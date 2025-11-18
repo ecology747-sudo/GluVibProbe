@@ -1,0 +1,560 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		D00025D62ECC7A0300519269 /* Last90DaysBarChartswift.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00025D52ECC7A0300519269 /* Last90DaysBarChartswift.swift */; };
+		D0306B5D2EC9DD49004BE9C2 /* GluVibProbeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B5C2EC9DD49004BE9C2 /* GluVibProbeApp.swift */; };
+		D0306B702EC9E0E5004BE9C2 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B6F2EC9E0D6004BE9C2 /* AppRouter.swift */; };
+		D0306B742EC9E1B7004BE9C2 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B732EC9E1B7004BE9C2 /* AppState.swift */; };
+		D0306B762EC9E2B0004BE9C2 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B752EC9E2B0004BE9C2 /* HomeView.swift */; };
+		D0306B7A2EC9E2FA004BE9C2 /* NutritionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B792EC9E2FA004BE9C2 /* NutritionView.swift */; };
+		D0306B7D2EC9E335004BE9C2 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B7C2EC9E335004BE9C2 /* ActivityView.swift */; };
+		D0306B802EC9E371004BE9C2 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B7F2EC9E371004BE9C2 /* HistoryView.swift */; };
+		D0306B832EC9E3BB004BE9C2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B822EC9E3BB004BE9C2 /* SettingsView.swift */; };
+		D0573AAF2ECB1E270025A4AE /* RangeSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0573AAE2ECB1E270025A4AE /* RangeSlider.swift */; };
+		D0573AB12ECB22250025A4AE /* LowerUpperRangeGlucoseSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0573AB02ECB22250025A4AE /* LowerUpperRangeGlucoseSlider.swift */; };
+		D0573AB42ECB4A320025A4AE /* HealthStore.swift .swift in Sources */ = {isa = PBXBuildFile; fileRef = D0573AB32ECB4A320025A4AE /* HealthStore.swift .swift */; };
+		D0573AB72ECB4E3A0025A4AE /* TestBodyMassView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0573AB62ECB4E3A0025A4AE /* TestBodyMassView.swift */; };
+		D07C43682ECB58E20057682A /* TestStepsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C43672ECB58E20057682A /* TestStepsView.swift */; };
+		D07C436A2ECB5B120057682A /* TestGlucoseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C43692ECB5B120057682A /* TestGlucoseView.swift */; };
+		D07C436D2ECB66160057682A /* StepsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C436C2ECB66160057682A /* StepsView.swift */; };
+		D07C436F2ECB67D20057682A /* KPICard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C436E2ECB67D20057682A /* KPICard.swift */; };
+		D07C43712ECB68A00057682A /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C43702ECB68A00057682A /* SectionHeader.swift */; };
+		D07C43732ECB68CA0057682A /* TemplateLineChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C43722ECB68CA0057682A /* TemplateLineChart.swift */; };
+		D07C43752ECB68F30057682A /* TemplateBarChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C43742ECB68F30057682A /* TemplateBarChart.swift */; };
+		D085FBCD2ECC5716009DDAB1 /* GluBottomTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D085FBCC2ECC5716009DDAB1 /* GluBottomTabBar.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		D00025D52ECC7A0300519269 /* Last90DaysBarChartswift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Last90DaysBarChartswift.swift; sourceTree = "<group>"; };
+		D0306B592EC9DD49004BE9C2 /* GluVibProbe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GluVibProbe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D0306B5C2EC9DD49004BE9C2 /* GluVibProbeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GluVibProbeApp.swift; sourceTree = "<group>"; };
+		D0306B6F2EC9E0D6004BE9C2 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		D0306B732EC9E1B7004BE9C2 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		D0306B752EC9E2B0004BE9C2 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		D0306B792EC9E2FA004BE9C2 /* NutritionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionView.swift; sourceTree = "<group>"; };
+		D0306B7C2EC9E335004BE9C2 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		D0306B7F2EC9E371004BE9C2 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		D0306B822EC9E3BB004BE9C2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D0573AAE2ECB1E270025A4AE /* RangeSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RangeSlider.swift; sourceTree = "<group>"; };
+		D0573AB02ECB22250025A4AE /* LowerUpperRangeGlucoseSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LowerUpperRangeGlucoseSlider.swift; sourceTree = "<group>"; };
+		D0573AB32ECB4A320025A4AE /* HealthStore.swift .swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore.swift .swift"; sourceTree = "<group>"; };
+		D0573AB62ECB4E3A0025A4AE /* TestBodyMassView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestBodyMassView.swift; sourceTree = "<group>"; };
+		D07C43672ECB58E20057682A /* TestStepsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestStepsView.swift; sourceTree = "<group>"; };
+		D07C43692ECB5B120057682A /* TestGlucoseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestGlucoseView.swift; sourceTree = "<group>"; };
+		D07C436C2ECB66160057682A /* StepsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepsView.swift; sourceTree = "<group>"; };
+		D07C436E2ECB67D20057682A /* KPICard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KPICard.swift; sourceTree = "<group>"; };
+		D07C43702ECB68A00057682A /* SectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SectionHeader.swift; sourceTree = "<group>"; };
+		D07C43722ECB68CA0057682A /* TemplateLineChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateLineChart.swift; sourceTree = "<group>"; };
+		D07C43742ECB68F30057682A /* TemplateBarChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateBarChart.swift; sourceTree = "<group>"; };
+		D085FBCC2ECC5716009DDAB1 /* GluBottomTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GluBottomTabBar.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		D0306B5B2EC9DD49004BE9C2 /* GluVibProbe */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = GluVibProbe;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D0306B562EC9DD49004BE9C2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D0306B502EC9DD48004BE9C2 = {
+			isa = PBXGroup;
+			children = (
+				D0573AB52ECB4E040025A4AE /* TestViews */,
+				D0306B6D2EC9DF2A004BE9C2 /* Themes */,
+				D0306B6C2EC9DF1F004BE9C2 /* Services */,
+				D0306B6B2EC9DF10004BE9C2 /* ViewModels */,
+				D0306B6A2EC9DEFE004BE9C2 /* Models */,
+				D0306B692EC9DEE8004BE9C2 /* Shared */,
+				D0306B682EC9DEDE004BE9C2 /* Features */,
+				D0306B672EC9DE04004BE9C2 /* App */,
+				D0306B5B2EC9DD49004BE9C2 /* GluVibProbe */,
+				D0306B5A2EC9DD49004BE9C2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D0306B5A2EC9DD49004BE9C2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D0306B592EC9DD49004BE9C2 /* GluVibProbe.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D0306B672EC9DE04004BE9C2 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				D0306B6F2EC9E0D6004BE9C2 /* AppRouter.swift */,
+				D0306B5C2EC9DD49004BE9C2 /* GluVibProbeApp.swift */,
+				D0306B732EC9E1B7004BE9C2 /* AppState.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		D0306B682EC9DEDE004BE9C2 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				D07C436B2ECB65EA0057682A /* Steps */,
+				D0306B812EC9E3A1004BE9C2 /* Settings */,
+				D0306B7E2EC9E356004BE9C2 /* History */,
+				D0306B7B2EC9E30E004BE9C2 /* Activity  */,
+				D0306B782EC9E2DC004BE9C2 /* Nutrition */,
+				D0306B772EC9E2BE004BE9C2 /* Home */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		D0306B692EC9DEE8004BE9C2 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				D0573AAD2ECB1DE30025A4AE /* Components */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		D0306B6A2EC9DEFE004BE9C2 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		D0306B6B2EC9DF10004BE9C2 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		D0306B6C2EC9DF1F004BE9C2 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				D0573AB22ECB4A030025A4AE /* HealthKit */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		D0306B6D2EC9DF2A004BE9C2 /* Themes */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Themes;
+			sourceTree = "<group>";
+		};
+		D0306B772EC9E2BE004BE9C2 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				D0306B752EC9E2B0004BE9C2 /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		D0306B782EC9E2DC004BE9C2 /* Nutrition */ = {
+			isa = PBXGroup;
+			children = (
+				D0306B792EC9E2FA004BE9C2 /* NutritionView.swift */,
+			);
+			path = Nutrition;
+			sourceTree = "<group>";
+		};
+		D0306B7B2EC9E30E004BE9C2 /* Activity  */ = {
+			isa = PBXGroup;
+			children = (
+				D0306B7C2EC9E335004BE9C2 /* ActivityView.swift */,
+			);
+			path = "Activity ";
+			sourceTree = "<group>";
+		};
+		D0306B7E2EC9E356004BE9C2 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				D0306B7F2EC9E371004BE9C2 /* HistoryView.swift */,
+			);
+			path = History;
+			sourceTree = "<group>";
+		};
+		D0306B812EC9E3A1004BE9C2 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				D0306B822EC9E3BB004BE9C2 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		D0573AAD2ECB1DE30025A4AE /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				D0573AAE2ECB1E270025A4AE /* RangeSlider.swift */,
+				D0573AB02ECB22250025A4AE /* LowerUpperRangeGlucoseSlider.swift */,
+				D07C436E2ECB67D20057682A /* KPICard.swift */,
+				D07C43702ECB68A00057682A /* SectionHeader.swift */,
+				D07C43722ECB68CA0057682A /* TemplateLineChart.swift */,
+				D07C43742ECB68F30057682A /* TemplateBarChart.swift */,
+				D085FBCC2ECC5716009DDAB1 /* GluBottomTabBar.swift */,
+				D00025D52ECC7A0300519269 /* Last90DaysBarChartswift.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		D0573AB22ECB4A030025A4AE /* HealthKit */ = {
+			isa = PBXGroup;
+			children = (
+				D0573AB32ECB4A320025A4AE /* HealthStore.swift .swift */,
+			);
+			path = HealthKit;
+			sourceTree = "<group>";
+		};
+		D0573AB52ECB4E040025A4AE /* TestViews */ = {
+			isa = PBXGroup;
+			children = (
+				D0573AB62ECB4E3A0025A4AE /* TestBodyMassView.swift */,
+				D07C43672ECB58E20057682A /* TestStepsView.swift */,
+				D07C43692ECB5B120057682A /* TestGlucoseView.swift */,
+			);
+			path = TestViews;
+			sourceTree = "<group>";
+		};
+		D07C436B2ECB65EA0057682A /* Steps */ = {
+			isa = PBXGroup;
+			children = (
+				D07C436C2ECB66160057682A /* StepsView.swift */,
+			);
+			path = Steps;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D0306B582EC9DD49004BE9C2 /* GluVibProbe */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D0306B642EC9DD49004BE9C2 /* Build configuration list for PBXNativeTarget "GluVibProbe" */;
+			buildPhases = (
+				D0306B552EC9DD49004BE9C2 /* Sources */,
+				D0306B562EC9DD49004BE9C2 /* Frameworks */,
+				D0306B572EC9DD49004BE9C2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D0306B5B2EC9DD49004BE9C2 /* GluVibProbe */,
+			);
+			name = GluVibProbe;
+			packageProductDependencies = (
+			);
+			productName = GluVibProbe;
+			productReference = D0306B592EC9DD49004BE9C2 /* GluVibProbe.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D0306B512EC9DD49004BE9C2 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2610;
+				LastUpgradeCheck = 2610;
+				TargetAttributes = {
+					D0306B582EC9DD49004BE9C2 = {
+						CreatedOnToolsVersion = 26.1;
+					};
+				};
+			};
+			buildConfigurationList = D0306B542EC9DD49004BE9C2 /* Build configuration list for PBXProject "GluVibProbe" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D0306B502EC9DD48004BE9C2;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D0306B5A2EC9DD49004BE9C2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D0306B582EC9DD49004BE9C2 /* GluVibProbe */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D0306B572EC9DD49004BE9C2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D0306B552EC9DD49004BE9C2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D0306B702EC9E0E5004BE9C2 /* AppRouter.swift in Sources */,
+				D0306B802EC9E371004BE9C2 /* HistoryView.swift in Sources */,
+				D0306B832EC9E3BB004BE9C2 /* SettingsView.swift in Sources */,
+				D07C436F2ECB67D20057682A /* KPICard.swift in Sources */,
+				D0306B5D2EC9DD49004BE9C2 /* GluVibProbeApp.swift in Sources */,
+				D07C436D2ECB66160057682A /* StepsView.swift in Sources */,
+				D0306B7A2EC9E2FA004BE9C2 /* NutritionView.swift in Sources */,
+				D07C436A2ECB5B120057682A /* TestGlucoseView.swift in Sources */,
+				D0573AB42ECB4A320025A4AE /* HealthStore.swift .swift in Sources */,
+				D0573AAF2ECB1E270025A4AE /* RangeSlider.swift in Sources */,
+				D0306B7D2EC9E335004BE9C2 /* ActivityView.swift in Sources */,
+				D07C43682ECB58E20057682A /* TestStepsView.swift in Sources */,
+				D07C43752ECB68F30057682A /* TemplateBarChart.swift in Sources */,
+				D00025D62ECC7A0300519269 /* Last90DaysBarChartswift.swift in Sources */,
+				D085FBCD2ECC5716009DDAB1 /* GluBottomTabBar.swift in Sources */,
+				D07C43732ECB68CA0057682A /* TemplateLineChart.swift in Sources */,
+				D0306B762EC9E2B0004BE9C2 /* HomeView.swift in Sources */,
+				D0573AB12ECB22250025A4AE /* LowerUpperRangeGlucoseSlider.swift in Sources */,
+				D07C43712ECB68A00057682A /* SectionHeader.swift in Sources */,
+				D0573AB72ECB4E3A0025A4AE /* TestBodyMassView.swift in Sources */,
+				D0306B742EC9E1B7004BE9C2 /* AppState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		D0306B622EC9DD49004BE9C2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = HA3MYH6C68;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		D0306B632EC9DD49004BE9C2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = HA3MYH6C68;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D0306B652EC9DD49004BE9C2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GluVibProbe/GluVibProbe.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = HA3MYH6C68;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "GluVibe uses your health data (glucose, activity, weight, nutrition) to calculate metabolic targets and show personalized analytics.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GluVibe may write selected health metrics in the future to keep your data consistent across apps.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mariolorenz.GluVibProbe;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D0306B662EC9DD49004BE9C2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GluVibProbe/GluVibProbe.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = HA3MYH6C68;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "GluVibe uses your health data (glucose, activity, weight, nutrition) to calculate metabolic targets and show personalized analytics.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GluVibe may write selected health metrics in the future to keep your data consistent across apps.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mariolorenz.GluVibProbe;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		D0306B542EC9DD49004BE9C2 /* Build configuration list for PBXProject "GluVibProbe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0306B622EC9DD49004BE9C2 /* Debug */,
+				D0306B632EC9DD49004BE9C2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D0306B642EC9DD49004BE9C2 /* Build configuration list for PBXNativeTarget "GluVibProbe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0306B652EC9DD49004BE9C2 /* Debug */,
+				D0306B662EC9DD49004BE9C2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D0306B512EC9DD49004BE9C2 /* Project object */;
+}
