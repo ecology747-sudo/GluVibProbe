@@ -28,6 +28,7 @@
 		D0C6B2392ECCB772000AC73E /* MonthlyBarChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0C6B2382ECCB772000AC73E /* MonthlyBarChart.swift */; };
 		D0C6B23B2ECCE630000AC73E /* ActivityStepsSectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0C6B23A2ECCE630000AC73E /* ActivityStepsSectionCard.swift */; };
 		D0C87F772ECF247C00658CC1 /* ActivityEnergyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0C87F762ECF247C00658CC1 /* ActivityEnergyView.swift */; };
+		D0E9E7332ED1E1170004CB90 /* Untitled.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E9E7322ED1DFAB0004CB90 /* Untitled.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +54,7 @@
 		D0C6B2382ECCB772000AC73E /* MonthlyBarChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthlyBarChart.swift; sourceTree = "<group>"; };
 		D0C6B23A2ECCE630000AC73E /* ActivityStepsSectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityStepsSectionCard.swift; sourceTree = "<group>"; };
 		D0C87F762ECF247C00658CC1 /* ActivityEnergyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEnergyView.swift; sourceTree = "<group>"; };
+		D0E9E7322ED1DFAB0004CB90 /* Untitled.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Untitled.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -211,6 +213,7 @@
 				D00025D52ECC7A0300519269 /* Last90DaysBarChart.swift */,
 				D0C6B2382ECCB772000AC73E /* MonthlyBarChart.swift */,
 				D0C6B23A2ECCE630000AC73E /* ActivityStepsSectionCard.swift */,
+				D0E9E7322ED1DFAB0004CB90 /* Untitled.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -325,6 +328,7 @@
 				D0306B7A2EC9E2FA004BE9C2 /* NutritionView.swift in Sources */,
 				D0573AB42ECB4A320025A4AE /* HealthStore.swift .swift in Sources */,
 				D0573AAF2ECB1E270025A4AE /* RangeSlider.swift in Sources */,
+				D0E9E7332ED1E1170004CB90 /* Untitled.swift in Sources */,
 				D0306B7D2EC9E335004BE9C2 /* ActivityView.swift in Sources */,
 				D00025D62ECC7A0300519269 /* Last90DaysBarChart.swift in Sources */,
 				D085FBCD2ECC5716009DDAB1 /* GluBottomTabBar.swift in Sources */,

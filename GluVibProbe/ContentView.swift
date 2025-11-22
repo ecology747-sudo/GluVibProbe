@@ -57,3 +57,4 @@ struct ContentView: View {
         .environmentObject(previewState)           // 🔹 NEU
         .previewDevice("iPhone 15 Pro")
 }
+//Test Git
