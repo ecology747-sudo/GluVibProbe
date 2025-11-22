@@ -2,7 +2,20 @@
 //  AppState.swift
 //  GluVibProbe
 //
-//  Created by MacBookAir on 16.11.25.
-//
 
-import Foundation
+import SwiftUI
+import Combine   // 🔥 WICHTIG für ObservableObject + @Published
+
+@MainActor
+final class AppState: ObservableObject {
+
+    // MARK: - Statistik-Screens (für die Pfeilnavigation)
+    enum StatsScreen {
+        case steps
+        case activityEnergy
+        case weight
+        case sleep
+    }
+
+    @Published var currentStatsScreen: StatsScreen = .steps
+}

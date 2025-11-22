@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var heightUnit: HeightUnit = .cm
     @State private var energyUnit: EnergyUnit = .kcal
     @State private var distanceUnit: DistanceUnit = .kilometers
+    @State private var dailyStepTarget: Int = 10_000   // ⬅️ NEU: Zielwert Schritte
     
     // MARK: - State Metabolic Targets
     @State private var glucoseMin: Int = 70
@@ -252,6 +253,26 @@ struct SettingsView: View {
                                 .pickerStyle(.segmented)
                             }
                         }
+                        
+                        // 🆕 DAILY STEP TARGET – hier neu dazwischen
+                       VStack(alignment: .leading, spacing: 8) {
+                           HStack {
+                               Text("Daily Step Target")
+                                   .font(.subheadline)
+                                   .foregroundColor(.secondary)
+                               
+                               Spacer()
+                               
+                               Picker("", selection: $dailyStepTarget) {
+                                   ForEach(Array(stride(from: 1_000, through: 30_000, by: 500)), id: \.self) { steps in
+                                       Text("\(steps) steps").tag(steps)
+                                   }
+                               }
+                               .pickerStyle(.wheel)
+                               .frame(width: 150, height: 50)
+                               .clipped()
+                           }
+                       }
                         
                         // BLOOD GLUCOSE UNIT
                         VStack(alignment: .leading, spacing: 8) {

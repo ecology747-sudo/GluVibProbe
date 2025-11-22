@@ -5,7 +5,12 @@ import SwiftUI
 
 struct ContentView: View {
     
-    @State private var selectedTab: GluTab = .home   // Start-Tab
+    @State private var selectedTab: GluTab
+    
+    /// Standard-Init für die App: startet auf .home
+    init(startTab: GluTab = .home) {
+        _selectedTab = State(initialValue: startTab)
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -14,7 +19,7 @@ struct ContentView: View {
             ZStack {
                 switch selectedTab {
                 case .activity:
-                    StepsView()              // ← deine bestehende StepsView
+                    ActivityDashboardView()
                 case .nutrition:
                     Text("Nutrition View")   // Platzhalter
                 case .home:
@@ -33,7 +38,22 @@ struct ContentView: View {
     }
 }
 
-#Preview {
-    ContentView()
-        .environmentObject(HealthStore())   // 👈 hinzufügen
+#Preview("ContentView – Home Tab") {
+    let previewStore = HealthStore.preview()
+    let previewState = AppState()                  // 🔹 NEU
+
+    ContentView(startTab: .home)
+        .environmentObject(previewStore)
+        .environmentObject(previewState)           // 🔹 NEU
+        .previewDevice("iPhone 15 Pro")
+}
+
+#Preview("ContentView – Steps (Activity) Tab") {
+    let previewStore = HealthStore.preview()
+    let previewState = AppState()                  // 🔹 NEU
+
+    ContentView(startTab: .activity)
+        .environmentObject(previewStore)
+        .environmentObject(previewState)           // 🔹 NEU
+        .previewDevice("iPhone 15 Pro")
 }
