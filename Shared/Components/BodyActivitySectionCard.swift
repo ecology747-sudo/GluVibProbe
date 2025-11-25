@@ -12,6 +12,7 @@ struct ActivityStepsSectionCard: View {
     let title: String
     let kpiTitle: String
     let kpiValue: String
+    let dailyStepsGoal: String
     let stepsToGoValue: String
     let last90DaysData: [DailyStepsEntry]
     let monthlyData: [MonthlyMetricEntry]
@@ -28,20 +29,22 @@ struct ActivityStepsSectionCard: View {
         title: String,
         kpiTitle: String,
         kpiValue: String,
+        dailyStepsGoal: String,
         stepsToGoValue: String,
         last90DaysData: [DailyStepsEntry],
         monthlyData: [MonthlyMetricEntry],
         onMetricSelected: @escaping (String) -> Void = { _ in }
     ) {
         self.sectionTitle = sectionTitle
-        self.title = title
-        self.kpiTitle = kpiTitle
-        self.kpiValue = kpiValue
-        self.stepsToGoValue = stepsToGoValue
-        self.last90DaysData = last90DaysData
-        self.monthlyData = monthlyData
-        self.onMetricSelected = onMetricSelected
-    }
+            self.title = title
+            self.kpiTitle = kpiTitle
+            self.kpiValue = kpiValue
+            self.dailyStepsGoal = dailyStepsGoal
+            self.stepsToGoValue = stepsToGoValue
+            self.last90DaysData = last90DaysData
+            self.monthlyData = monthlyData
+            self.onMetricSelected = onMetricSelected
+        }
 
     // MARK: - Body
 
@@ -68,7 +71,7 @@ struct ActivityStepsSectionCard: View {
             MonthlyBarChart(data: monthlyData)
                 .frame(height: 260)
         }
-        .padding(16)
+        .padding(6)
         .background(
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color.Glu.backgroundSurface)
@@ -90,7 +93,6 @@ private extension ActivityStepsSectionCard {
     var metricChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-
                 ForEach(Array(metricNames.enumerated()), id: \.offset) { _, metric in
                     let active = (metric == title)
 
@@ -136,26 +138,26 @@ private extension ActivityStepsSectionCard {
     var kpiHeader: some View {
         HStack(alignment: .top, spacing: 10) {
 
-            let stepsGoalValue = "10 000"
+           
 
             // 1️⃣ Goal
             KPICard(
                 title: "Goal",
-                value: stepsGoalValue,
+                stepsToday: dailyStepsGoal,
                 unit: nil
             )
 
             // 2️⃣ Today
             KPICard(
                 title: "Today",
-                value: kpiValue,
+                stepsToday: kpiValue,
                 unit: nil
             )
 
             // 3️⃣ to go
             KPICard(
                 title: "to go",
-                value: stepsToGoValue,
+                stepsToday: stepsToGoValue,
                 unit: nil
             )
         }
@@ -184,6 +186,7 @@ private extension ActivityStepsSectionCard {
         title: "Steps",
         kpiTitle: "Steps Today",
         kpiValue: "8 532",
+        dailyStepsGoal: "10 000", 
         stepsToGoValue: "1 468",
         last90DaysData: demoLast90,
         monthlyData: demoMonthly
