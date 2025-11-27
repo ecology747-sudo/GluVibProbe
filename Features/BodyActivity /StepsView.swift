@@ -47,6 +47,7 @@ struct StepsView: View {
                         kpiTargetText: viewModel.formattedDailyStepGoal,
                         kpiCurrentText: viewModel.formattedTodaySteps,
                         kpiDeltaText: viewModel.kpiDeltaText,   // 👈 HIER neu
+                        hasTarget: true,
                         last90DaysData: viewModel.last90DaysData,
                         monthlyData: viewModel.monthlyStepsData,
                         dailyStepsGoalForChart: viewModel.dailyStepsGoalInt,

@@ -44,6 +44,7 @@
 		D05873A82ED706C70010C475 /* AveragePeriodsBarChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05873A72ED706C70010C475 /* AveragePeriodsBarChart.swift */; };
 		D05873AA2ED707A50010C475 /* MetricScaleType.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05873A92ED707A50010C475 /* MetricScaleType.swift */; };
 		D05873AC2ED72E1A0010C475 /* ChartCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05873AB2ED72E1A0010C475 /* ChartCard.swift */; };
+		D05873AE2ED8648E0010C475 /* SleepViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05873AD2ED8648E0010C475 /* SleepViewModel.swift */; };
 		D07C436D2ECB66160057682A /* StepsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C436C2ECB66160057682A /* StepsView.swift */; };
 		D07C436F2ECB67D20057682A /* KPICard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C436E2ECB67D20057682A /* KPICard.swift */; };
 		D07C43712ECB68A00057682A /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D07C43702ECB68A00057682A /* SectionHeader.swift */; };
@@ -89,7 +90,6 @@
 		D0573AB32ECB4A320025A4AE /* HealthStore.swift .swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore.swift .swift"; sourceTree = "<group>"; };
 		D05873902ED32A620010C475 /* StepsView1_Archiv.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepsView1_Archiv.swift; sourceTree = "<group>"; };
 		D05873922ED32F7E0010C475 /* SettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModel.swift; sourceTree = "<group>"; };
-		D05873942ED333040010C475 /* StepsView_Legacy.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StepsView_Legacy.swift; sourceTree = "<group>"; };
 		D05873962ED4628D0010C475 /* HealthStore_archive.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HealthStore_archive.swift; sourceTree = "<group>"; };
 		D05873982ED575B80010C475 /* ActivityStepsSectionCard_Archive.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ActivityStepsSectionCard_Archive.swift; sourceTree = "<group>"; };
 		D058739A2ED581140010C475 /* NutritionSectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionSectionCard.swift; sourceTree = "<group>"; };
@@ -101,6 +101,7 @@
 		D05873A72ED706C70010C475 /* AveragePeriodsBarChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AveragePeriodsBarChart.swift; sourceTree = "<group>"; };
 		D05873A92ED707A50010C475 /* MetricScaleType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricScaleType.swift; sourceTree = "<group>"; };
 		D05873AB2ED72E1A0010C475 /* ChartCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartCard.swift; sourceTree = "<group>"; };
+		D05873AD2ED8648E0010C475 /* SleepViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepViewModel.swift; sourceTree = "<group>"; };
 		D07C436C2ECB66160057682A /* StepsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepsView.swift; sourceTree = "<group>"; };
 		D07C436E2ECB67D20057682A /* KPICard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KPICard.swift; sourceTree = "<group>"; };
 		D07C43702ECB68A00057682A /* SectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SectionHeader.swift; sourceTree = "<group>"; };
@@ -255,6 +256,7 @@
 			children = (
 				D02F830E2ED26AE7005011A1 /* StepsViewModel.swift */,
 				D02F83102ED26B11005011A1 /* ActivityEnergyViewModel.swift */,
+				D05873AD2ED8648E0010C475 /* SleepViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -305,7 +307,6 @@
 				D0C87F762ECF247C00658CC1 /* ActivityEnergyView.swift */,
 				D02F831E2ED2A3CB005011A1 /* SleepView.swift */,
 				D02F83202ED2A498005011A1 /* WeightView.swift */,
-				D05873942ED333040010C475 /* StepsView_Legacy.swift */,
 				D05873902ED32A620010C475 /* StepsView1_Archiv.swift */,
 			);
 			path = "BodyActivity ";
@@ -477,6 +478,7 @@
 				D0B082062ED1C3D000D77F09 /* BodyActivityDashboard.swift in Sources */,
 				D02F83252ED2A637005011A1 /* BolusView.swift in Sources */,
 				D0306B762EC9E2B0004BE9C2 /* HomeView.swift in Sources */,
+				D05873AE2ED8648E0010C475 /* SleepViewModel.swift in Sources */,
 				D02F831F2ED2A3CB005011A1 /* SleepView.swift in Sources */,
 				D02F83182ED2733F005011A1 /* ActivityEnergyEntry.swift in Sources */,
 				D02F83112ED26B11005011A1 /* ActivityEnergyViewModel.swift in Sources */,

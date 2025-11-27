@@ -66,9 +66,21 @@ struct MonthlyBarChart: View {
         case .smallInteger:
             // z. B. g, kcal, Minuten – dynamisch
             let step: Int
-            if maxValue <= 200 { step = 20 }
-            else if maxValue <= 500 { step = 50 }
-            else { step = 100 }
+
+            if maxValue <= 200 {
+                step = 20              // 0, 20, 40, ...
+            } else if maxValue <= 500 {
+                step = 50              // 0, 50, 100, ...
+            } else if maxValue <= 2_000 {
+                step = 100             // 0, 100, 200, ...
+            } else if maxValue <= 10_000 {
+                step = 500             // 0, 500, 1 000, ...
+            } else if maxValue <= 20_000 {
+                step = 2_000           // 0, 2 000, 4 000, ... 20 000
+            } else {
+                step = 5_000           // 0, 5 000, 10 000, ... (extrem hohe Werte)
+            }
+
             let upper = ((maxValue + step - 1) / step) * step
             return Array(stride(from: 0, through: upper, by: step))
 

@@ -17,6 +17,9 @@ struct BodyActivitySectionCard: View {
     let kpiCurrentText: String        // z. B. "8 532"
     let kpiDeltaText: String          // z. B. "+1 468" oder "−500"
 
+    /// Gibt an, ob es einen Zielwert gibt (z. B. Steps) oder nicht (z. B. Activity Energy)
+    let hasTarget: Bool               // true = Target/Current/Delta, false = nur Current
+
     // --- DATEN FÜR DIE CHARTS ---
     let last90DaysData: [DailyStepsEntry]
     let monthlyData: [MonthlyMetricEntry]
@@ -39,6 +42,9 @@ struct BodyActivitySectionCard: View {
     // Durchschnittswerte für 7D–365D
     let periodAverages: [PeriodAverageEntry]
 
+    // 🔥 NEU: Skala für die Charts
+    let scaleType: MetricScaleType
+
     // MARK: - Formatter
 
     private static let numberFormatter: NumberFormatter = {
@@ -56,13 +62,15 @@ struct BodyActivitySectionCard: View {
         kpiTargetText: String,
         kpiCurrentText: String,
         kpiDeltaText: String,
+        hasTarget: Bool = true,
         last90DaysData: [DailyStepsEntry],
         monthlyData: [MonthlyMetricEntry],
         dailyStepsGoalForChart: Int? = nil,
         onMetricSelected: @escaping (String) -> Void = { _ in },
         metrics: [String] = ["Weight", "Steps", "Sleep", "Activity Energy"],
         monthlyMetricLabel: String = "Steps / Month",
-        periodAverages: [PeriodAverageEntry] = []
+        periodAverages: [PeriodAverageEntry] = [],
+        scaleType: MetricScaleType = .steps          // 🔸 Default = Steps
     ) {
         self.sectionTitle = sectionTitle
         self.title = title
@@ -70,6 +78,7 @@ struct BodyActivitySectionCard: View {
         self.kpiTargetText = kpiTargetText
         self.kpiCurrentText = kpiCurrentText
         self.kpiDeltaText = kpiDeltaText
+        self.hasTarget = hasTarget
         self.last90DaysData = last90DaysData
         self.monthlyData = monthlyData
         self.dailyStepsGoalForChart = dailyStepsGoalForChart
@@ -77,6 +86,7 @@ struct BodyActivitySectionCard: View {
         self.metrics = metrics
         self.monthlyMetricLabel = monthlyMetricLabel
         self.periodAverages = periodAverages
+        self.scaleType = scaleType
     }
 
     // MARK: - Body
@@ -103,7 +113,7 @@ struct BodyActivitySectionCard: View {
                     metricLabel: title,
                     dailyStepsGoal: dailyStepsGoalForChart,
                     barColor: Color.Glu.activityOrange,
-                    scaleType: .steps
+                    scaleType: scaleType                      // 👈 generisch
                 )
                 .frame(height: 260)
             }
@@ -116,7 +126,7 @@ struct BodyActivitySectionCard: View {
                         metricLabel: title,
                         goalValue: dailyStepsGoalForChart,
                         barColor: Color.Glu.activityOrange,
-                        scaleType: .steps,
+                        scaleType: scaleType,                 // 👈 generisch
                         valueFormatter: { value in
                             BodyActivitySectionCard.numberFormatter
                                 .string(from: NSNumber(value: value))
@@ -126,25 +136,20 @@ struct BodyActivitySectionCard: View {
                     .frame(height: 260)
                 }
             }
-            
-            
+
             // Monats-Chart in Kachel
             ChartCard(borderColor: Color.Glu.activityOrange) {
                 MonthlyBarChart(
                     data: monthlyData,
                     metricLabel: monthlyMetricLabel,
                     barColor: Color.Glu.activityOrange,
-                    scaleType: .steps
+                    scaleType: scaleType                      // 👈 generisch
                 )
                 .frame(height: 260)
             }
-
-            
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-                
-        
     }
 }
 
@@ -194,11 +199,11 @@ private extension BodyActivitySectionCard {
                         }
                 }
             }
-            .padding(.horizontal, 12)                   // etwas mehr Luft links/rechts
+            .padding(.horizontal, 12)
             .padding(.vertical, 4)
             .frame(minWidth: 0,
                    maxWidth: .infinity,
-                   alignment: .center)                  // zentriert in der Card
+                   alignment: .center)
         }
     }
 
@@ -206,24 +211,38 @@ private extension BodyActivitySectionCard {
     var kpiHeader: some View {
         HStack(alignment: .top, spacing: 10) {
 
-            KPICard(
-                title: "Target",
-                valueText: kpiTargetText,
-                unit: nil
-            )
+            if hasTarget {
+                // 🔹 Standard-Fall: 3 KPIs (Target / Current / Delta)
+                KPICard(
+                    title: "Target",
+                    valueText: kpiTargetText,
+                    unit: nil
+                )
 
-            KPICard(
-                title: "Current",
-                valueText: kpiCurrentText,
-                unit: nil
-            )
+                KPICard(
+                    title: "Current",
+                    valueText: kpiCurrentText,
+                    unit: nil
+                )
 
-            KPICard(
-                title: "Delta",
-                valueText: kpiDeltaText,
-                unit: nil,
-                valueColor: deltaColor   // 👈 nur hier farbig
-            )
+                KPICard(
+                    title: "Delta",
+                    valueText: kpiDeltaText,
+                    unit: nil,
+                    valueColor: deltaColor   // 👈 nur hier farbig
+                )
+            } else {
+                // 🔹 Kein Ziel: nur Current, zentriert
+                Spacer(minLength: 0)
+
+                KPICard(
+                    title: "Current",
+                    valueText: kpiCurrentText,
+                    unit: nil
+                )
+
+                Spacer(minLength: 0)
+            }
         }
         .padding(.bottom, 10)
     }
@@ -240,52 +259,4 @@ private extension BodyActivitySectionCard {
         }
         return Color.Glu.primaryBlue.opacity(0.75) // neutral
     }
-}
-
-// MARK: - Preview
-
-#Preview("BodyActivitySectionCard – Steps Demo") {
-    let calendar = Calendar.current
-    let today = calendar.startOfDay(for: Date())
-
-    let demoLast90: [DailyStepsEntry] = (0..<90).compactMap { offset in
-        guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
-        return DailyStepsEntry(date: date, steps: Int.random(in: 2_000...12_000))
-    }
-    .sorted { $0.date < $1.date }
-
-    let demoMonthly: [MonthlyMetricEntry] = [
-        MonthlyMetricEntry(monthShort: "Feb", value: 140_000),
-        MonthlyMetricEntry(monthShort: "Mar", value: 155_000),
-        MonthlyMetricEntry(monthShort: "Apr", value: 168_000),
-        MonthlyMetricEntry(monthShort: "May", value: 160_000),
-        MonthlyMetricEntry(monthShort: "Jun", value: 172_000)
-    ]
-
-    let demoAverages: [PeriodAverageEntry] = [
-        .init(label: "7D",   days: 7,   value: 8_417),
-        .init(label: "14D",  days: 14,  value: 8_010),
-        .init(label: "30D",  days: 30,  value: 7_560),
-        .init(label: "90D",  days: 90,  value: 7_100),
-        .init(label: "180D", days: 180, value: 6_900),
-        .init(label: "365D", days: 365, value: 6_800)
-    ]
-
-    BodyActivitySectionCard(
-        sectionTitle: "Körper & Aktivität",
-        title: "Steps",
-        kpiTitle: "Steps",
-        kpiTargetText: "10 000",
-        kpiCurrentText: "8 532",
-        kpiDeltaText: "+1 468",
-        last90DaysData: demoLast90,
-        monthlyData: demoMonthly,
-        dailyStepsGoalForChart: 10_000,
-        onMetricSelected: { _ in },
-        metrics: ["Weight", "Steps", "Sleep", "Activity Energy"],
-        monthlyMetricLabel: "Steps / Month",
-        periodAverages: demoAverages
-    )
-    .padding()
-    .background(Color.Glu.backgroundNavy)
 }

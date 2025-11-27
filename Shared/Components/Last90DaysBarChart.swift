@@ -9,11 +9,7 @@ import Charts
 
 // MARK: - Datenmodell
 
-struct DailyStepsEntry: Identifiable {
-    let id = UUID()
-    let date: Date
-    let steps: Int      // wird auch für Activity Energy (kcal) wiederverwendet
-}
+
 
 // Zeitraum-Auswahl für den Chart
 enum Last90DaysPeriod: String, CaseIterable, Identifiable {

@@ -7,8 +7,9 @@ import Foundation
 import HealthKit
 import Combine
 
-final class HealthStore_archive: ObservableObject {
-    
+final class HealthStore_Archive: ObservableObject {
+
+    // Singleton-Instanz für die App
     static let shared = HealthStore()
 
     private let healthStore = HKHealthStore()
@@ -20,43 +21,64 @@ final class HealthStore_archive: ObservableObject {
     }
 
     // MARK: - Published Values für SwiftUI
+
+    /// Schritte heute
     @Published var todaySteps: Int = 0
+
+    /// Tägliche Schritte der letzten 90 Tage (für aktuellen Chart)
     @Published var last90Days: [DailyStepsEntry] = []
+
+    /// Monatliche Schritt-Summen (letzte 5 Monate inkl. aktuellem Monat)
     @Published var monthlySteps: [MonthlyMetricEntry] = []
 
-    // 🔥 Neu: Activity Energy (kcal)
-    @Published var todayEnergy: Int = 0
-    @Published var last90DaysEnergy: [DailyStepsEntry] = []
-    @Published var monthlyEnergy: [MonthlyMetricEntry] = []
+    // 🔥 NEU: Activity Energy (kcal)
+
+    /// Aktivitätsenergie heute (kcal)
+    @Published var todayActiveEnergy: Int = 0
+
+    /// Tägliche Aktivitätsenergie der letzten 90 Tage
+    @Published var last90DaysActiveEnergy: [ActivityEnergyEntry] = []
+
+    /// Monatliche Aktivitätsenergie (letzte 5 Monate inkl. aktuellem Monat)
+    @Published var monthlyActiveEnergy: [MonthlyMetricEntry] = []
+    
+    
+
+    // Nur für Xcode-Previews: vordefinierte Tageswerte (bis 365 Tage)
+    private var previewDailySteps: [DailyStepsEntry] = []
+
+    // Preview-Daten für Activity Energy
+    private var previewDailyActiveEnergy: [ActivityEnergyEntry] = []
 
     // MARK: - Permission Request
+
     func requestAuthorization() {
-        // ⚠️ Im Preview KEIN HealthKit-Aufruf → Demo-Daten bleiben erhalten
+        // Im Preview KEIN HealthKit-Aufruf → Demo-Daten bleiben erhalten
         if isPreview {
             return
         }
 
         guard
             let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount),
-            let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)
+            let activeEnergyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)
         else {
             return
         }
 
         healthStore.requestAuthorization(
             toShare: [],
-            read: [stepType, energyType]
+            read: [stepType, activeEnergyType]
         ) { success, error in
             if success {
-                // Schritte
+                // Schritte nach erfolgreicher Auth laden
                 self.fetchStepsToday()
                 self.fetchLast90Days()
                 self.fetchMonthlySteps()
 
-                // 🔥 Activity Energy
-                self.fetchEnergyToday()
-                self.fetchLast90DaysEnergy()
-                self.fetchMonthlyEnergy()
+                // 🔥 NEU: Activity Energy nach erfolgreicher Auth laden
+                self.fetchActiveEnergyToday()
+                self.fetchLast90DaysActiveEnergy()
+                self.fetchMonthlyActiveEnergy()
             } else {
                 print("HealthKit Auth fehlgeschlagen:", error?.localizedDescription ?? "unbekannt")
             }
@@ -64,6 +86,7 @@ final class HealthStore_archive: ObservableObject {
     }
 
     // MARK: - Heute: Schritte
+
     func fetchStepsToday() {
         guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
             return
@@ -92,64 +115,9 @@ final class HealthStore_archive: ObservableObject {
         healthStore.execute(query)
     }
 
-    // MARK: - Helper: Letzte N Tage (tägliche Buckets)
-    private func fetchLastNDays(
-        quantityType: HKQuantityType,
-        unit: HKUnit,
-        days: Int,
-        assign: @escaping ([DailyStepsEntry]) -> Void
-    ) {
-        let calendar = Calendar.current
-        
-        // 🔹 Heute, 00:00 lokale Zeit
-        let todayStart = calendar.startOfDay(for: Date())
-        
-        // 🔹 Start vor (days - 1) Tagen, ebenfalls 00:00
-        guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
-            return
-        }
-        
-        // 🔹 Alle Samples in diesem Zeitraum
-        let predicate = HKQuery.predicateForSamples(
-            withStart: startDate,
-            end: todayStart,
-            options: []
-        )
-        
-        var daily: [DailyStepsEntry] = []
-        let interval = DateComponents(day: 1)
-        
-        let query = HKStatisticsCollectionQuery(
-            quantityType: quantityType,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum,
-            anchorDate: startDate,
-            intervalComponents: interval
-        )
-        
-        query.initialResultsHandler = { _, results, _ in
-            results?.enumerateStatistics(from: startDate, to: todayStart) { stats, _ in
-                let value = stats.sumQuantity()?.doubleValue(for: unit) ?? 0
-                
-                daily.append(
-                    DailyStepsEntry(
-                        date: stats.startDate,     // = 00:00 dieses Tages (lokal)
-                        steps: Int(value)          // ⚠️ steps-Feld = Steps ODER kcal
-                    )
-                )
-            }
-            
-            // 🔹 Auf dem Main-Thread Published-Werte aktualisieren
-            DispatchQueue.main.async {
-                assign(daily.sorted { $0.date < $1.date })
-            }
-        }
-        
-        healthStore.execute(query)
-    }
-    
     // MARK: - Heute: Activity Energy (kcal)
-    func fetchEnergyToday() {
+
+    func fetchActiveEnergyToday() {
         guard let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
             return
         }
@@ -170,43 +138,37 @@ final class HealthStore_archive: ObservableObject {
             let value = result?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
 
             DispatchQueue.main.async {
-                self.todayEnergy = Int(value)
+                self.todayActiveEnergy = Int(value)
             }
         }
 
         healthStore.execute(query)
     }
 
-    // MARK: - Letzte 90 Tage (täglich) – Schritte
-    func fetchLast90Days() {
-        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
-            return
-        }
+    // MARK: - Helper: Letzte N Tage (tägliche Buckets, zeitzonensicher)
 
-        // Helper verwenden
-        fetchLastNDays(
-            quantityType: stepType,
-            unit: .count(),
-            days: 90
-        ) { entries in
-            self.last90Days = entries
-        }
-    }
-
-    // MARK: - Letzte 90 Tage (täglich) – Activity Energy
-    func fetchLast90DaysEnergy() {
-        guard let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
-            return
-        }
-
+    private func fetchLastNDays(
+        quantityType: HKQuantityType,
+        unit: HKUnit,
+        days: Int,
+        assign: @escaping ([DailyStepsEntry]) -> Void
+    ) {
         let calendar = Calendar.current
-        guard let startDate = calendar.date(byAdding: .day, value: -89, to: Date()) else {
+
+        // Aktueller Zeitpunkt (jetzt)
+        let now = Date()
+        // Heute, 00:00 lokale Zeit
+        let todayStart = calendar.startOfDay(for: now)
+
+        // Start vor (days - 1) Tagen, ebenfalls 00:00
+        guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
             return
         }
 
+        // Alle Samples von startDate bis JETZT
         let predicate = HKQuery.predicateForSamples(
             withStart: startDate,
-            end: Date(),
+            end: now,
             options: []
         )
 
@@ -214,7 +176,7 @@ final class HealthStore_archive: ObservableObject {
         let interval = DateComponents(day: 1)
 
         let query = HKStatisticsCollectionQuery(
-            quantityType: energyType,
+            quantityType: quantityType,
             quantitySamplePredicate: predicate,
             options: .cumulativeSum,
             anchorDate: startDate,
@@ -222,26 +184,166 @@ final class HealthStore_archive: ObservableObject {
         )
 
         query.initialResultsHandler = { _, results, _ in
-            results?.enumerateStatistics(from: startDate, to: Date()) { stats, _ in
-                let energy = stats.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+            results?.enumerateStatistics(from: startDate, to: now) { stats, _ in
+                let value = stats.sumQuantity()?.doubleValue(for: unit) ?? 0
 
                 daily.append(
                     DailyStepsEntry(
-                        date: stats.startDate,
-                        steps: Int(energy)   // steps-Feld enthält hier kcal
+                        date: stats.startDate, // 00:00 dieses Tages
+                        steps: Int(value)      // Summe bis zum Ende des Buckets (heute = bis jetzt)
                     )
                 )
             }
 
             DispatchQueue.main.async {
-                self.last90DaysEnergy = daily.sorted { $0.date < $1.date }
+                assign(daily.sorted { $0.date < $1.date })
             }
         }
 
         healthStore.execute(query)
     }
 
+    // 🔥 NEU: Helper für Activity Energy (kcal)
+
+    private func fetchLastNDaysActiveEnergy(
+        quantityType: HKQuantityType,
+        unit: HKUnit,
+        days: Int,
+        assign: @escaping ([ActivityEnergyEntry]) -> Void
+    ) {
+        let calendar = Calendar.current
+
+        let now = Date()
+        let todayStart = calendar.startOfDay(for: now)
+
+        guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
+            return
+        }
+
+        let predicate = HKQuery.predicateForSamples(
+            withStart: startDate,
+            end: now,
+            options: []
+        )
+
+        var daily: [ActivityEnergyEntry] = []
+        let interval = DateComponents(day: 1)
+
+        let query = HKStatisticsCollectionQuery(
+            quantityType: quantityType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum,
+            anchorDate: startDate,
+            intervalComponents: interval
+        )
+
+        query.initialResultsHandler = { _, results, _ in
+            results?.enumerateStatistics(from: startDate, to: now) { stats, _ in
+                let value = stats.sumQuantity()?.doubleValue(for: unit) ?? 0
+
+                daily.append(
+                    ActivityEnergyEntry(
+                        date: stats.startDate,
+                        activeEnergy: Int(value)
+                    )
+                )
+            }
+
+            DispatchQueue.main.async {
+                assign(daily.sorted { $0.date < $1.date })
+            }
+        }
+
+        healthStore.execute(query)
+    }
+
+    // MARK: - Generic Steps: Letzte N Tage (öffentlich für ViewModels)
+
+    /// Liefert tägliche Schrittwerte für die letzten `days` Tage.
+    /// In der echten App → HealthKit-Abfrage.
+    /// In der Preview → benutzt `previewDailySteps`.
+    func fetchStepsDaily(
+        last days: Int,
+        assign: @escaping ([DailyStepsEntry]) -> Void
+    ) {
+        // 🔸 Xcode-Preview: benutze vorbereitete Demo-Daten
+        if isPreview {
+            let base = previewDailySteps
+
+            let count = min(days, base.count)
+            let slice = count > 0 ? Array(base.suffix(count)) : []
+
+            DispatchQueue.main.async {
+                assign(slice)
+            }
+            return
+        }
+
+        // 🔸 Echte App: HealthKit-Abfrage
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            return
+        }
+
+        fetchLastNDays(
+            quantityType: stepType,
+            unit: .count(),
+            days: days,
+            assign: assign
+        )
+    }
+
+    // 🔥 NEU: Generic Activity Energy: Letzte N Tage
+
+    /// Liefert tägliche Aktivitätsenergie für die letzten `days` Tage.
+    /// In der echten App → HealthKit-Abfrage.
+    /// In der Preview → benutzt `previewDailyActiveEnergy`.
+    func fetchActiveEnergyDaily(
+        last days: Int,
+        assign: @escaping ([ActivityEnergyEntry]) -> Void
+    ) {
+        // Preview: Demo-Daten
+        if isPreview {
+            let base = previewDailyActiveEnergy
+
+            let count = min(days, base.count)
+            let slice = count > 0 ? Array(base.suffix(count)) : []
+
+            DispatchQueue.main.async {
+                assign(slice)
+            }
+            return
+        }
+
+        guard let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
+            return
+        }
+
+        fetchLastNDaysActiveEnergy(
+            quantityType: energyType,
+            unit: .kilocalorie(),
+            days: days,
+            assign: assign
+        )
+    }
+
+    // MARK: - Letzte 90 Tage (täglich) – Schritte (Komfort-Wrapper für aktuellen Chart)
+
+    func fetchLast90Days() {
+        fetchStepsDaily(last: 90) { [weak self] entries in
+            self?.last90Days = entries
+        }
+    }
+
+    // 🔥 NEU: Letzte 90 Tage – Activity Energy
+
+    func fetchLast90DaysActiveEnergy() {
+        fetchActiveEnergyDaily(last: 90) { [weak self] entries in
+            self?.last90DaysActiveEnergy = entries
+        }
+    }
+
     // MARK: - Monatliche Schritte (letzte 5 Monate inkl. aktuellem Monat)
+
     func fetchMonthlySteps() {
         guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
             return
@@ -302,8 +404,9 @@ final class HealthStore_archive: ObservableObject {
         healthStore.execute(query)
     }
 
-    // MARK: - Monatliche Activity Energy (letzte 5 Monate inkl. aktuellem Monat)
-    func fetchMonthlyEnergy() {
+    // 🔥 NEU: Monatliche Activity Energy
+
+    func fetchMonthlyActiveEnergy() {
         guard let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
             return
         }
@@ -312,12 +415,10 @@ final class HealthStore_archive: ObservableObject {
         let today = Date()
         let startOfToday = calendar.startOfDay(for: today)
 
-        // sauberer Monatsanfang
         guard let startOfCurrentMonth = calendar.date(
             from: calendar.dateComponents([.year, .month], from: startOfToday)
         ) else { return }
 
-        // Start vor 4 Monaten
         guard let startDate = calendar.date(
             byAdding: .month, value: -4, to: startOfCurrentMonth
         ) else { return }
@@ -356,7 +457,7 @@ final class HealthStore_archive: ObservableObject {
             }
 
             DispatchQueue.main.async {
-                self.monthlyEnergy = temp
+                self.monthlyActiveEnergy = temp
             }
         }
 
@@ -365,21 +466,25 @@ final class HealthStore_archive: ObservableObject {
 }
 
 // MARK: - Preview Store (Demo-Daten, KEIN HealthKit)
+
 extension HealthStore {
     static func preview() -> HealthStore {
         let store = HealthStore(isPreview: true)
 
-        // Schritte (Demo)
-        store.todaySteps = 8_532
-
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        // Demo 90 days – Schritte
-        store.last90Days = (0..<90).compactMap { i in
+        // Schritte (Demo)
+        store.todaySteps = 8_532
+
+        // Demo 365 days – Basis für alle Durchschnitte (Steps)
+        store.previewDailySteps = (0..<365).compactMap { i in
             let d = calendar.date(byAdding: .day, value: -i, to: today)!
-            return DailyStepsEntry(date: d, steps: Int.random(in: 2_000...12_000))
+            return DailyStepsEntry(date: d, steps: Int.random(in: 3_000...12_000))
         }.sorted { $0.date < $1.date }
+
+        // Demo 90 days – Schritte
+        store.last90Days = Array(store.previewDailySteps.suffix(90))
 
         // Demo monthly data – Schritte
         store.monthlySteps = [
@@ -387,23 +492,26 @@ extension HealthStore {
             MonthlyMetricEntry(monthShort: "Aug", value: 152_000),
             MonthlyMetricEntry(monthShort: "Sep", value: 165_000),
             MonthlyMetricEntry(monthShort: "Okt", value: 158_000),
-            MonthlyMetricEntry(monthShort: "Nov", value: 171_000),
+            MonthlyMetricEntry(monthShort: "Nov", value: 171_000)
         ]
 
-        // 🔥 Demo-Daten für Activity Energy (kcal)
-        store.todayEnergy = 567
+        // 🔥 Demo Activity Energy
 
-        store.last90DaysEnergy = (0..<90).compactMap { i in
+        store.todayActiveEnergy = 650
+
+        store.previewDailyActiveEnergy = (0..<365).compactMap { i in
             let d = calendar.date(byAdding: .day, value: -i, to: today)!
-            return DailyStepsEntry(date: d, steps: Int.random(in: 300...1_200)) // steps-Feld = kcal
+            return ActivityEnergyEntry(date: d, activeEnergy: Int.random(in: 200...1_200))
         }.sorted { $0.date < $1.date }
 
-        store.monthlyEnergy = [
-            MonthlyMetricEntry(monthShort: "Jul", value: 22_500),
-            MonthlyMetricEntry(monthShort: "Aug", value: 24_200),
-            MonthlyMetricEntry(monthShort: "Sep", value: 23_800),
-            MonthlyMetricEntry(monthShort: "Okt", value: 25_100),
-            MonthlyMetricEntry(monthShort: "Nov", value: 24_900),
+        store.last90DaysActiveEnergy = Array(store.previewDailyActiveEnergy.suffix(90))
+
+        store.monthlyActiveEnergy = [
+            MonthlyMetricEntry(monthShort: "Jul", value: 18_200),
+            MonthlyMetricEntry(monthShort: "Aug", value: 19_500),
+            MonthlyMetricEntry(monthShort: "Sep", value: 20_100),
+            MonthlyMetricEntry(monthShort: "Okt", value: 19_800),
+            MonthlyMetricEntry(monthShort: "Nov", value: 21_000)
         ]
 
         return store

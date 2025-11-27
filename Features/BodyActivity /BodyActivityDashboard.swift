@@ -17,7 +17,7 @@ struct BodyActivityDashboardView: View {
             StepsView(onMetricSelected: handleMetricSelection)
 
         case .activityEnergy:
-            ActivityEnergyView()
+            ActivityEnergyView(onMetricSelected: handleMetricSelection)
 
         case .weight:
             // WeightView
@@ -25,7 +25,8 @@ struct BodyActivityDashboardView: View {
 
         case .sleep:
             // SleepView
-            StepsView(onMetricSelected: handleMetricSelection)
+            // StepsView(onMetricSelected: handleMetricSelection)
+            SleepView(onMetricSelected: handleMetricSelection)
         }
     }
 
