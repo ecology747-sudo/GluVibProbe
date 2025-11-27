@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     
+    private let settings = SettingsModel.shared   // 👈 NEU
+    
     // MARK: - State Personal & Units
     @State private var gender: String = "Male"
     @State private var birthDate: Date = Date()
@@ -255,24 +257,24 @@ struct SettingsView: View {
                         }
                         
                         // 🆕 DAILY STEP TARGET – hier neu dazwischen
-                       VStack(alignment: .leading, spacing: 8) {
-                           HStack {
-                               Text("Daily Step Target")
-                                   .font(.subheadline)
-                                   .foregroundColor(.secondary)
-                               
-                               Spacer()
-                               
-                               Picker("", selection: $dailyStepTarget) {
-                                   ForEach(Array(stride(from: 1_000, through: 30_000, by: 500)), id: \.self) { steps in
-                                       Text("\(steps) steps").tag(steps)
-                                   }
-                               }
-                               .pickerStyle(.wheel)
-                               .frame(width: 150, height: 50)
-                               .clipped()
-                           }
-                       }
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Daily Step Target")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Picker("", selection: $dailyStepTarget) {
+                                    ForEach(Array(stride(from: 1_000, through: 30_000, by: 500)), id: \.self) { steps in
+                                        Text("\(steps) steps").tag(steps)
+                                    }
+                                }
+                                .pickerStyle(.wheel)
+                                .frame(width: 150, height: 50)
+                                .clipped()
+                            }
+                        }
                         
                         // BLOOD GLUCOSE UNIT
                         VStack(alignment: .leading, spacing: 8) {
@@ -309,60 +311,60 @@ struct SettingsView: View {
                     Section(header: Text("Metabolic Targets & Thresholds")) {
                         
                         
-                            // TIR WITH RangeSlider
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("Glucose Target Range")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Text("\(tirMinDisplay)–\(tirMaxDisplay) \(glucoseUnit.label)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.green)
-                                }
-                                
-                                RangeSlider(
-                                    lowerValue: Binding(
-                                        get: {
-                                            glucoseUnit == .mgdL
-                                            ? Double(glucoseMin)
-                                            : mgToMmol(glucoseMin)
-                                        },
-                                        set: { newVal in
-                                            if glucoseUnit == .mgdL {
-                                                glucoseMin = min(Int(newVal.rounded()), glucoseMax)
-                                            } else {
-                                                let mg = mmolToMg(newVal)
-                                                glucoseMin = min(mg, glucoseMax)
-                                            }
-                                        }
-                                    ),
-                                    upperValue: Binding(
-                                        get: {
-                                            glucoseUnit == .mgdL
-                                            ? Double(glucoseMax)
-                                            : mgToMmol(glucoseMax)
-                                        },
-                                        set: { newVal in
-                                            if glucoseUnit == .mgdL {
-                                                glucoseMax = max(Int(newVal.rounded()), glucoseMin)
-                                            } else {
-                                                let mg = mmolToMg(newVal)
-                                                glucoseMax = max(mg, glucoseMin)
-                                            }
-                                        }
-                                    ),
-                                    range: glucoseUnit == .mgdL
-                                    ? 50.0...300.0        // mg/dL
-                                    : 2.775...16.65          // mmol/L
-                                    ,
-                                    // 🔹 unterschiedliches minGap nach Einheit:
-                                    minGap: glucoseUnit == .mgdL
-                                    ? 25.0                // z.B. 25 mg/dL
-                                    : 1.5                 // z.B. 1.5 mmol/L
-                                )
-                                .frame(height: 40)
+                        // TIR WITH RangeSlider
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Glucose Target Range")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text("\(tirMinDisplay)–\(tirMaxDisplay) \(glucoseUnit.label)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.green)
                             }
+                            
+                            RangeSlider(
+                                lowerValue: Binding(
+                                    get: {
+                                        glucoseUnit == .mgdL
+                                        ? Double(glucoseMin)
+                                        : mgToMmol(glucoseMin)
+                                    },
+                                    set: { newVal in
+                                        if glucoseUnit == .mgdL {
+                                            glucoseMin = min(Int(newVal.rounded()), glucoseMax)
+                                        } else {
+                                            let mg = mmolToMg(newVal)
+                                            glucoseMin = min(mg, glucoseMax)
+                                        }
+                                    }
+                                ),
+                                upperValue: Binding(
+                                    get: {
+                                        glucoseUnit == .mgdL
+                                        ? Double(glucoseMax)
+                                        : mgToMmol(glucoseMax)
+                                    },
+                                    set: { newVal in
+                                        if glucoseUnit == .mgdL {
+                                            glucoseMax = max(Int(newVal.rounded()), glucoseMin)
+                                        } else {
+                                            let mg = mmolToMg(newVal)
+                                            glucoseMax = max(mg, glucoseMin)
+                                        }
+                                    }
+                                ),
+                                range: glucoseUnit == .mgdL
+                                ? 50.0...300.0        // mg/dL
+                                : 2.775...16.65          // mmol/L
+                                ,
+                                // 🔹 unterschiedliches minGap nach Einheit:
+                                minGap: glucoseUnit == .mgdL
+                                ? 25.0                // z.B. 25 mg/dL
+                                : 1.5                 // z.B. 1.5 mmol/L
+                            )
+                            .frame(height: 40)
+                        }
                         // VERY LOW / HIGH GLUCOSE LIMITS
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Very Low / Very High Glucose Thresholds")
@@ -436,119 +438,190 @@ struct SettingsView: View {
                                     .font(.subheadline)
                                     .foregroundColor(.red)
                             }}
-                            }
+                    }
+                    
+                    
+                    // -------------------------------
+                    // Section: Nutrition Targets ...
+                    // -------------------------------
+                    Section(header: Text("Nutrition Targets")) {
                         
-                        
-                        // -------------------------------
-                        // Section: Nutrition Targets ...
-                        // -------------------------------
-                        Section(header: Text("Nutrition Targets")) {
-                            
-                            // DAILY CARBOHYDRATES
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("Daily Carbohydrates")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Spacer()
-                                    
-                                    Picker("", selection: $dailyCarbs) {
-                                        ForEach(Array(stride(from: 50, through: 3000, by: 50)), id: \.self) { grams in
-                                            Text("\(grams) g").tag(grams)
-                                        }
+                        // DAILY CARBOHYDRATES
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Daily Carbohydrates")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Picker("", selection: $dailyCarbs) {
+                                    ForEach(Array(stride(from: 50, through: 3000, by: 50)), id: \.self) { grams in
+                                        Text("\(grams) g").tag(grams)
                                     }
-                                    .pickerStyle(.wheel)
-                                    .frame(width: 120, height: 50)
-                                    .clipped()
                                 }
-                            }
-                            
-                            // DAILY PROTEIN
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("Daily Protein")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Spacer()
-                                    
-                                    Picker("", selection: $dailyProtein) {
-                                        ForEach(Array(stride(from: 40, through: 400, by: 10)), id: \.self) { grams in
-                                            Text("\(grams) g").tag(grams)
-                                        }
-                                    }
-                                    .pickerStyle(.wheel)
-                                    .frame(width: 120, height: 50)
-                                    .clipped()
-                                }
-                            }
-                            
-                            // DAILY FAT
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("Daily Fat")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Spacer()
-                                    
-                                    Picker("", selection: $dailyFat) {
-                                        ForEach(Array(stride(from: 20, through: 250, by: 5)), id: \.self) { grams in
-                                            Text("\(grams) g").tag(grams)
-                                        }
-                                    }
-                                    .pickerStyle(.wheel)
-                                    .frame(width: 120, height: 50)
-                                    .clipped()
-                                }
-                            }
-                            
-                            // DAILY CALORIES
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("Daily Calories")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Spacer()
-                                    
-                                    Picker("", selection: $dailyCalories) {
-                                        ForEach(stride(from: 1000, through: 10000, by: 50).map { $0 }, id: \.self) { kcal in
-                                            Text("\(kcal) kcal").tag(kcal)
-                                        }
-                                    }
-                                    .pickerStyle(.wheel)
-                                    .frame(width: 130, height: 50)
-                                    .clipped()
-                                }
+                                .pickerStyle(.wheel)
+                                .frame(width: 120, height: 50)
+                                .clipped()
                             }
                         }
                         
-                        // Section Time & Localization
-                        Section(header: Text("Time & Localization")) {
-                            Text("GluVib uses your iPhone system settings for time, date and region.")
-                                .font(.footnote)
-                                .foregroundColor(.black)
+                        // DAILY PROTEIN
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Daily Protein")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Picker("", selection: $dailyProtein) {
+                                    ForEach(Array(stride(from: 40, through: 400, by: 10)), id: \.self) { grams in
+                                        Text("\(grams) g").tag(grams)
+                                    }
+                                }
+                                .pickerStyle(.wheel)
+                                .frame(width: 120, height: 50)
+                                .clipped()
+                            }
                         }
                         
-                        // Section Data Sources & HealthKit
-                        Section(header: Text("Data Sources & HealthKit Integration")) {
-                            // später: HealthKit Permissions etc.
+                        // DAILY FAT
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Daily Fat")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Picker("", selection: $dailyFat) {
+                                    ForEach(Array(stride(from: 20, through: 250, by: 5)), id: \.self) { grams in
+                                        Text("\(grams) g").tag(grams)
+                                    }
+                                }
+                                .pickerStyle(.wheel)
+                                .frame(width: 120, height: 50)
+                                .clipped()
+                            }
+                        }
+                        
+                        // DAILY CALORIES
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Daily Calories")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Picker("", selection: $dailyCalories) {
+                                    ForEach(stride(from: 1000, through: 10000, by: 50).map { $0 }, id: \.self) { kcal in
+                                        Text("\(kcal) kcal").tag(kcal)
+                                    }
+                                }
+                                .pickerStyle(.wheel)
+                                .frame(width: 130, height: 50)
+                                .clipped()
+                            }
                         }
                     }
                     
-                    // SAVE BUTTON
-                    HStack {
-                        Spacer()
-                        Button("Save Settings") {
-                            // später: saveSettings()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        Spacer()
+                    // Section Time & Localization
+                    Section(header: Text("Time & Localization")) {
+                        Text("GluVib uses your iPhone system settings for time, date and region.")
+                            .font(.footnote)
+                            .foregroundColor(.black)
                     }
-                    .padding(.vertical, 8)
+                    
+                    // Section Data Sources & HealthKit
+                    Section(header: Text("Data Sources & HealthKit Integration")) {
+                        // später: HealthKit Permissions etc.
+                    }
                 }
+                
+                // SAVE BUTTON
+                HStack {
+                    Spacer()
+                    Button("Save Settings") {
+
+                        // Steps
+                        settings.dailyStepGoal = dailyStepTarget
+
+                        // Personal
+                            settings.gender         = gender
+                            settings.birthDate      = birthDate
+                            settings.heightCm       = height
+                            settings.weightKg       = weightKg
+                            settings.targetWeightKg = targetWeight
+
+                            // Units
+                            settings.weightUnit     = weightUnit
+                            settings.heightUnit     = heightUnit
+                            settings.energyUnit     = energyUnit
+                            settings.distanceUnit   = distanceUnit
+                            settings.glucoseUnit    = glucoseUnit
+                        
+                        // Metabolic
+                        settings.glucoseMin    = glucoseMin
+                        settings.glucoseMax    = glucoseMax
+                        settings.veryLowLimit  = veryLowLimit
+                        settings.veryHighLimit = veryHighLimit
+                        settings.glucoseUnit   = glucoseUnit
+
+                        // Nutrition
+                        settings.dailyCarbs    = dailyCarbs
+                        settings.dailyProtein  = dailyProtein
+                        settings.dailyCalories = dailyCalories
+                        settings.dailyFat      = dailyFat
+
+                        // Persistenz
+                        settings.saveToDefaults()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Settings")
+                        .font(.title)
+                        .foregroundColor(.red)
+                }
+            }
+        }
+        .onAppear {
+            // Steps
+            dailyStepTarget = settings.dailyStepGoal
+
+            // Personal
+            gender       = settings.gender
+            birthDate    = settings.birthDate
+            height       = settings.heightCm
+            weightKg     = settings.weightKg
+            targetWeight = settings.targetWeightKg
+
+            // Units
+            weightUnit   = settings.weightUnit
+            heightUnit   = settings.heightUnit
+            energyUnit   = settings.energyUnit
+            distanceUnit = settings.distanceUnit
+            glucoseUnit  = settings.glucoseUnit
+
+            // Metabolic
+            glucoseMin    = settings.glucoseMin
+            glucoseMax    = settings.glucoseMax
+            veryLowLimit  = settings.veryLowLimit
+            veryHighLimit = settings.veryHighLimit
+
+            // Nutrition
+            dailyCarbs    = settings.dailyCarbs
+            dailyProtein  = settings.dailyProtein
+            dailyCalories = settings.dailyCalories
+            dailyFat      = settings.dailyFat
+        }
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .principal) {
@@ -559,7 +632,6 @@ struct SettingsView: View {
                 }
             }
         }
-}
 
 #Preview {
     SettingsView()

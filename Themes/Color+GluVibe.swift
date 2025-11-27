@@ -1,3 +1,4 @@
+
 import SwiftUI
 
 extension Color {
@@ -7,8 +8,11 @@ extension Color {
         static let accentAqua        = Color("GluAccentAqua")
         static let backgroundNavy    = Color("GluBackgroundNavy")
         static let backgroundSurface = Color("GluBackgroundSurface")
-
-        // 🔸 Bereichsfarbe für Steps / Activity Energy
         static let activityOrange    = Color("GluActivityOrange")
+
+        // 🔹 Section-Aliasse (BodyActivity, Metabolic, Nutrition)
+        static let bodyActivityAccent = activityOrange   // Steps, Activity, Weight, Sleep
+        static let metabolicAccent    = accentLime       // Glucose, Insulin, TIR
+        static let nutritionAccent    = accentAqua       // Carbs, Protein, Calories
     }
 }

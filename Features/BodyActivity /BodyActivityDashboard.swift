@@ -1,11 +1,11 @@
 //
-//  ActivityDashboardView.swift
+//  BodyActivityDashboardView.swift
 //  GluVibProbe
 //
 
 import SwiftUI
 
-struct ActivityDashboardView: View {
+struct BodyActivityDashboardView: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
@@ -17,14 +17,14 @@ struct ActivityDashboardView: View {
             StepsView(onMetricSelected: handleMetricSelection)
 
         case .activityEnergy:
-            ActivityEnergyView(onMetricSelected: handleMetricSelection)
+            ActivityEnergyView()
 
         case .weight:
-            // später eigener Screen
+            // WeightView
             StepsView(onMetricSelected: handleMetricSelection)
 
         case .sleep:
-            // später eigener Screen
+            // SleepView
             StepsView(onMetricSelected: handleMetricSelection)
         }
     }
@@ -54,7 +54,7 @@ struct ActivityDashboardView: View {
     let previewStore = HealthStore.preview()
     let previewState = AppState()
 
-    return ActivityDashboardView()
+    return BodyActivityDashboardView()
         .environmentObject(previewStore)
         .environmentObject(previewState)
 }

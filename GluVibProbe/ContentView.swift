@@ -19,7 +19,7 @@ struct ContentView: View {
             ZStack {
                 switch selectedTab {
                 case .activity:
-                    ActivityDashboardView()
+                    BodyActivityDashboardView()
                 case .nutrition:
                     Text("Nutrition View")   // Platzhalter
                 case .home:

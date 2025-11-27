@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct StepsView: View {
+struct StepsView_Legacy: View {
 
     @EnvironmentObject var healthStore: HealthStore
 

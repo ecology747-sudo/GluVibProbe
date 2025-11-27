@@ -1,5 +1,5 @@
 //
-//  KhBolusRatioView.swift
+//  CarbBolusRatioView.swift
 //  GluVibProbe
 //
 //  Created by MacBookAir on 23.11.25.

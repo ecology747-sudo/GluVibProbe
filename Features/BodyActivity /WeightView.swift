@@ -1,5 +1,5 @@
 //
-//  Weight.swift
+//  WeightView.swift
 //  GluVibProbe
 //
 //  Created by MacBookAir on 23.11.25.

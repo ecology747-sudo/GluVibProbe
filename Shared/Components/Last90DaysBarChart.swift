@@ -6,6 +6,7 @@
 import SwiftUI
 import Charts
 
+
 // MARK: - Datenmodell
 
 struct DailyStepsEntry: Identifiable {
@@ -34,32 +35,37 @@ enum Last90DaysPeriod: String, CaseIterable, Identifiable {
     }
 }
 
+
+
 // MARK: - View
 
 struct Last90DaysBarChart: View {
 
     // Eingabedaten (generisch, wird für Steps & Energy verwendet)
     let entries: [DailyStepsEntry]
+        let metricLabel: String
+        let dailyStepsGoal: Int?
 
-    /// Label der Metrik, z. B. "Steps" oder "kcal"
-    let metricLabel: String
+        let barColor: Color              // schon vorhanden
+        let scaleType: MetricScaleType   // 👈 NEU
 
-    /// Optionaler Zielwert für eine horizontale Linie (z. B. 10 000 Steps)
-    let dailyGoal: Int?
-
-    // interner UI-State (aktiver Zeitraum)
-    @State private var selectedPeriod: Last90DaysPeriod = .days30
+        // interner UI-State (aktiver Zeitraum)
+        @State private var selectedPeriod: Last90DaysPeriod = .days30
 
     // MARK: - Init mit Default-Werten
 
     init(
         entries: [DailyStepsEntry],
         metricLabel: String = "Value",
-        dailyGoal: Int? = nil
+        dailyStepsGoal: Int? = nil,
+        barColor: Color = Color.Glu.activityOrange,   // 🔸 Default = BodyActivity
+        scaleType: MetricScaleType = .steps           // 🔸 Default = Steps
     ) {
         self.entries = entries
         self.metricLabel = metricLabel
-        self.dailyGoal = dailyGoal
+        self.dailyStepsGoal = dailyStepsGoal
+        self.barColor = barColor
+        self.scaleType = scaleType                    // 👈 NEU
     }
 
     // MARK: - Gefilterte Daten
@@ -113,36 +119,59 @@ struct Last90DaysBarChart: View {
 
     // MARK: - Y-Achsen-Ticks
 
-    /// Dynamische Y-Achsen-Ticks (Steps & Activity Energy)
+    /// Dynamische Y-Achsen-Ticks abhängig vom Scale-Typ (Steps / SmallInt / Percent)
     private var yAxisTickValues: [Int] {
-        // Maximaler Datenwert
         let dataMax = filteredEntries.map(\.steps).max() ?? 0
-        // Zielwert einbeziehen, falls vorhanden
-        let goalMax = dailyGoal ?? 0
+        let goalMax = dailyStepsGoal ?? 0
         let maxValue = max(dataMax, goalMax)
 
-        if maxValue <= 0 {
-            return [0]
+        switch scaleType {
+        case .percent:
+            // 0–100% (oder leicht darüber), Ticks alle 10%
+            let upper = max(100, ((maxValue + 9) / 10) * 10)
+            return Array(stride(from: 0, through: upper, by: 10))
+
+        case .smallInteger:
+            // z.B. Insulin, Minuten, kleine kcal-Bereiche
+            guard maxValue > 0 else { return [0] }
+
+            let step: Int
+            if maxValue <= 20 {
+                step = 5          // 0, 5, 10, 15, 20
+            } else if maxValue <= 200 {
+                step = 20         // 0, 20, 40, ... 200
+            } else if maxValue <= 2_000 {
+                step = 200        // 0, 200, 400, ...
+            } else {
+                step = 500        // Fallback
+            }
+
+            let upper = ((maxValue + step - 1) / step) * step
+            return Array(stride(from: 0, through: upper, by: step))
+
+        case .steps:
+            // große Bereiche in Steps, Darstellung später in T
+            guard maxValue > 0 else { return [0] }
+
+            let step: Int
+            if maxValue <= 4_000 {
+                step = 500        // feiner für kleine Step-Bereiche
+            } else if maxValue <= 20_000 {
+                step = 2_000
+            } else {
+                step = 5_000
+            }
+
+            let upper = ((maxValue + step - 1) / step) * step
+            return Array(stride(from: 0, through: upper, by: step))
         }
-
-        // Schrittweite abhängig vom Maximalwert
-        let step: Int
-        if maxValue <= 2_000 {
-            step = 200          // z.B. kcal Bereich
-        } else {
-            step = 2_000        // Steps-Bereich
-        }
-
-        // nach oben auf das nächste Vielfache von "step" runden
-        let upper = ((maxValue + step - 1) / step) * step
-
-        return Array(stride(from: 0, through: upper, by: step))
     }
+
 
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .center, spacing: 20) {
 
             periodPicker
 
@@ -155,17 +184,18 @@ struct Last90DaysBarChart: View {
                         y: .value(metricLabel, entry.steps),
                         width: .fixed(selectedPeriod == .days90 ? 2 : 8)
                     )
-                    .foregroundStyle(Color.Glu.activityOrange.gradient)
+                    .foregroundStyle(barColor.gradient)   // ✅ jetzt generisch
                 }
 
                 // 🔹 Optional: horizontale Ziel-Linie (Goal) – nur Linie, kein Label
-                if let goal = dailyGoal {
+                if let goal = dailyStepsGoal {
                     RuleMark(
                         y: .value("Goal", goal)
                     )
-                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 3]))   // etwas dicker + gestrichelt
-                    .foregroundStyle(Color.Glu.accentLime)                // grün aus deinem CI
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [6, 6]))
+                    .foregroundStyle(Color.green)
                 }
+
                 // 🔴 Trendlinie über den Balken
                 ForEach(trendPoints, id: \.date) { point in
                     LineMark(
@@ -177,17 +207,10 @@ struct Last90DaysBarChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
                 }
             }
-            // Plot-Area leicht einrücken:
-            //  - rechts mehr Luft → Y-Labels wirken nicht angeklebt
-            //  - links minimal Puffer
             .chartPlotStyle { plotArea in
                 plotArea
-                    .padding(.trailing, 20)
-                    .padding(.leading, 6)
             }
-            // X-Skala mit Innenpadding, damit der letzte Tag (z.B. 20) nicht am Rand klebt
             .chartXScale(range: .plotDimension(padding: 16))
-            // X-Achse: Datum, Beschriftung in GluPrimaryBlue
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: 7)) { value in
                     AxisGridLine()
@@ -204,10 +227,7 @@ struct Last90DaysBarChart: View {
                     }
                 }
             }
-            // Y-Achse: rechts, Beschriftung in GluPrimaryBlue
             .chartYAxis {
-                let maxValue = filteredEntries.map(\.steps).max() ?? 0
-
                 AxisMarks(
                     position: .trailing,
                     values: yAxisTickValues
@@ -221,31 +241,40 @@ struct Last90DaysBarChart: View {
                         if let intValue = value.as(Int.self) {
 
                             if intValue == 0 {
-                                // 0 ausblenden → kein Label
+                                // 0 kannst du bei Bedarf auch anzeigen – aktuell ausgeblendet
                                 EmptyView()
-                            }
-                            else if maxValue <= 2_000 {
-                                // z.B. kcal: exakte Werte
-                                Text("\(intValue)")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
-                            }
-                            else {
-                                // Steps: ab 1000 in T darstellen
-                                if intValue >= 1_000 {
-                                    Text("\(intValue / 1_000)T")
+                            } else {
+                                switch scaleType {
+                                case .percent:
+                                    Text("\(intValue)%")
                                         .font(.system(size: 9, weight: .semibold))
                                         .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
-                                } else {
+
+                                case .smallInteger:
+                                    // z.B. Insulin-Einheiten, Minuten, kleine kcal-Bereiche
                                     Text("\(intValue)")
                                         .font(.system(size: 9, weight: .semibold))
                                         .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
+
+                                case .steps:
+                                    // Steps: ab 1 000 → „T“ (Tausend)
+                                    if intValue >= 1_000 {
+                                        Text("\(intValue / 1_000)T")
+                                            .font(.system(size: 9, weight: .semibold))
+                                            .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
+                                    } else {
+                                        Text("\(intValue)")
+                                            .font(.system(size: 9, weight: .semibold))
+                                            .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+
+                          
             .frame(height: 220)
         }
         .padding(.horizontal, 4)
@@ -254,9 +283,9 @@ struct Last90DaysBarChart: View {
     // MARK: - Zeitraum-Picker (7 / 14 / 30 / 90)
 
     private var periodPicker: some View {
-        HStack(spacing: 14) {     // 🔹 etwas mehr Abstand zwischen den Chips
+        HStack(spacing: 14) {
 
-            Spacer()  // Zentrierung in der Card
+            Spacer()
 
             ForEach(Last90DaysPeriod.allCases) { period in
                 let active = (period == selectedPeriod)
@@ -264,19 +293,19 @@ struct Last90DaysBarChart: View {
                 Button {
                     selectedPeriod = period
                 } label: {
-                    Text(period.rawValue)                      // 7 / 14 / 30 / 90
-                        .font(.caption2.weight(.medium))       // wie Metric-Chips
+                    Text(period.rawValue)
+                        .font(.caption2.weight(.medium))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                        .padding(.vertical, 6)                 // ca. 32–36 pt Tap-Höhe
-                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 20)
                         .frame(minWidth: 40)
                         .background(
                             Capsule()
                                 .fill(
                                     active
                                     ? Color.Glu.activityOrange
-                                    : Color.Glu.backgroundSurface   // 🔹 CI statt weiß
+                                    : Color.Glu.backgroundSurface
                                 )
                         )
                         .overlay(
@@ -288,13 +317,11 @@ struct Last90DaysBarChart: View {
                                     lineWidth: active ? 0 : 1
                                 )
                         )
-                        .shadow(color: .black.opacity(0.06),    // dezenter Shadow → Apple Style
+                        .shadow(color: .black.opacity(0.06),
                                 radius: 2,
                                 x: 0,
                                 y: 1)
-                        .foregroundStyle(
-                            Color.Glu.primaryBlue                // Textfarbe CI-konform
-                        )
+                        .foregroundStyle(Color.Glu.primaryBlue)
                 }
             }
 
@@ -319,7 +346,8 @@ struct Last90DaysBarChart: View {
     return Last90DaysBarChart(
         entries: entries,
         metricLabel: "Steps",
-        dailyGoal: 10_000
+        dailyStepsGoal: 10_000,
+        barColor: Color.Glu.activityOrange   // 🔸 BodyActivity
     )
     .padding()
     .background(Color.Glu.backgroundSurface)

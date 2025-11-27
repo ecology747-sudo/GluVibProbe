@@ -2,24 +2,32 @@
 //  StepsView.swift
 //  GluVibProbe
 //
-// mit gpt checken ob view konform alles was nicht 100% view ist kommt in stepsmodelview!!
+//  Reine View für den Steps-Screen (MVVM)
+//
+
 import SwiftUI
 
 struct StepsView: View {
 
-    @EnvironmentObject var healthStore: HealthStore
-
-    private let dailyGoal = 10_000
+    @StateObject private var viewModel: StepsViewModel
 
     // Callback aus dem Dashboard (für Metric-Chips)
     let onMetricSelected: (String) -> Void
 
-    init(onMetricSelected: @escaping (String) -> Void = { _ in }) {
+    /// Haupt-Init für die App:
+    /// - ohne ViewModel → StepsViewModel benutzt automatisch HealthStore.shared
+    /// - mit ViewModel → z.B. in Previews kann ein spezielles VM übergeben werden
+    init(
+        viewModel: StepsViewModel? = nil,
+        onMetricSelected: @escaping (String) -> Void = { _ in }
+    ) {
         self.onMetricSelected = onMetricSelected
-    }
 
-    var stepsToGo: Int {
-        max(dailyGoal - healthStore.todaySteps, 0)
+        if let viewModel {
+            _viewModel = StateObject(wrappedValue: viewModel)
+        } else {
+            _viewModel = StateObject(wrappedValue: StepsViewModel())
+        }
     }
 
     var body: some View {
@@ -31,31 +39,44 @@ struct StepsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    // ✅ Nur noch DIESE Card enthält den SectionHeader
-                    ActivityStepsSectionCard(
-                        sectionTitle: "Körper & Aktivität",   // Screen-Header
-                        title: "Steps",                       // aktiver Metric-Chip
-                        kpiTitle: "Steps Today",
-                        kpiValue: "\(healthStore.todaySteps)",
-                        stepsToGoValue: "\(stepsToGo)",
-                        last90DaysData: healthStore.last90Days,
-                        monthlyData: healthStore.monthlySteps,
-                        onMetricSelected: onMetricSelected
+                    // Haupt-Section mit KPI + Charts (Steps)
+                    BodyActivitySectionCard(
+                        sectionTitle: "Activity & Body",
+                        title: "Steps",
+                        kpiTitle: "Steps",
+                        kpiTargetText: viewModel.formattedDailyStepGoal,
+                        kpiCurrentText: viewModel.formattedTodaySteps,
+                        kpiDeltaText: viewModel.kpiDeltaText,   // 👈 HIER neu
+                        last90DaysData: viewModel.last90DaysData,
+                        monthlyData: viewModel.monthlyStepsData,
+                        dailyStepsGoalForChart: viewModel.dailyStepsGoalInt,
+                        onMetricSelected: onMetricSelected,
+                        metrics: ["Weight", "Steps", "Sleep", "Activity Energy"],
+                        monthlyMetricLabel: "Steps / Month",
+                        periodAverages: viewModel.periodAverages
                     )
                     .padding(.horizontal)
                 }
-                .padding(.top, 16)   // etwas Luft nach oben
+                .padding(.top, 16)
+            }
+            .refreshable {
+                // 👇 beim „Pull-to-Refresh“:
+                viewModel.refresh()
             }
         }
         .onAppear {
-            healthStore.requestAuthorization()
+            viewModel.onAppear()
         }
     }
 }
 
 #Preview("StepsView – Body & Activity") {
+    // 🔹 Preview-HealthStore mit 365-Tage-Demodaten
     let previewStore = HealthStore.preview()
 
-    return StepsView()
-        .environmentObject(previewStore)
+    // 🔹 ViewModel bekommt diesen Preview-Store (isPreview == true)
+    let previewVM = StepsViewModel(healthStore: previewStore)
+
+    return StepsView(viewModel: previewVM)
+        .environmentObject(previewStore) // falls andere Views den Store als EnvironmentObject brauchen
 }

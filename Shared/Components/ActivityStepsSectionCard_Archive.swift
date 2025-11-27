@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-struct ActivityStepsSectionCard: View {
+struct ActivityStepsSectionCard_Archive: View {
 
     // MARK: - Eingabewerte
 

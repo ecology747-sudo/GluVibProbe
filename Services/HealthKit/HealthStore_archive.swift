@@ -7,7 +7,7 @@ import Foundation
 import HealthKit
 import Combine
 
-final class HealthStore: ObservableObject {
+final class HealthStore_archive: ObservableObject {
     
     static let shared = HealthStore()
 
