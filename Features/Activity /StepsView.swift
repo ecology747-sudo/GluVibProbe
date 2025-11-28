@@ -1,5 +1,5 @@
 //
-//  StepsView1_Archive.swift
+//  StepsView.swift
 //  GluVibProbe
 //
 //  Reine View für den Steps-Screen (MVVM)
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct StepsView1_Archive: View {
+struct StepsView: View {
 
     @StateObject private var viewModel: StepsViewModel
 
@@ -40,13 +40,14 @@ struct StepsView1_Archive: View {
                 VStack(alignment: .leading, spacing: 16) {
 
                     // Haupt-Section mit KPI + Charts (Steps)
-                    BodyActivitySectionCard(
+                    ActivitySectionCard(
                         sectionTitle: "Activity & Body",
                         title: "Steps",
                         kpiTitle: "Steps",
                         kpiTargetText: viewModel.formattedDailyStepGoal,
                         kpiCurrentText: viewModel.formattedTodaySteps,
                         kpiDeltaText: viewModel.kpiDeltaText,   // 👈 HIER neu
+                        hasTarget: true,
                         last90DaysData: viewModel.last90DaysData,
                         monthlyData: viewModel.monthlyStepsData,
                         dailyStepsGoalForChart: viewModel.dailyStepsGoalInt,

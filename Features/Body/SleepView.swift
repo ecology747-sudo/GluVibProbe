@@ -20,7 +20,8 @@ struct SleepView: View {
 
     var body: some View {
         ZStack {
-            Color.Glu.activityOrange.opacity(0.18).ignoresSafeArea()
+            Color.Glu.activityOrange.opacity(0.18)
+                .ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {

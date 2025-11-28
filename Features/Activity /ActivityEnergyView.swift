@@ -40,7 +40,7 @@ struct ActivityEnergyView: View {
                 VStack(alignment: .leading, spacing: 16) {
 
                     // Haupt-Section mit KPI + Charts (Activity Energy)
-                    BodyActivitySectionCard(
+                    ActivitySectionCard(
                         sectionTitle: "Activity & Body",
                         title: "Activity Energy",
                         kpiTitle: "Activity Energy",

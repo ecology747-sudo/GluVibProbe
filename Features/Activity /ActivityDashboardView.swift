@@ -1,11 +1,16 @@
 //
-//  BodyActivityDashboardView.swift
+//  ActivityDashboardView.swift
 //  GluVibProbe
 //
 
 import SwiftUI
 
-struct BodyActivityDashboardView: View {
+/// Dashboard für die Activity-Domain:
+/// - Steps
+/// - Activity Energy
+///
+/// Sleep & Weight wandern später in die Body-Domain (eigenes Dashboard).
+struct ActivityDashboardView: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
@@ -14,23 +19,27 @@ struct BodyActivityDashboardView: View {
         switch appState.currentStatsScreen {
 
         case .steps:
+            // Steps-Flow mit Metric-Chips
             StepsView(onMetricSelected: handleMetricSelection)
 
         case .activityEnergy:
-            ActivityEnergyView(onMetricSelected: handleMetricSelection)
+            // Activity-Energy-Flow
+            ActivityEnergyView()
 
         case .weight:
-            // WeightView
+            // Übergangsweise: weiter auf Steps anzeigen,
+            // bis Weight in der Body-Domain separat hängt.
             StepsView(onMetricSelected: handleMetricSelection)
 
         case .sleep:
-            // SleepView
-            // StepsView(onMetricSelected: handleMetricSelection)
-            SleepView(onMetricSelected: handleMetricSelection)
+            // Übergangsweise: weiter auf Steps anzeigen,
+            // bis Sleep in der Body-Domain separat hängt.
+            StepsView(onMetricSelected: handleMetricSelection)
         }
     }
 
     // MARK: - Navigation durch Metric Chips
+
     private func handleMetricSelection(_ metric: String) {
         switch metric {
         case "Steps":
@@ -55,7 +64,7 @@ struct BodyActivityDashboardView: View {
     let previewStore = HealthStore.preview()
     let previewState = AppState()
 
-    return BodyActivityDashboardView()
+    return ActivityDashboardView()
         .environmentObject(previewStore)
         .environmentObject(previewState)
 }
