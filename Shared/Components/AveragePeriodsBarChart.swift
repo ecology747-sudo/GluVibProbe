@@ -12,7 +12,7 @@ struct PeriodAverageEntry: Identifiable {
     let id = UUID()
     let label: String      // "7T", "14T", "30T", etc.
     let days: Int          // 7, 14, 30, 90, 180, 365
-    let value: Int         // Durchschnittswert
+    let value: Int         // Durchschnittswert (z. B. Steps, Minuten Schlaf, kcal)
 }
 
 // MARK: - CHART VIEW
@@ -22,10 +22,10 @@ struct AveragePeriodsBarChart: View {
     // MARK: - Input
 
     let data: [PeriodAverageEntry]
-    let metricLabel: String              // z. B. "Steps", "kcal", "g"
+    let metricLabel: String              // z. B. "Steps", "kcal", "g", "Sleep"
     let goalValue: Int?                  // optionale Zielwert-Linie
     let barColor: Color                  // Domain-Farbe
-    let scaleType: MetricScaleType       // Steps / smallInteger / percent
+    let scaleType: MetricScaleType       // .steps / .smallInteger / .percent / .hours
     let valueFormatter: (Int) -> String  // Formatierung des Balkenlabels
 
     // MARK: - Sortierte Daten (365T → 7T)
@@ -65,6 +65,31 @@ struct AveragePeriodsBarChart: View {
 
         case .percent:
             return Array(stride(from: 0, through: 100, by: 20))
+
+        case .hours:
+            // 🔥 Sleep: Werte in Minuten → Achse in Stunden
+            // maxValue ist in Minuten
+            let maxHours = Double(maxValue) / 60.0
+
+            let stepHours: Double
+            if maxHours <= 5 {
+                stepHours = 1        // 0, 1, 2, 3, 4, 5 h
+            } else if maxHours <= 10 {
+                stepHours = 2        // 0, 2, 4, 6, 8, 10 h
+            } else {
+                stepHours = 5        // 0, 5, 10, 15, ... h
+            }
+
+            let upperHours = ceil(maxHours / stepHours) * stepHours
+            let upperMinutes = Int(upperHours * 60.0)
+
+            return Array(
+                stride(
+                    from: 0,
+                    through: upperMinutes,
+                    by: Int(stepHours * 60.0)
+                )
+            )
         }
     }
 
@@ -119,6 +144,11 @@ struct AveragePeriodsBarChart: View {
 
                         case .percent:
                             Text("\(v)%")
+
+                        case .hours:
+                            // 🔥 Sleep-Achse in Stunden (eine Nachkommastelle)
+                            let hours = Double(v) / 60.0
+                            Text(String(format: "%.1f h", hours))
                         }
                     }
                 }

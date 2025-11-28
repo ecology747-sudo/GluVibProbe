@@ -7,11 +7,8 @@ import SwiftUI
 import Charts
 
 
-// MARK: - Datenmodell
+// MARK: - Zeitraum-Auswahl für den Chart
 
-
-
-// Zeitraum-Auswahl für den Chart
 enum Last90DaysPeriod: String, CaseIterable, Identifiable {
     case days7  = "7"
     case days14 = "14"
@@ -37,16 +34,16 @@ enum Last90DaysPeriod: String, CaseIterable, Identifiable {
 
 struct Last90DaysBarChart: View {
 
-    // Eingabedaten (generisch, wird für Steps & Energy verwendet)
+    // Eingabedaten (generisch, wird für Steps & Energy & Sleep verwendet)
     let entries: [DailyStepsEntry]
-        let metricLabel: String
-        let dailyStepsGoal: Int?
+    let metricLabel: String
+    let dailyStepsGoal: Int?
 
-        let barColor: Color              // schon vorhanden
-        let scaleType: MetricScaleType   // 👈 NEU
+    let barColor: Color              // Domain-Farbe
+    let scaleType: MetricScaleType   // .steps / .smallInteger / .percent / .hours
 
-        // interner UI-State (aktiver Zeitraum)
-        @State private var selectedPeriod: Last90DaysPeriod = .days30
+    // interner UI-State (aktiver Zeitraum)
+    @State private var selectedPeriod: Last90DaysPeriod = .days30
 
     // MARK: - Init mit Default-Werten
 
@@ -61,7 +58,7 @@ struct Last90DaysBarChart: View {
         self.metricLabel = metricLabel
         self.dailyStepsGoal = dailyStepsGoal
         self.barColor = barColor
-        self.scaleType = scaleType                    // 👈 NEU
+        self.scaleType = scaleType
     }
 
     // MARK: - Gefilterte Daten
@@ -115,13 +112,14 @@ struct Last90DaysBarChart: View {
 
     // MARK: - Y-Achsen-Ticks
 
-    /// Dynamische Y-Achsen-Ticks abhängig vom Scale-Typ (Steps / SmallInt / Percent)
+    /// Dynamische Y-Achsen-Ticks abhängig vom Scale-Typ (Steps / SmallInt / Percent / Hours)
     private var yAxisTickValues: [Int] {
         let dataMax = filteredEntries.map(\.steps).max() ?? 0
         let goalMax = dailyStepsGoal ?? 0
         let maxValue = max(dataMax, goalMax)
 
         switch scaleType {
+
         case .percent:
             // 0–100% (oder leicht darüber), Ticks alle 10%
             let upper = max(100, ((maxValue + 9) / 10) * 10)
@@ -160,6 +158,15 @@ struct Last90DaysBarChart: View {
 
             let upper = ((maxValue + step - 1) / step) * step
             return Array(stride(from: 0, through: upper, by: step))
+
+        case .hours:
+            // 🔥 Sleep: Werte in Minuten, Achse in Stunden
+            guard maxValue > 0 else { return [0] }
+
+            let maxHours = Double(maxValue) / 60.0
+            let upperHours = ceil(maxHours)           // z.B. 7.4 → 8 h
+            let upperMinutes = Int(upperHours * 60.0) // zurück nach Minuten
+            return Array(stride(from: 0, through: upperMinutes, by: 60)) // 60 Min = 1 h
         }
     }
 
@@ -173,17 +180,17 @@ struct Last90DaysBarChart: View {
 
             Chart {
 
-                // 🔸 Balken (für Steps ODER Activity Energy)
+                // 🔸 Balken (für Steps, Activity Energy oder Sleep)
                 ForEach(filteredEntries) { entry in
                     BarMark(
                         x: .value("Date", entry.date),
                         y: .value(metricLabel, entry.steps),
                         width: .fixed(selectedPeriod == .days90 ? 2 : 8)
                     )
-                    .foregroundStyle(barColor.gradient)   // ✅ jetzt generisch
+                    .foregroundStyle(barColor.gradient)
                 }
 
-                // 🔹 Optional: horizontale Ziel-Linie (Goal) – nur Linie, kein Label
+                // 🔹 Optional: horizontale Ziel-Linie (Goal)
                 if let goal = dailyStepsGoal {
                     RuleMark(
                         y: .value("Goal", goal)
@@ -237,17 +244,18 @@ struct Last90DaysBarChart: View {
                         if let intValue = value.as(Int.self) {
 
                             if intValue == 0 {
-                                // 0 kannst du bei Bedarf auch anzeigen – aktuell ausgeblendet
+                                // 0 bleibt ausgeblendet wie bisher
                                 EmptyView()
                             } else {
                                 switch scaleType {
+
                                 case .percent:
                                     Text("\(intValue)%")
                                         .font(.system(size: 9, weight: .semibold))
                                         .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
 
                                 case .smallInteger:
-                                    // z.B. Insulin-Einheiten, Minuten, kleine kcal-Bereiche
+                                    // z.B. Insulin-Einheiten, kleine kcal-Bereiche
                                     Text("\(intValue)")
                                         .font(.system(size: 9, weight: .semibold))
                                         .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
@@ -263,14 +271,19 @@ struct Last90DaysBarChart: View {
                                             .font(.system(size: 9, weight: .semibold))
                                             .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
                                     }
+
+                                case .hours:
+                                    // 🔥 Sleep: Minuten → Stunden
+                                    let hours = Double(intValue) / 60.0
+                                    Text(String(format: "%.1f h", hours))
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
                                 }
                             }
                         }
                     }
                 }
             }
-
-                          
             .frame(height: 220)
         }
         .padding(.horizontal, 4)
@@ -343,7 +356,8 @@ struct Last90DaysBarChart: View {
         entries: entries,
         metricLabel: "Steps",
         dailyStepsGoal: 10_000,
-        barColor: Color.Glu.activityOrange   // 🔸 BodyActivity
+        barColor: Color.Glu.activityOrange,
+        scaleType: .steps
     )
     .padding()
     .background(Color.Glu.backgroundSurface)

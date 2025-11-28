@@ -42,7 +42,7 @@ struct BodyActivitySectionCard: View {
     // Durchschnittswerte für 7D–365D
     let periodAverages: [PeriodAverageEntry]
 
-    // 🔥 NEU: Skala für die Charts
+    // 🔥 Skala für die Charts (Steps, SmallInt, Percent, Hours)
     let scaleType: MetricScaleType
 
     // MARK: - Formatter
@@ -128,9 +128,16 @@ struct BodyActivitySectionCard: View {
                         barColor: Color.Glu.activityOrange,
                         scaleType: scaleType,                 // 👈 generisch
                         valueFormatter: { value in
-                            BodyActivitySectionCard.numberFormatter
-                                .string(from: NSNumber(value: value))
-                            ?? "\(value)"
+                            // 🔥 HIER: spezielle Formatierung für Sleep (Minuten → Stunden)
+                            switch scaleType {
+                            case .hours:
+                                let hours = Double(value) / 60.0
+                                return String(format: "%.1f h", hours)
+                            default:
+                                return BodyActivitySectionCard.numberFormatter
+                                    .string(from: NSNumber(value: value))
+                                ?? "\(value)"
+                            }
                         }
                     )
                     .frame(height: 260)

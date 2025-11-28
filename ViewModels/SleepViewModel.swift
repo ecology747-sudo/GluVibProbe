@@ -129,7 +129,7 @@ final class SleepViewModel: ObservableObject {
         Self.formatMinutes(avgSleepLast7Days)
     }
 
-    private static func formatMinutes(_ minutes: Int) -> String {
+    static func formatMinutes(_ minutes: Int) -> String {
         guard minutes > 0 else { return "–" }
 
         let hours = minutes / 60

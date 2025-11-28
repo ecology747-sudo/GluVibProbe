@@ -11,7 +11,7 @@ import Charts
 struct MonthlyMetricEntry: Identifiable {
     let id = UUID()
     let monthShort: String   // "Jan", "Feb", ...
-    let value: Int           // Aggregierter Monatswert
+    let value: Int           // Aggregierter Monatswert (z. B. Steps, kcal, Minuten Schlaf)
 }
 
 // MARK: - View
@@ -21,9 +21,9 @@ struct MonthlyBarChart: View {
     // MARK: - Input
 
     let data: [MonthlyMetricEntry]
-    let metricLabel: String          // z. B. "Steps / Month", "kcal / Month"
+    let metricLabel: String          // z. B. "Steps / Month", "kcal / Month", "Sleep / Month"
     let barColor: Color              // Domain-Farbe (BodyActivity, Nutrition, Metabolic)
-    let scaleType: MetricScaleType   // .steps / .smallInteger / .percent
+    let scaleType: MetricScaleType   // .steps / .smallInteger / .percent / .hours
 
     // MARK: - Init
 
@@ -86,6 +86,31 @@ struct MonthlyBarChart: View {
 
         case .percent:
             return Array(stride(from: 0, through: 100, by: 20))
+
+        case .hours:
+            // 🔥 Sleep: Werte in Minuten → Achse in Stunden
+            // maxValue ist Minuten, wir rechnen in Stunden um
+            let maxHours = Double(maxValue) / 60.0
+            // grober Tick-Abstand in Stunden
+            let stepHours: Double
+            if maxHours <= 50 {
+                stepHours = 10   // 0, 10, 20, 30, 40, 50
+            } else if maxHours <= 150 {
+                stepHours = 20   // 0, 20, 40, 60, ...
+            } else {
+                stepHours = 50   // sehr große Summen
+            }
+
+            let upperHours = ceil(maxHours / stepHours) * stepHours
+            let upperMinutes = Int(upperHours * 60.0)
+
+            return Array(
+                stride(
+                    from: 0,
+                    through: upperMinutes,
+                    by: Int(stepHours * 60.0)
+                )
+            )
         }
     }
 
@@ -104,6 +129,11 @@ struct MonthlyBarChart: View {
 
         case .percent:
             return "\(value) %"
+
+        case .hours:
+            // 🔥 Sleep: Minuten → Stunden (ganzzahlige Stunden für Monats-Summen)
+            let hours = Int((Double(value) / 60.0).rounded())
+            return "\(hours) h"
         }
     }
 
@@ -138,9 +168,10 @@ struct MonthlyBarChart: View {
                 AxisValueLabel {
                     if let v = value.as(Int.self) {
                         switch scaleType {
+
                         case .steps:
-                            if v >= 1000 {
-                                Text("\(v / 1000)T")
+                            if v >= 1_000 {
+                                Text("\(v / 1_000)T")
                             } else {
                                 Text("\(v)")
                             }
@@ -150,6 +181,11 @@ struct MonthlyBarChart: View {
 
                         case .percent:
                             Text("\(v)%")
+
+                        case .hours:
+                            // 🔥 Sleep-Achse in Stunden
+                            let hours = Int((Double(v) / 60.0).rounded())
+                            Text("\(hours) h")
                         }
                     }
                 }
@@ -167,8 +203,6 @@ struct MonthlyBarChart: View {
                 .font(.caption.bold())
                 .foregroundStyle(Color.Glu.primaryBlue)
             }
-        
-            
         }
         .frame(height: 260)
     }
