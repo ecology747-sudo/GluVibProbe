@@ -1,18 +1,18 @@
 //
-//  BodyActivitySectionCard.swift
+//  ActivitySectionCard.swift
 //  GluVibProbe
 //
 
 import SwiftUI
 
-struct BodyActivitySectionCard: View {
+struct ActivitySectionCard: View {
 
     // MARK: - Eingabewerte
 
     let title: String                 // Aktiver Metrik-Name (z. B. "Steps")
 
     // --- GENERISCHE KPI-WERTE ---
-    let kpiTitle: String              // Kann später entfallen, optional
+    let kpiTitle: String              // z. B. "Steps Today"
     let kpiTargetText: String         // z. B. "10 000"
     let kpiCurrentText: String        // z. B. "8 532"
     let kpiDeltaText: String          // z. B. "+1 468" oder "−500"
@@ -36,13 +36,13 @@ struct BodyActivitySectionCard: View {
     // Callback für Chips
     let onMetricSelected: (String) -> Void
 
-    // Chip-Liste (Weight / Steps / Sleep / Activity Energy)
+    // Chip-Liste (Steps / Activity Energy)
     let metrics: [String]
 
     // Durchschnittswerte für 7D–365D
     let periodAverages: [PeriodAverageEntry]
 
-    // 🔥 Skala für die Charts (Steps, SmallInt, Percent, Hours)
+    // Skala für die Charts (Steps / smallInt / Prozent / Stunden)
     let scaleType: MetricScaleType
 
     // MARK: - Formatter
@@ -56,7 +56,7 @@ struct BodyActivitySectionCard: View {
     // MARK: - Initializer
 
     init(
-        sectionTitle: String = "Körper & Aktivität",
+        sectionTitle: String = "Activity",
         title: String,
         kpiTitle: String,
         kpiTargetText: String,
@@ -65,12 +65,12 @@ struct BodyActivitySectionCard: View {
         hasTarget: Bool = true,
         last90DaysData: [DailyStepsEntry],
         monthlyData: [MonthlyMetricEntry],
-        dailyStepsGoalForChart: Int? = nil,
+        dailyGoalForChart: Int? = nil,
         onMetricSelected: @escaping (String) -> Void = { _ in },
-        metrics: [String] = ["Weight", "Steps", "Sleep", "Activity Energy"],
+        metrics: [String] = ["Steps", "Activity Energy"],   // 👈 nur Activity-Metriken
         monthlyMetricLabel: String = "Steps / Month",
         periodAverages: [PeriodAverageEntry] = [],
-        scaleType: MetricScaleType = .steps          // 🔸 Default = Steps
+        scaleType: MetricScaleType = .steps
     ) {
         self.sectionTitle = sectionTitle
         self.title = title
@@ -81,7 +81,7 @@ struct BodyActivitySectionCard: View {
         self.hasTarget = hasTarget
         self.last90DaysData = last90DaysData
         self.monthlyData = monthlyData
-        self.dailyStepsGoalForChart = dailyStepsGoalForChart
+        self.dailyStepsGoalForChart = dailyGoalForChart   // ✅ hier war der Fehler
         self.onMetricSelected = onMetricSelected
         self.metrics = metrics
         self.monthlyMetricLabel = monthlyMetricLabel
@@ -100,44 +100,37 @@ struct BodyActivitySectionCard: View {
                 subtitle: nil
             )
 
-            // Chips (Weight / Steps / Sleep / Activity Energy)
+            // Chips (Steps / Activity Energy)
             metricChips
 
             // KPI-Bereich
             kpiHeader
 
             // 90-Tage-Chart in Kachel
-            ChartCard(borderColor: Color.Glu.activityOrange) {
+            ChartCard(borderColor: Color.Glu.activityAccent) {
                 Last90DaysBarChart(
                     entries: last90DaysData,
                     metricLabel: title,
                     dailyStepsGoal: dailyStepsGoalForChart,
-                    barColor: Color.Glu.activityOrange,
-                    scaleType: scaleType                      // 👈 generisch
+                    barColor: Color.Glu.activityAccent,
+                    scaleType: scaleType
                 )
                 .frame(height: 260)
             }
 
             // Durchschnitts-Chart in Kachel
             if !periodAverages.isEmpty {
-                ChartCard(borderColor: Color.Glu.activityOrange) {
+                ChartCard(borderColor: Color.Glu.activityAccent) {
                     AveragePeriodsBarChart(
                         data: periodAverages,
                         metricLabel: title,
                         goalValue: dailyStepsGoalForChart,
-                        barColor: Color.Glu.activityOrange,
-                        scaleType: scaleType,                 // 👈 generisch
+                        barColor: Color.Glu.activityAccent,
+                        scaleType: scaleType,
                         valueFormatter: { value in
-                            // 🔥 HIER: spezielle Formatierung für Sleep (Minuten → Stunden)
-                            switch scaleType {
-                            case .hours:
-                                let hours = Double(value) / 60.0
-                                return String(format: "%.1f h", hours)
-                            default:
-                                return BodyActivitySectionCard.numberFormatter
-                                    .string(from: NSNumber(value: value))
-                                ?? "\(value)"
-                            }
+                            ActivitySectionCard.numberFormatter
+                                .string(from: NSNumber(value: value))
+                            ?? "\(value)"
                         }
                     )
                     .frame(height: 260)
@@ -145,12 +138,12 @@ struct BodyActivitySectionCard: View {
             }
 
             // Monats-Chart in Kachel
-            ChartCard(borderColor: Color.Glu.activityOrange) {
+            ChartCard(borderColor: Color.Glu.activityAccent) {
                 MonthlyBarChart(
                     data: monthlyData,
                     metricLabel: monthlyMetricLabel,
-                    barColor: Color.Glu.activityOrange,
-                    scaleType: scaleType                      // 👈 generisch
+                    barColor: Color.Glu.activityAccent,
+                    scaleType: scaleType
                 )
                 .frame(height: 260)
             }
@@ -162,7 +155,7 @@ struct BodyActivitySectionCard: View {
 
 // MARK: - Subviews
 
-private extension BodyActivitySectionCard {
+private extension ActivitySectionCard {
 
     // MARK: Metric Chips
     var metricChips: some View {
@@ -180,7 +173,7 @@ private extension BodyActivitySectionCard {
                         .background(
                             Capsule().fill(
                                 active
-                                    ? Color.Glu.activityOrange
+                                    ? Color.Glu.activityAccent
                                     : Color.Glu.backgroundSurface
                             )
                         )
@@ -188,7 +181,7 @@ private extension BodyActivitySectionCard {
                             Capsule().stroke(
                                 active
                                     ? Color.clear
-                                    : Color.Glu.activityOrange.opacity(0.8),
+                                    : Color.Glu.activityAccent.opacity(0.8),
                                 lineWidth: active ? 0 : 1
                             )
                         )
@@ -236,7 +229,7 @@ private extension BodyActivitySectionCard {
                     title: "Delta",
                     valueText: kpiDeltaText,
                     unit: nil,
-                    valueColor: deltaColor   // 👈 nur hier farbig
+                    valueColor: deltaColor
                 )
             } else {
                 // 🔹 Kein Ziel: nur Current, zentriert

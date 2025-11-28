@@ -19,16 +19,24 @@ struct ContentView: View {
             ZStack {
                 switch selectedTab {
                 case .activity:
-                    BodyActivityDashboardView()
+                    ActivityDashboardView()
+
+                case .body:
+                    BodyDashboardView()
+
                 case .nutrition:
-                    Text("Nutrition View")   // Platzhalter
+                    NutritionDashboard()    // 👈 jetzt echte View
+
                 case .home:
-                    Text("Home View")        // Platzhalter
+                    HomeView()
+
                 case .history:
-                    Text("History View")     // Platzhalter
+                    HistoryView()           // 👈 jetzt echte View
+
                 case .settings:
-                    SettingsView()           // deine Settings-Seite
+                    SettingsView()
                 }
+
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             

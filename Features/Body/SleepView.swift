@@ -20,40 +20,31 @@ struct SleepView: View {
 
     var body: some View {
         ZStack {
-            Color.Glu.activityOrange.opacity(0.18)
+            // 👉 Body-Domain = Orange
+            Color.Glu.bodyAccent.opacity(0.18)
                 .ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    BodyActivitySectionCard(
-                        sectionTitle: "Körper & Aktivität",
+                    BodySectionCard(
+                        sectionTitle: "Body",
                         title: "Sleep",
-
-                        // ---------- KPI ----------
                         kpiTitle: "Sleep Today",
                         kpiTargetText: "",
+                        // 👉 KPI in Stunden + Minuten
                         kpiCurrentText: SleepViewModel.formatMinutes(viewModel.todaySleepMinutes),
                         kpiDeltaText: "",
                         hasTarget: false,
-
-                        // ---------- CHART DATEN ----------
-                        last90DaysData: viewModel.last90DaysDataForChart,   // ✅ Richtig
-                        monthlyData: viewModel.monthlySleepData,            // ✅ Richtig
-
-                        dailyStepsGoalForChart: nil,
-
-                        // ---------- CHIP NAVIGATION ----------
+                        // 👉 Sleep-Daten in generische Entries gemapped
+                        last90DaysData: viewModel.last90DaysDataForChart,
+                        monthlyData: viewModel.monthlySleepData,
+                        dailyGoalForChart: nil,
                         onMetricSelected: onMetricSelected,
-                        metrics: ["Weight", "Steps", "Sleep", "Activity Energy"],
-
+                        metrics: ["Sleep", "Weight"],
                         monthlyMetricLabel: "Sleep / Month",
-
-                        // ---------- PERIOD AVG ----------
-                        periodAverages: viewModel.periodAverages,           // ✅ Richtig
-
-                        // ---------- SCALE ----------
-                        scaleType: .hours                                   // 🔥 Wichtig
+                        periodAverages: viewModel.periodAverages,
+                        scaleType: .hours 
                     )
                     .padding(.horizontal)
                 }
@@ -68,13 +59,18 @@ struct SleepView: View {
         }
     }
 }
-#Preview("SleepView – Body & Activity") {
-    let previewStore = HealthStore.preview()
-    let previewVM = SleepViewModel(healthStore: previewStore)
+
+// MARK: - Preview
+
+#Preview("SleepView – Body Domain") {
+    let appState   = AppState()
+    let healthStore = HealthStore.preview()
+    let viewModel  = SleepViewModel(healthStore: healthStore)
 
     return SleepView(
-        viewModel: previewVM,
+        viewModel: viewModel,
         onMetricSelected: { _ in }
     )
-    .environmentObject(previewStore)
+    .environmentObject(appState)
+    .environmentObject(healthStore)
 }

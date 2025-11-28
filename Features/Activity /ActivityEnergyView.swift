@@ -2,60 +2,60 @@
 //  ActivityEnergyView.swift
 //  GluVibProbe
 //
-//  Reine View für den Activity-Energy-Screen (MVVM)
-//
 
 import SwiftUI
 
 struct ActivityEnergyView: View {
 
+    // MARK: - ViewModel
+
     @StateObject private var viewModel: ActivityEnergyViewModel
 
-    // Callback aus dem Dashboard (für Metric-Chips)
+    // Callback nach oben (ActivityDashboardView),
+    // damit der Dashboard-Switch weiß, welche Metrik gewählt wurde
     let onMetricSelected: (String) -> Void
 
-    /// Haupt-Init für die App:
-    /// - ohne ViewModel → ActivityEnergyViewModel benutzt automatisch HealthStore.shared
-    /// - mit ViewModel → z.B. in Previews kann ein spezielles VM übergeben werden
+    // MARK: - Init
+
     init(
         viewModel: ActivityEnergyViewModel? = nil,
         onMetricSelected: @escaping (String) -> Void = { _ in }
     ) {
         self.onMetricSelected = onMetricSelected
-
-        if let viewModel {
-            _viewModel = StateObject(wrappedValue: viewModel)
-        } else {
-            _viewModel = StateObject(wrappedValue: ActivityEnergyViewModel())
-        }
+        _viewModel = StateObject(
+            wrappedValue: viewModel ?? ActivityEnergyViewModel()
+        )
     }
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
-            // Hintergrund für den Bereich „Körper & Aktivität“
-            Color.Glu.activityOrange.opacity(0.18)
+            // 🔴 Activity-Domain-Hintergrund
+            Color.Glu.activityAccent.opacity(0.18)
                 .ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    // Haupt-Section mit KPI + Charts (Activity Energy)
                     ActivitySectionCard(
-                        sectionTitle: "Activity & Body",
+                        sectionTitle: "Activity",
                         title: "Activity Energy",
-                        kpiTitle: "Activity Energy",
-                        kpiTargetText: "",                            // kein Ziel
+                        kpiTitle: "Active Energy Today",
+                        // kein Target für Activity Energy
+                        kpiTargetText: "",
                         kpiCurrentText: viewModel.formattedTodayActiveEnergy,
-                        kpiDeltaText: "",                              // kein Delta
-                        hasTarget: false,                              // 👉 nur Current-KPI zentriert
+                        kpiDeltaText: "",
+                        hasTarget: false,
                         last90DaysData: viewModel.last90DaysData,
                         monthlyData: viewModel.monthlyActiveEnergyData,
-                        dailyStepsGoalForChart: nil,                   // keine Ziel-Linie
+                        dailyGoalForChart: nil,
+                        // 🔑 WICHTIG: Callback nach oben durchreichen
                         onMetricSelected: onMetricSelected,
-                        metrics: ["Weight", "Steps", "Sleep", "Activity Energy"],
-                        monthlyMetricLabel: "kcal / Month",
+                        metrics: ["Steps", "Activity Energy"],
+                        monthlyMetricLabel: "Active Energy / Month",
                         periodAverages: viewModel.periodAverages,
-                        scaleType: .smallInteger                       // 👉 andere Skala
+                        scaleType: .smallInteger
                     )
                     .padding(.horizontal)
                 }
@@ -71,10 +71,6 @@ struct ActivityEnergyView: View {
     }
 }
 
-#Preview("ActivityEnergyView – Body & Activity") {
-    let previewStore = HealthStore.preview()
-    let previewVM = ActivityEnergyViewModel(healthStore: previewStore)
-
-    return ActivityEnergyView(viewModel: previewVM)
-        .environmentObject(previewStore)
+#Preview {
+    ActivityEnergyView()
 }

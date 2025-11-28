@@ -107,7 +107,19 @@ struct AveragePeriodsBarChart: View {
                 .foregroundStyle(barColor.gradient)
                 .cornerRadius(4)
                 .annotation(position: .top) {
-                    Text(valueFormatter(entry.value))
+                    let labelText: String = {
+                        switch scaleType {
+                        case .hours:
+                            // 🔥 Sleep: Minuten → Stunden
+                            let hours = Double(entry.value) / 60.0
+                            return String(format: "%.1f h", hours)
+
+                        default:
+                            return valueFormatter(entry.value)
+                        }
+                    }()
+
+                    Text(labelText)
                         .font(.caption2.bold())
                         .foregroundColor(Color.Glu.primaryBlue)
                         .padding(.bottom, 2)

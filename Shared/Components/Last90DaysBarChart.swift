@@ -51,7 +51,7 @@ struct Last90DaysBarChart: View {
         entries: [DailyStepsEntry],
         metricLabel: String = "Value",
         dailyStepsGoal: Int? = nil,
-        barColor: Color = Color.Glu.activityOrange,   // 🔸 Default = BodyActivity
+        barColor: Color = Color.Glu.activityAccent,   // 🔸 Default = Activity-Akzent
         scaleType: MetricScaleType = .steps           // 🔸 Default = Steps
     ) {
         self.entries = entries
@@ -313,7 +313,7 @@ struct Last90DaysBarChart: View {
                             Capsule()
                                 .fill(
                                     active
-                                    ? Color.Glu.activityOrange
+                                    ? barColor                       // 🔁 Domain-Farbe
                                     : Color.Glu.backgroundSurface
                                 )
                         )
@@ -322,7 +322,7 @@ struct Last90DaysBarChart: View {
                                 .stroke(
                                     active
                                     ? Color.clear
-                                    : Color.Glu.activityOrange.opacity(0.8),
+                                    : barColor.opacity(0.8),          // 🔁 Domain-Farbe
                                     lineWidth: active ? 0 : 1
                                 )
                         )
@@ -356,7 +356,7 @@ struct Last90DaysBarChart: View {
         entries: entries,
         metricLabel: "Steps",
         dailyStepsGoal: 10_000,
-        barColor: Color.Glu.activityOrange,
+        barColor: Color.Glu.activityAccent,   // 🔁 Activity = Rot
         scaleType: .steps
     )
     .padding()

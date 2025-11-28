@@ -33,7 +33,7 @@ struct StepsView: View {
     var body: some View {
         ZStack {
             // Hintergrund für den Bereich „Körper & Aktivität“
-            Color.Glu.activityOrange.opacity(0.18)
+            Color.Glu.activityAccent.opacity(0.18)
                 .ignoresSafeArea()
 
             ScrollView {
@@ -41,20 +41,21 @@ struct StepsView: View {
 
                     // Haupt-Section mit KPI + Charts (Steps)
                     ActivitySectionCard(
-                        sectionTitle: "Activity & Body",
+                        sectionTitle: "Activity",
                         title: "Steps",
-                        kpiTitle: "Steps",
+                        kpiTitle: "Steps Today",
                         kpiTargetText: viewModel.formattedDailyStepGoal,
                         kpiCurrentText: viewModel.formattedTodaySteps,
-                        kpiDeltaText: viewModel.kpiDeltaText,   // 👈 HIER neu
+                        kpiDeltaText: viewModel.kpiDeltaText,
                         hasTarget: true,
                         last90DaysData: viewModel.last90DaysData,
                         monthlyData: viewModel.monthlyStepsData,
-                        dailyStepsGoalForChart: viewModel.dailyStepsGoalInt,
+                        dailyGoalForChart: viewModel.dailyStepsGoalInt,
                         onMetricSelected: onMetricSelected,
-                        metrics: ["Weight", "Steps", "Sleep", "Activity Energy"],
+                        metrics: ["Steps", "Activity Energy"],
                         monthlyMetricLabel: "Steps / Month",
-                        periodAverages: viewModel.periodAverages
+                        periodAverages: viewModel.periodAverages,
+                        scaleType: .steps
                     )
                     .padding(.horizontal)
                 }

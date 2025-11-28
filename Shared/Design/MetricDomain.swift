@@ -5,44 +5,78 @@
 
 import SwiftUI
 
-/// Fach-Domain für Metriken – steuert u.a. Farben.
-/// Wird von SectionCards verwendet, um Charts & Chips
-/// CI-konform zu färben.
+/// Fach-Domain für Metriken.
+/// Steuert CI-Farben für:
+/// - SectionCards
+/// - Charts
+/// - Chips
+/// - KPI-Highlights
+///
+/// Die Domain entspricht dem fachlichen Bereich
+/// der jeweiligen Metrik (z. B. Steps → Activity).
 enum MetricDomain {
-    case bodyActivity    // Steps, Activity Energy, Weight, Sleep
-    case nutrition       // Carbs, Protein, Fat, Calories
-    case metabolic       // Glucose, Insulin, Time in Range
+
+    /// 🔥 **ACTIVITY**
+    /// Schritte, Aktivitätsenergie, Workouts, Training
+    /// → Farbe: **Rot (GluBodyRed)**
+    case activity
+
+    /// 🟠 **BODY**
+    /// Schlaf, Gewicht, Herzfrequenz, Körperdaten
+    /// → Farbe: **Orange (GluActivityOrange)**
+    case body
+
+    /// 🟦 **NUTRITION**
+    /// Carbs, Protein, Fat, Calories
+    /// → Farbe: **Aqua/Blau**
+    case nutrition
+
+    /// 🟢 **METABOLIC**
+    /// Glucose, Insulin, Time-in-Range
+    /// → Farbe: **Lime**
+    case metabolic
 }
 
 extension MetricDomain {
 
-    /// Primäre Akzentfarbe für Charts (Balken etc.)
+    /// Primäre CI-Farbe für Charts, Linien, Bars,
+    /// KPI-Highlights, SectionFrames.
     var accentColor: Color {
         switch self {
-        case .bodyActivity:
-            // Steps / Activity → Orange
-            return Color.Glu.activityOrange
+
+        case .activity:
+            // 🔥 Rot – symbolisiert Bewegung & Aktivität
+            return Color.Glu.activityAccent
+
+        case .body:
+            // 🟠 Orange – warme Farbe für Körperdaten
+            return Color.Glu.bodyAccent
 
         case .nutrition:
-            // Nutrition → Primär-Blau
-            return Color.Glu.primaryBlue
+            // 🟦 Aqua – klar & frisch für Ernährung
+            return Color.Glu.nutritionAccent
 
         case .metabolic:
-            // Metabolik → Lime
-            return Color.Glu.accentLime
+            // 🟢 Lime – Glukose / Medizinische Werte
+            return Color.Glu.metabolicAccent
         }
     }
 
-    /// (Optional für später)
-    /// Farbe für Chips, Badges, kleine Highlights
+    /// Farbe für Chips (Filter), Badges, kleine UI-Highlights.
     var chipColor: Color {
         switch self {
-        case .bodyActivity:
-            return Color.Glu.activityOrange
+
+        case .activity:
+            return Color.Glu.activityAccent
+
+        case .body:
+            return Color.Glu.bodyAccent
+
         case .nutrition:
-            return Color.Glu.primaryBlue
+            return Color.Glu.nutritionAccent
+
         case .metabolic:
-            return Color.Glu.accentLime
+            return Color.Glu.metabolicAccent
         }
     }
 }

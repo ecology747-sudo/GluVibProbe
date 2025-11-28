@@ -4,15 +4,17 @@
 import SwiftUI
 
 enum GluTab: CaseIterable {
-    case activity
-    case nutrition
-    case home
+    case activity   // 🔴 Activity-Domain (Steps, Activity Energy, Workouts)
+    case body       // 🟠 Body-Domain (Sleep, Weight, HR, HRV)
+    case nutrition  // 🟦 Nutrition-Domain
+    case home       // 🟢 Metabolic-Domain Dashboard (Merken für später)
     case history
     case settings
 
     var title: String {
         switch self {
         case .activity:  return "Activity"
+        case .body:      return "Body"
         case .nutrition: return "Nutrition"
         case .home:      return "Home"
         case .history:   return "History"
@@ -22,7 +24,8 @@ enum GluTab: CaseIterable {
 
     var systemImage: String {
         switch self {
-        case .activity:  return "figure.walk"
+        case .activity:  return "figure.walk"          // Aktivität
+        case .body:      return "figure.arms.open"     // Körper (Sleep/Weight)
         case .nutrition: return "fork.knife"
         case .home:      return "house.fill"
         case .history:   return "folder.fill.badge.plus"
@@ -48,8 +51,10 @@ struct GluBottomTabBar: View {
                             .font(.caption2)
                     }
                     .padding(.top, 0)
-                    .frame(maxWidth: .infinity,
-                           maxHeight: .infinity)   // füllt die TabBar → vertikal zentriert
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity   // füllt die TabBar → vertikal zentriert
+                    )
                     .contentShape(Rectangle())
                     .foregroundColor(
                         selectedTab == tab ? .accentColor : .secondary
@@ -60,6 +65,5 @@ struct GluBottomTabBar: View {
         .frame(height: 60)              // sichtbare TabBar-Höhe
         .padding(.horizontal, 15)
         .background(.thinMaterial)
-        
     }
 }

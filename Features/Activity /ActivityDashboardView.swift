@@ -24,7 +24,7 @@ struct ActivityDashboardView: View {
 
         case .activityEnergy:
             // Activity-Energy-Flow
-            ActivityEnergyView()
+            ActivityEnergyView(onMetricSelected: handleMetricSelection)
 
         case .weight:
             // Übergangsweise: weiter auf Steps anzeigen,
