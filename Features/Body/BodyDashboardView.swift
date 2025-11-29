@@ -1,15 +1,10 @@
-//
-//  BodyDashboardView.swift
-//  GluVibProbe
-//
-
 import SwiftUI
 
 /// Dashboard für Body-Daten:
 /// - Sleep
-/// - (später) Weight
+/// - Weight
 ///
-/// Die Activity-Daten liegen jetzt im ActivityDashboardView.
+/// Die Activity-Daten liegen im ActivityDashboardView.
 struct BodyDashboardView: View {
 
     @EnvironmentObject var appState: AppState
@@ -23,20 +18,17 @@ struct BodyDashboardView: View {
             SleepView(onMetricSelected: handleMetricSelection)
 
         case .weight:
-            // 💡 Ab jetzt eigene WeightView (mit Metric-Chips)
+            // WeightView mit den gleichen Body-Metric-Chips (Sleep / Weight)
             WeightView(onMetricSelected: handleMetricSelection)
 
-        // Übergangsweise weiterhin SleepView,
-        // bis Steps/Activity hier nicht mehr über das Body-Dashboard laufen
-        case .steps:
-            SleepView(onMetricSelected: handleMetricSelection)
-
-        case .activityEnergy:
+        // Falls Nutzer in der Body-Domain einmal „falsch“ auf Steps/Activity landet:
+        // Übergangsweise zurück auf Sleep (bis Tabs alles sauber trennen)
+        case .steps, .activityEnergy:
             SleepView(onMetricSelected: handleMetricSelection)
         }
     }
 
-    // MARK: - Metric Navigation
+    // MARK: - Metric Navigation (Sleep <-> Weight)
 
     private func handleMetricSelection(_ metric: String) {
         switch metric {
@@ -47,6 +39,7 @@ struct BodyDashboardView: View {
         case "Weight":
             appState.currentStatsScreen = .weight
 
+        // Falls in Body-Domain jemand „Steps“ oder „Activity Energy“ antippt:
         case "Steps":
             appState.currentStatsScreen = .steps
 

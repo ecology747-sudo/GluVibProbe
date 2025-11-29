@@ -144,10 +144,14 @@ final class ActivityEnergyViewModel: ObservableObject {
 
     // MARK: - Formatting for the View
 
-    /// Formatierter Wert für "Current" (heute, kcal)
+    /// Formatierter Wert für "Current" (heute, inkl. Einheit "kcal")
     var formattedTodayActiveEnergy: String {
-        numberFormatter.string(from: NSNumber(value: todayActiveEnergy))
+        guard todayActiveEnergy > 0 else { return "–" }
+
+        let numberString = numberFormatter.string(from: NSNumber(value: todayActiveEnergy))
             ?? "\(todayActiveEnergy)"
+
+        return "\(numberString) kcal"
     }
 
     // MARK: - Number Formatter

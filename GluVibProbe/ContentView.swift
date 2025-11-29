@@ -53,7 +53,7 @@ struct ContentView: View {
     ContentView(startTab: .home)
         .environmentObject(previewStore)
         .environmentObject(previewState)           // 🔹 NEU
-        .previewDevice("iPhone 15 Pro")
+        
 }
 
 #Preview("ContentView – Steps (Activity) Tab") {
@@ -63,6 +63,6 @@ struct ContentView: View {
     ContentView(startTab: .activity)
         .environmentObject(previewStore)
         .environmentObject(previewState)           // 🔹 NEU
-        .previewDevice("iPhone 15 Pro")
+        
 }
 //Test Git

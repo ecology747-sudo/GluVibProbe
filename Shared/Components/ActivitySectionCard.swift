@@ -81,7 +81,7 @@ struct ActivitySectionCard: View {
         self.hasTarget = hasTarget
         self.last90DaysData = last90DaysData
         self.monthlyData = monthlyData
-        self.dailyStepsGoalForChart = dailyGoalForChart   // ✅ hier war der Fehler
+        self.dailyStepsGoalForChart = dailyGoalForChart
         self.onMetricSelected = onMetricSelected
         self.metrics = metrics
         self.monthlyMetricLabel = monthlyMetricLabel

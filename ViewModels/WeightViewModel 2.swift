@@ -1,4 +1,12 @@
 //
+//  WeightViewModel 2.swift
+//  GluVibProbe
+//
+//  Created by MacBookAir on 28.11.25.
+//
+
+
+//
 //  WeightViewModel.swift
 //  GluVibProbe
 //

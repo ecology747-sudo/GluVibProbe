@@ -45,6 +45,9 @@ struct BodySectionCard: View {
     // Skala für die Charts (z. B. .hours bei Sleep)
     let scaleType: MetricScaleType
 
+    /// Steuert, ob der Monats-Chart angezeigt wird (z. B. bei Weight = false)
+    let showMonthlyChart: Bool
+
     // MARK: - Formatter
 
     private static let numberFormatter: NumberFormatter = {
@@ -70,6 +73,7 @@ struct BodySectionCard: View {
         metrics: [String] = ["Sleep", "Weight"],
         monthlyMetricLabel: String = "Value / Month",
         periodAverages: [PeriodAverageEntry] = [],
+        showMonthlyChart: Bool = true,                 // 🔸 Default = Monatschart AN
         scaleType: MetricScaleType = .smallInteger
     ) {
         self.sectionTitle = sectionTitle
@@ -86,6 +90,7 @@ struct BodySectionCard: View {
         self.metrics = metrics
         self.monthlyMetricLabel = monthlyMetricLabel
         self.periodAverages = periodAverages
+        self.showMonthlyChart = showMonthlyChart       // 🔸 neu
         self.scaleType = scaleType
     }
 
@@ -137,15 +142,17 @@ struct BodySectionCard: View {
                 }
             }
 
-            // Monats-Chart in Kachel
-            ChartCard(borderColor: Color.Glu.bodyAccent) {
-                MonthlyBarChart(
-                    data: monthlyData,
-                    metricLabel: monthlyMetricLabel,
-                    barColor: Color.Glu.bodyAccent,
-                    scaleType: scaleType
-                )
-                .frame(height: 260)
+            // Monats-Chart in Kachel (optional)
+            if showMonthlyChart {
+                ChartCard(borderColor: Color.Glu.bodyAccent) {
+                    MonthlyBarChart(
+                        data: monthlyData,
+                        metricLabel: monthlyMetricLabel,
+                        barColor: Color.Glu.bodyAccent,
+                        scaleType: scaleType
+                    )
+                    .frame(height: 260)
+                }
             }
         }
         .padding(.horizontal, 8)
@@ -306,7 +313,8 @@ private extension BodySectionCard {
         metrics: ["Sleep", "Weight"],
         monthlyMetricLabel: "Sleep / Month",
         periodAverages: periodDemo,
-        scaleType: .hours     // 👉 wenn du .hours in MetricScaleType ergänzt
+        showMonthlyChart: true,            // Sleep: Monatschart sinnvoll
+        scaleType: .hours
     )
     .padding()
     .background(Color.Glu.backgroundSurface)
