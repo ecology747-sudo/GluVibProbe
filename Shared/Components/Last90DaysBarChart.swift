@@ -126,17 +126,20 @@ struct Last90DaysBarChart: View {
             return Array(stride(from: 0, through: upper, by: 10))
 
         case .smallInteger:
-            // z.B. Insulin, Minuten, kleine kcal-Bereiche
+            // z.B. Gewicht, Insulin, kleinere kcal-Bereiche
             guard maxValue > 0 else { return [0] }
 
             let step: Int
-            if maxValue <= 20 {
+            switch maxValue {
+            case 1...20:
                 step = 5          // 0, 5, 10, 15, 20
-            } else if maxValue <= 200 {
+            case 21...200:
                 step = 20         // 0, 20, 40, ... 200
-            } else if maxValue <= 2_000 {
+            case 201...500:
+                step = 50         // 👉 z.B. Weight in kg/lbs: 0, 50, 100, 150, 200, 250
+            case 501...2_000:
                 step = 200        // 0, 200, 400, ...
-            } else {
+            default:
                 step = 500        // Fallback
             }
 

@@ -155,9 +155,11 @@ final class WeightViewModel: ObservableObject {
 
     // MARK: - Formatting für die View
 
-    /// Formatierter Wert für die KPI "Weight Today"
-    var formattedTodayWeight: String {
+    // MARK: - Formatting für die View
+
+    /// Formatierter Wert für die KPI "Weight Today" inkl. Einheit
+    var formattedTodayWeightKg: String {
         guard todayWeightKg > 0 else { return "–" }
-        return "\(todayWeightKg)"
+        return "\(todayWeightKg) kg"
     }
 }
