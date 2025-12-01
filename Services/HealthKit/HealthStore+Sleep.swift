@@ -11,48 +11,88 @@ import HealthKit
 extension HealthStore {
 
     // ============================================================
-    // MARK: - SLEEP (Minuten)
+    // MARK: - Helpers
     // ============================================================
 
-    // Heute
+    /// Schneidet ein Sample auf das Fenster [windowStart, windowEnd) zu
+    private func clampedDuration(
+        for sample: HKCategorySample,
+        windowStart: Date,
+        windowEnd: Date
+    ) -> TimeInterval {
+        let start = max(sample.startDate, windowStart)
+        let end   = min(sample.endDate, windowEnd)
+        guard end > start else { return 0 }
+        return end.timeIntervalSince(start)
+    }
+
+    /// Filtert alle Nicht-Wach-Samples
+    private func nonAwakeSamples(from samples: [HKSample]?) -> [HKCategorySample] {
+        let all = samples as? [HKCategorySample] ?? []
+        return all.filter { $0.value != HKCategoryValueSleepAnalysis.awake.rawValue }
+    }
+
+    // ============================================================
+    // MARK: - Schlaf heute (komplette letzte Nacht)
+    // ============================================================
+
+    /// "Sleep Today" ≈ Apple: Nacht von ca. 18:00 (Vortag) bis 18:00 (heute),
+    /// nur Schlafphasen, keine Wach-Phasen.
     func fetchSleepToday() {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return }
 
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
+        let calendar   = Calendar.current
+        let now        = Date()
+        let todayStart = calendar.startOfDay(for: now)
+
+        // Fenster: 18:00 Vortag bis jetzt (max. 18:00 heute)
+        guard
+            let windowStart = calendar.date(byAdding: .hour, value: -6, to: todayStart)
+        else { return }
+
+        let windowEnd = now   // wir schneiden später ggf. auf das Fenster zu
+
         let predicate = HKQuery.predicateForSamples(
-            withStart: startOfDay,
-            end: Date(),
-            options: .strictStartDate
+            withStart: windowStart,
+            end: windowEnd,
+            options: []
         )
+
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
 
         let query = HKSampleQuery(
             sampleType: sleepType,
             predicate: predicate,
             limit: HKObjectQueryNoLimit,
-            sortDescriptors: nil
+            sortDescriptors: [sort]
         ) { [weak self] _, samples, _ in
             guard let self else { return }
 
-            let all = samples as? [HKCategorySample] ?? []
+            let relevant = self.nonAwakeSamples(from: samples)
 
-            let seconds = all.reduce(0.0) { acc, sample in
-                acc + sample.endDate.timeIntervalSince(sample.startDate)
+            let totalSeconds = relevant.reduce(0.0) { acc, sample in
+                acc + self.clampedDuration(for: sample,
+                                           windowStart: windowStart,
+                                           windowEnd: windowEnd)
             }
 
             DispatchQueue.main.async {
-                self.todaySleepMinutes = Int(seconds / 60.0)
+                self.todaySleepMinutes = Int(totalSeconds / 60.0)
             }
         }
 
         healthStore.execute(query)
     }
 
-    // Sleep N Tage
+    // ============================================================
+    // MARK: - Sleep N Tage (18–18 Fenster pro Tag)
+    // ============================================================
+
     func fetchSleepDaily(
         last days: Int,
         assign: @escaping ([DailySleepEntry]) -> Void
     ) {
+        // Preview bleibt wie gehabt
         if isPreview {
             let slice = Array(previewDailySleep.suffix(days))
             DispatchQueue.main.async { assign(slice) }
@@ -61,12 +101,21 @@ extension HealthStore {
 
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return }
 
-        let calendar = Calendar.current
-        let now = Date()
+        let calendar   = Calendar.current
+        let now        = Date()
         let todayStart = calendar.startOfDay(for: now)
-        guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else { return }
 
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: [])
+        // Ältester Tag (Aufwach-Tag) im gewünschten Zeitraum
+        guard let firstDay = calendar.date(byAdding: .day, value: -days + 1, to: todayStart) else { return }
+        // Gesamtfenster für die Query: ab 18:00 des Vortags vom ersten Tag
+        guard let queryStart = calendar.date(byAdding: .hour, value: -6, to: firstDay) else { return }
+
+        let predicate = HKQuery.predicateForSamples(
+            withStart: queryStart,
+            end: now,
+            options: []
+        )
+
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
 
         let query = HKSampleQuery(
@@ -74,38 +123,48 @@ extension HealthStore {
             predicate: predicate,
             limit: HKObjectQueryNoLimit,
             sortDescriptors: [sort]
-        ) { _, samples, _ in
-            let all = samples as? [HKCategorySample] ?? []
-            let calendar = Calendar.current
+        ) { [weak self] _, samples, _ in
+            guard let self else { return }
 
-            var bucket: [Date: TimeInterval] = [:]
+            let relevant = self.nonAwakeSamples(from: samples)
 
-            for s in all {
-                var current = s.startDate
-                let end = s.endDate
+            var entries: [DailySleepEntry] = []
 
-                while current < end {
-                    let dayStart = calendar.startOfDay(for: current)
-                    guard let nextDay = calendar.date(byAdding: .day, value: 1, to: dayStart) else { break }
+            // Wir bauen für jeden Tag ein eigenes 18–18-Fenster
+            for offset in 0..<days {
+                guard let dayStart = calendar.date(byAdding: .day, value: offset, to: firstDay) else { continue }
 
-                    let segmentEnd = min(end, nextDay)
-                    let duration = segmentEnd.timeIntervalSince(current)
+                guard
+                    let windowStart = calendar.date(byAdding: .hour, value: -6, to: dayStart),
+                    let rawWindowEnd = calendar.date(byAdding: .hour, value: 18, to: dayStart)
+                else { continue }
 
-                    bucket[dayStart, default: 0] += duration
-                    current = segmentEnd
+                let windowEnd = min(rawWindowEnd, now)
+
+                let seconds = relevant.reduce(0.0) { acc, sample in
+                    acc + self.clampedDuration(for: sample,
+                                               windowStart: windowStart,
+                                               windowEnd: windowEnd)
                 }
+
+                let minutes = Int(seconds / 60.0)
+                entries.append(DailySleepEntry(date: dayStart, minutes: minutes))
             }
 
-            let entries: [DailySleepEntry] = bucket.map { (day, seconds) in
-                DailySleepEntry(date: day, minutes: Int(seconds / 60.0))
-            }
-            .sorted { $0.date < $1.date }
+            // Sortiert nach Datum (sicherheitshalber)
+            let sorted = entries.sorted { $0.date < $1.date }
 
-            DispatchQueue.main.async { assign(entries) }
+            DispatchQueue.main.async {
+                assign(sorted)
+            }
         }
 
         healthStore.execute(query)
     }
+
+    // ============================================================
+    // MARK: - Wrapper für Charts
+    // ============================================================
 
     func fetchLast90DaysSleep() {
         fetchSleepDaily(last: 90) { [weak self] entries in

@@ -14,6 +14,9 @@ final class SleepViewModel: ObservableObject {
     /// Schlaf heute in Minuten
     @Published var todaySleepMinutes: Int = 0
 
+    /// Ziel-Schlafdauer in Minuten (z. B. 8 h)
+    @Published var targetSleepMinutes: Int = 8 * 60   // später aus SettingsModel laden
+
     /// Schlaf der letzten 90 Tage (Basis für 90d-Chart)
     @Published var last90DaysSleep: [DailySleepEntry] = []
 
@@ -63,6 +66,8 @@ final class SleepViewModel: ObservableObject {
         todaySleepMinutes = healthStore.todaySleepMinutes
         last90DaysSleep   = healthStore.last90DaysSleep
         monthlySleepData  = healthStore.monthlySleep
+
+        // 🔜 später: targetSleepMinutes aus SettingsModel übernehmen
     }
 
     private func loadExtendedSleepData() {
@@ -117,18 +122,28 @@ final class SleepViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Formatting
+    // MARK: - KPI: Target + Delta
 
-    /// Formatierter heutiger Schlaf, z. B. "7 h 15 min"
+    /// Delta in Minuten (heute minus Ziel)
+    var deltaSleepMinutes: Int {
+        todaySleepMinutes - targetSleepMinutes
+    }
+
+    var formattedTargetSleep: String {
+        Self.formatMinutes(targetSleepMinutes)
+    }
+
     var formattedTodaySleep: String {
         Self.formatMinutes(todaySleepMinutes)
     }
 
-    /// Optional: Durchschnitt 7 Tage (falls du den später irgendwo anzeigen möchtest)
-    var formattedAvgSleepLast7Days: String {
-        Self.formatMinutes(avgSleepLast7Days)
+    var formattedDeltaSleep: String {
+        Self.formatDeltaMinutes(deltaSleepMinutes)
     }
 
+    // MARK: - Formatting
+
+    /// Formatierter Wert, z. B. "7 h 15 min" oder "–"
     static func formatMinutes(_ minutes: Int) -> String {
         guard minutes > 0 else { return "–" }
 
@@ -142,6 +157,27 @@ final class SleepViewModel: ObservableObject {
             return "\(h) h"
         default:
             return "\(hours) h \(mins) min"
+        }
+    }
+
+    /// Formatierter Delta-Wert mit Vorzeichen, z. B. "+45 min", "–1 h 15 min"
+    static func formatDeltaMinutes(_ delta: Int) -> String {
+        if delta == 0 {
+            return "0 min"
+        }
+
+        let sign = delta > 0 ? "+" : "–"
+        let absMinutes = abs(delta)
+        let hours = absMinutes / 60
+        let mins  = absMinutes % 60
+
+        switch (hours, mins) {
+        case (0, let m):
+            return "\(sign)\(m) min"
+        case (let h, 0):
+            return "\(sign)\(h) h"
+        default:
+            return "\(sign)\(hours) h \(mins) min"
         }
     }
 }

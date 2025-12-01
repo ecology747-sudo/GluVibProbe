@@ -2,37 +2,58 @@ import SwiftUI
 
 extension Color {
     struct Glu {
-        // MARK: - Basis-Palette aus deinem Asset-Katalog
+        // MARK: - Brand / Basis-Farben (direkt aus dem Asset-Katalog)
 
+        /// Primäre Markenfarbe (z.B. Texte, Buttons, Units-Domain)
         static let primaryBlue       = Color("GluPrimaryBlue")
-        static let accentLime        = Color("GluAccentLime")
-        static let accentAqua        = Color("GluAccentAqua")
+
+        /// Dunkler Hintergrund (z.B. für spätere Dark-/Card-Designs)
         static let backgroundNavy    = Color("GluBackgroundNavy")
+
+        /// Heller Surface-Hintergrund (Dashboard, Karten-Background)
         static let backgroundSurface = Color("GluBackgroundSurface")
 
-        // Bestehendes Orange (bisherige BodyActivity-Farbe)
-        static let activityOrange    = Color("GluActivityOrange")
+        // MARK: - Domain-Farben (jede Domain genau eine Farbe)
 
-        // Neue Rot-Farbe aus deinem Asset-Katalog
-        // (Asset-Name laut dir: "GlubodyRed")
-        static let activityRed       = Color("GlubodyRed")
+        /// BODY-Domain (Weight, Sleep, HR, Body-Settings)
+        /// – Orange, wie in deiner BodySettingsSection-Kachel
+        static let bodyDomain        = Color("GluActivityOrange")
 
-        // MARK: - Section-Aliasse pro Domain
-        //
-        // Activity-Domain (Steps, Activity Energy, Trainings, etc.)
-        static let activityAccent    = activityRed
+        /// ACTIVITY-Domain (Steps, Activity Energy, Workouts)
+        /// – Rot (GlubodyRed), wie in der ActivitySettingsSection
+        static let activityDomain    = Color("GlubodyRed")
 
-        // Body-Domain (Weight, Sleep, HR, etc.)
-        static let bodyAccent        = activityOrange
+        /// METABOLIC-Domain (Glucose, Insulin, TIR)
+        /// – LIME-Green / Glow
+        static let metabolicDomain   = Color("GluLimeGlow")
 
-        // Metabolic-Domain (Glucose, Insulin, TIR)
-        static let metabolicAccent   = accentLime
+        /// NUTRITION-Domain (Carbs, Protein, Fat, Calories)
+        /// – Aqua / Türkis
+        static let nutritionDomain   = Color("GluAccentAqua")
 
-        // Nutrition-Domain (Carbs, Protein, Fat, Calories)
-        static let nutritionAccent   = accentAqua
+        /// UNITS / globale Controls
+        /// – läuft über die Primärfarbe
+        static let unitsDomain       = primaryBlue
 
-        // OPTIONAL: alter Alias für Legacy-Code
-        // (falls irgendwo noch bodyActivityAccent verwendet wird)
-        static let bodyActivityAccent = activityOrange
+        // MARK: - Legacy-Namen (nur damit dein bestehender Code nicht bricht)
+        // Diese kannst du später Schritt für Schritt entfernen,
+        // wenn du überall auf die neuen Domain-Namen umgestellt hast.
+
+        // Früher: "Accent"-Farben
+        static let accentLime        = metabolicDomain
+        static let accentAqua        = nutritionDomain
+
+        // Früher: "ActivityOrange" / "ActivityRed"
+        static let activityOrange    = bodyDomain
+        static let activityRed       = activityDomain
+
+        // Früher: Domain-Aliasse
+        static let activityAccent    = activityDomain
+        static let bodyAccent        = bodyDomain
+        static let metabolicAccent   = metabolicDomain
+        static let nutritionAccent   = nutritionDomain
+
+        // Ganz alt: bodyActivityAccent
+        static let bodyActivityAccent = bodyDomain
     }
 }

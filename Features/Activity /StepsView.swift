@@ -72,7 +72,7 @@ struct StepsView: View {
     }
 }
 
-#Preview("StepsView – Body & Activity") {
+#Preview("StepsView – Activity") {
     // 🔹 Preview-HealthStore mit 365-Tage-Demodaten
     let previewStore = HealthStore.preview()
 
@@ -81,4 +81,6 @@ struct StepsView: View {
 
     return StepsView(viewModel: previewVM)
         .environmentObject(previewStore) // falls andere Views den Store als EnvironmentObject brauchen
+    
+    
 }

@@ -260,3 +260,37 @@ private extension ActivitySectionCard {
         return Color.Glu.primaryBlue.opacity(0.75) // neutral
     }
 }
+
+
+// MARK: - Preview
+
+#Preview("ActivitySectionCard – Steps") {
+    // Beispiel-Dummy-Daten (leere Arrays reichen für den Preview aus)
+    let dummyLast90Days: [DailyStepsEntry] = []
+    let dummyMonthly: [MonthlyMetricEntry] = []
+    let dummyPeriodAverages: [PeriodAverageEntry] = []
+
+    return NavigationStack {
+        ScrollView {
+            ActivitySectionCard(
+                sectionTitle: "Activity",
+                title: "Steps",
+                kpiTitle: "Steps Today",
+                kpiTargetText: "10 000",
+                kpiCurrentText: "8 532",
+                kpiDeltaText: "+1 468",
+                hasTarget: true,
+                last90DaysData: dummyLast90Days,
+                monthlyData: dummyMonthly,
+                dailyGoalForChart: 10_000,
+                onMetricSelected: { _ in },
+                metrics: ["Steps", "Activity Energy"],
+                monthlyMetricLabel: "Steps / Month",
+                periodAverages: dummyPeriodAverages,
+                scaleType: .steps
+            )
+            .padding()
+        }
+        .background(Color.Glu.backgroundSurface.ignoresSafeArea())
+    }
+}

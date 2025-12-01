@@ -131,7 +131,7 @@ final class HealthStore: ObservableObject {
 
 extension HealthStore {
     static func preview() -> HealthStore {
-        let store = HealthStore(isPreview: true)
+        let store = HealthStore(isPreview: true)    // wenn Preview dann DEMO DAta
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 

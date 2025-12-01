@@ -31,11 +31,10 @@ struct SleepView: View {
                         sectionTitle: "Body",
                         title: "Sleep",
                         kpiTitle: "Sleep Today",
-                        kpiTargetText: "",
-                        // 👉 KPI in Stunden + Minuten
-                        kpiCurrentText: SleepViewModel.formatMinutes(viewModel.todaySleepMinutes),
-                        kpiDeltaText: "",
-                        hasTarget: false,
+                        kpiTargetText: viewModel.formattedTargetSleep,
+                        kpiCurrentText: viewModel.formattedTodaySleep,
+                        kpiDeltaText: viewModel.formattedDeltaSleep,
+                        hasTarget: true,
                         // 👉 Sleep-Daten in generische Entries gemapped
                         last90DaysData: viewModel.last90DaysDataForChart,
                         monthlyData: viewModel.monthlySleepData,
@@ -44,7 +43,7 @@ struct SleepView: View {
                         metrics: ["Sleep", "Weight"],
                         monthlyMetricLabel: "Sleep / Month",
                         periodAverages: viewModel.periodAverages,
-                        scaleType: .hours 
+                        scaleType: .hours
                     )
                     .padding(.horizontal)
                 }

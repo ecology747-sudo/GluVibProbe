@@ -6,6 +6,8 @@ import SwiftUI
 struct ContentView: View {
     
     @State private var selectedTab: GluTab
+    private let settings = SettingsModel.shared
+    @State private var showUnsavedAlert: Bool = false
     
     /// Standard-Init für die App: startet auf .home
     init(startTab: GluTab = .home) {
@@ -28,7 +30,7 @@ struct ContentView: View {
                     NutritionDashboard()    // 👈 jetzt echte View
 
                 case .home:
-                    HomeView()
+                    HomeView()     //ist Metabolic
 
                 case .history:
                     HistoryView()           // 👈 jetzt echte View
@@ -41,8 +43,42 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // Untere Tab-Bar (immer sichtbar)
-            GluBottomTabBar(selectedTab: $selectedTab)
+            GluBottomTabBar(
+                selectedTab: Binding(
+                    get: { selectedTab },
+                    set: { newValue in
+                        handleTabSelection(newValue)
+                    }
+                )
+            )
         }
+        .alert(
+            "Unsaved Settings",
+            isPresented: $showUnsavedAlert
+        ) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("""
+            You have unsaved changes.
+            Please tap “Save Settings” before leaving this screen.
+            """)
+        }
+        .tint(Color.Glu.primaryBlue)    }
+    
+    // MARK: - Tab Handling
+
+    private func handleTabSelection(_ newTab: GluTab) {
+        // Wenn wir die Settings-View verlassen wollen und dort noch ungespeicherte
+        // Änderungen vorhanden sind, Navigation blockieren und Hinweis zeigen.
+        if selectedTab == .settings,
+           newTab != .settings,
+           settings.hasUnsavedChanges {
+            showUnsavedAlert = true
+            return
+        }
+
+        // Ansonsten Tab ganz normal wechseln
+        selectedTab = newTab
     }
 }
 
@@ -52,17 +88,5 @@ struct ContentView: View {
 
     ContentView(startTab: .home)
         .environmentObject(previewStore)
-        .environmentObject(previewState)           // 🔹 NEU
-        
+        .environmentObject(previewState)
 }
-
-#Preview("ContentView – Steps (Activity) Tab") {
-    let previewStore = HealthStore.preview()
-    let previewState = AppState()                  // 🔹 NEU
-
-    ContentView(startTab: .activity)
-        .environmentObject(previewStore)
-        .environmentObject(previewState)           // 🔹 NEU
-        
-}
-//Test Git

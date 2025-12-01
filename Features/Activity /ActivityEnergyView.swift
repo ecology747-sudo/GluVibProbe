@@ -72,7 +72,7 @@ struct ActivityEnergyView: View {
 }
 
 
-#Preview("ActivityEnergyView – Body & Activity") {
+#Preview("ActivityEnergyView – Activity") {
     let previewStore = HealthStore.preview()
     let previewVM = ActivityEnergyViewModel(healthStore: previewStore)
 

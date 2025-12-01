@@ -11,6 +11,21 @@ final class SettingsModel: ObservableObject {
 
     // Singleton für einfachen Zugriff im Projekt
     static let shared = SettingsModel()
+    
+    // MARK: - Unsaved Changes Flag
+    
+    /// True, wenn es ungespeicherte Änderungen in der SettingsView gibt
+    @Published var hasUnsavedChanges: Bool = false
+    
+    /// Markiert, dass es ungespeicherte Änderungen gibt
+    func markUnsavedChanges() {
+        hasUnsavedChanges = true
+    }
+
+    /// Setzt den Unsaved-Status zurück (z. B. nach dem Speichern oder Laden)
+    func clearUnsavedChanges() {
+        hasUnsavedChanges = false
+    }
 
     // MARK: - Published Values
 
@@ -44,9 +59,9 @@ final class SettingsModel: ObservableObject {
     // MARK: - Nutrition Targets
 
     @Published var dailyCarbs: Int = 200       // g
-    @Published var dailyProtein: Int = 80     // g
-    @Published var dailyCalories: Int = 2500  // kcal
-    @Published var dailyFat: Int = 70         // g
+    @Published var dailyProtein: Int = 80      // g
+    @Published var dailyCalories: Int = 2500   // kcal
+    @Published var dailyFat: Int = 70          // g
 
 
     // MARK: - Persistenz (UserDefaults)
@@ -61,10 +76,10 @@ final class SettingsModel: ObservableObject {
         static let dailyStepGoal = "settings_dailyStepGoal"
 
         // Personal
-        static let gender        = "settings_gender"
-        static let birthDate     = "settings_birthDate"
-        static let heightCm      = "settings_heightCm"
-        static let weightKg      = "settings_weightKg"
+        static let gender         = "settings_gender"
+        static let birthDate      = "settings_birthDate"
+        static let heightCm       = "settings_heightCm"
+        static let weightKg       = "settings_weightKg"
         static let targetWeightKg = "settings_targetWeightKg"
 
         // Units
@@ -92,6 +107,7 @@ final class SettingsModel: ObservableObject {
 
     private init() {
         loadFromDefaults()   // ⬅️ Beim Start Werte aus UserDefaults laden
+        clearUnsavedChanges() // Nach dem Laden: Zustand ist "clean"
     }
 
 
@@ -102,9 +118,9 @@ final class SettingsModel: ObservableObject {
     func loadFromDefaults() {
 
         // Schrittziel laden, falls vorhanden
-                if defaults.object(forKey: Keys.dailyStepGoal) != nil {
-                    self.dailyStepGoal = defaults.integer(forKey: Keys.dailyStepGoal)
-                }
+        if defaults.object(forKey: Keys.dailyStepGoal) != nil {
+            self.dailyStepGoal = defaults.integer(forKey: Keys.dailyStepGoal)
+        }
         
         
         // MARK: Personal
@@ -157,45 +173,43 @@ final class SettingsModel: ObservableObject {
         
         // MARK: Metabolic
 
-                if defaults.object(forKey: Keys.glucoseMin) != nil {
-                    glucoseMin = defaults.integer(forKey: Keys.glucoseMin)
-                }
+        if defaults.object(forKey: Keys.glucoseMin) != nil {
+            glucoseMin = defaults.integer(forKey: Keys.glucoseMin)
+        }
 
-                if defaults.object(forKey: Keys.glucoseMax) != nil {
-                    glucoseMax = defaults.integer(forKey: Keys.glucoseMax)
-                }
+        if defaults.object(forKey: Keys.glucoseMax) != nil {
+            glucoseMax = defaults.integer(forKey: Keys.glucoseMax)
+        }
 
-                if defaults.object(forKey: Keys.veryLowLimit) != nil {
-                    veryLowLimit = defaults.integer(forKey: Keys.veryLowLimit)
-                }
+        if defaults.object(forKey: Keys.veryLowLimit) != nil {
+            veryLowLimit = defaults.integer(forKey: Keys.veryLowLimit)
+        }
 
-                if defaults.object(forKey: Keys.veryHighLimit) != nil {
-                    veryHighLimit = defaults.integer(forKey: Keys.veryHighLimit)
-                }
+        if defaults.object(forKey: Keys.veryHighLimit) != nil {
+            veryHighLimit = defaults.integer(forKey: Keys.veryHighLimit)
+        }
 
-                if let unitRaw = defaults.string(forKey: Keys.glucoseUnit),
-                   let unit = GlucoseUnit(rawValue: unitRaw) {
-                    glucoseUnit = unit
-                }
+        if let unitRaw = defaults.string(forKey: Keys.glucoseUnit),
+           let unit = GlucoseUnit(rawValue: unitRaw) {
+            glucoseUnit = unit
+        }
         
-        // Nutrition
-                if defaults.object(forKey: Keys.dailyCarbs) != nil {
-                    dailyCarbs = defaults.integer(forKey: Keys.dailyCarbs)
-                }
-                if defaults.object(forKey: Keys.dailyProtein) != nil {
-                    dailyProtein = defaults.integer(forKey: Keys.dailyProtein)
-                }
-                if defaults.object(forKey: Keys.dailyCalories) != nil {
-                    dailyCalories = defaults.integer(forKey: Keys.dailyCalories)
-                }
-                if defaults.object(forKey: Keys.dailyFat) != nil {
-                    dailyFat = defaults.integer(forKey: Keys.dailyFat)
-                }
+        // MARK: Nutrition
+        if defaults.object(forKey: Keys.dailyCarbs) != nil {
+            dailyCarbs = defaults.integer(forKey: Keys.dailyCarbs)
+        }
+        if defaults.object(forKey: Keys.dailyProtein) != nil {
+            dailyProtein = defaults.integer(forKey: Keys.dailyProtein)
+        }
+        if defaults.object(forKey: Keys.dailyCalories) != nil {
+            dailyCalories = defaults.integer(forKey: Keys.dailyCalories)
+        }
+        if defaults.object(forKey: Keys.dailyFat) != nil {
+            dailyFat = defaults.integer(forKey: Keys.dailyFat)
+        }
 
-        // weitere Werte kommen hier später hinzu
-        // if defaults.object(forKey: Keys.dailyCarbGoal) != nil {
-        //     self.dailyCarbGoal = defaults.integer(forKey: Keys.dailyCarbGoal)
-        // }
+        // Nach dem Laden: Zustand ist konsistent → keine unsaved changes
+        clearUnsavedChanges()
     }
 
 
@@ -233,5 +247,8 @@ final class SettingsModel: ObservableObject {
         defaults.set(dailyProtein,  forKey: Keys.dailyProtein)
         defaults.set(dailyCalories, forKey: Keys.dailyCalories)
         defaults.set(dailyFat,      forKey: Keys.dailyFat)
+        
+        // Nach erfolgreichem Speichern: keine unsaved changes mehr
+        clearUnsavedChanges()
     }
 }
