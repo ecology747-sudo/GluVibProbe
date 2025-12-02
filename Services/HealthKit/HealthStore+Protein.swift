@@ -1,5 +1,5 @@
 //
-//  NutritionEnergyView.swift
+//  HealthStore+Protein.swift
 //  GluVibProbe
 //
 //  Created by MacBookAir on 02.12.25.
