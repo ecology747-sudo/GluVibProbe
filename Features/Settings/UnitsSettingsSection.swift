@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// Globale Units-Settings (Glucose, Distance, Weight, Height)
+/// Globale Units-Settings (Glucose, Distance, Weight, Height, Energy)
 ///
 /// - Kein eigener Domain-Farbcode (Units gelten für alle Domains)
 /// - Verwendet Primary Blue als Akzentfarbe
@@ -18,6 +18,7 @@ struct UnitsSettingsSection: View {
     @Binding var distanceUnit: DistanceUnit
     @Binding var weightUnit: WeightUnit
     @Binding var heightUnit: HeightUnit
+    @Binding var energyUnit: EnergyUnit      // 🔥 neu
 
     // MARK: - Body
 
@@ -33,7 +34,6 @@ struct UnitsSettingsSection: View {
                     .stroke(Color.Glu.primaryBlue.opacity(0.20), lineWidth: 1)
 
                 VStack(alignment: .leading, spacing: 16) {
-
 
                     // BLOOD GLUCOSE UNIT
                     VStack(alignment: .leading, spacing: 8) {
@@ -59,6 +59,22 @@ struct UnitsSettingsSection: View {
 
                         Picker("", selection: $distanceUnit) {
                             ForEach(DistanceUnit.allCases) { unit in
+                                Text(unit.label)
+                                    .foregroundColor(Color.Glu.primaryBlue)
+                                    .tag(unit)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    // ENERGY UNIT 🔥 neu
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Energy")
+                            .font(.subheadline)
+                            .foregroundColor(Color.Glu.primaryBlue)
+
+                        Picker("", selection: $energyUnit) {
+                            ForEach(EnergyUnit.allCases) { unit in
                                 Text(unit.label)
                                     .foregroundColor(Color.Glu.primaryBlue)
                                     .tag(unit)
@@ -117,7 +133,8 @@ struct UnitsSettingsSection: View {
                 glucoseUnit: .constant(.mgdL),
                 distanceUnit: .constant(.kilometers),
                 weightUnit: .constant(.kg),
-                heightUnit: .constant(.cm)
+                heightUnit: .constant(.cm),
+                energyUnit: .constant(.kcal)   // 🔥 neu
             )
         }
     }

@@ -17,23 +17,17 @@ struct ActivityDashboardView: View {
 
     var body: some View {
         switch appState.currentStatsScreen {
-
         case .steps:
-            // Steps-Flow mit Metric-Chips
             StepsView(onMetricSelected: handleMetricSelection)
-
         case .activityEnergy:
-            // Activity-Energy-Flow
             ActivityEnergyView(onMetricSelected: handleMetricSelection)
 
-        case .weight:
-            // Übergangsweise: weiter auf Steps anzeigen,
-            // bis Weight in der Body-Domain separat hängt.
+        // Nutrition-Screens im Activity-Dashboard einfach „wegparken“
+        case .carbs, .protein, .fat, .calories:
             StepsView(onMetricSelected: handleMetricSelection)
 
-        case .sleep:
-            // Übergangsweise: weiter auf Steps anzeigen,
-            // bis Sleep in der Body-Domain separat hängt.
+        // Body-Screens ggf. auch „wegparken“ oder korrekt routen
+        case .sleep, .weight:
             StepsView(onMetricSelected: handleMetricSelection)
         }
     }

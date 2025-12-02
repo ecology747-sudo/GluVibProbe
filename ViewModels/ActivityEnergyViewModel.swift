@@ -12,22 +12,22 @@ final class ActivityEnergyViewModel: ObservableObject {
 
     // MARK: - Published Output for the View
 
-    /// Aktivitätsenergie heute (kcal)
+    /// Aktivitätsenergie heute (Basis: kcal)
     @Published var todayActiveEnergy: Int = 0
 
-    /// 90-Tage-Daten für den Chart (für die bestehenden Charts als DailyStepsEntry gemappt)
+    /// 90-Tage-Daten (Basis: kcal, intern) – für Chart gemappt
     @Published var last90DaysData: [DailyStepsEntry] = []
 
-    /// Monatliche Aktivitätsenergie (für Monats-Chart)
+    /// Monatliche Aktivitätsenergie (Basis: kcal)
     @Published var monthlyActiveEnergyData: [MonthlyMetricEntry] = []
 
-    /// Tägliche Aktivitätsenergie der letzten 365 Tage (Basis für Durchschnitts-Logik)
+    /// Tägliche Aktivitätsenergie der letzten 365 Tage (Basis: kcal)
     @Published var dailyActiveEnergy365: [ActivityEnergyEntry] = []
 
     // MARK: - Dependencies
 
     private let healthStore: HealthStore
-    private let settings: SettingsModel   // aktuell noch nicht aktiv genutzt, aber bereit für spätere Energy-Ziele
+    private let settings: SettingsModel   // für EnergyUnit (kcal / kJ)
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -50,7 +50,7 @@ final class ActivityEnergyViewModel: ObservableObject {
     // MARK: - Refresh Logic (HealthKit neu abfragen)
 
     func refresh() {
-        // 1. HealthKit neu abfragen (Activity Energy)
+        // 1. HealthKit neu abfragen (Activity Energy – Basis immer kcal)
         healthStore.fetchActiveEnergyToday()
         healthStore.fetchLast90DaysActiveEnergy()
         healthStore.fetchMonthlyActiveEnergy()
@@ -70,19 +70,19 @@ final class ActivityEnergyViewModel: ObservableObject {
     // MARK: - Loading Logic (bestehende Werte)
 
     private func loadData() {
-        // Heute
+        // Heute (Basis: kcal)
         todayActiveEnergy = healthStore.todayActiveEnergy
 
-        // 90-Tage-Verlauf (für Last90DaysBarChart → DailyStepsEntry-Mapping)
+        // 90-Tage-Verlauf (Basis: kcal)
         last90DaysData = healthStore.last90DaysActiveEnergy.map {
             DailyStepsEntry(date: $0.date, steps: $0.activeEnergy)
         }
 
-        // Monatsverlauf
+        // Monatsverlauf (Basis: kcal)
         monthlyActiveEnergyData = healthStore.monthlyActiveEnergy
     }
 
-    // MARK: - Durchschnittswerte (Activity Energy) – basierend auf dailyActiveEnergy365
+    // MARK: - Durchschnittswerte (Activity Energy, Basis kcal)
 
     /// Durchschnittliche Aktivitätsenergie der letzten 7 Tage
     var avgActiveEnergyLast7Days: Int {
@@ -114,19 +114,19 @@ final class ActivityEnergyViewModel: ObservableObject {
         averageActiveEnergy(last: 365)
     }
 
-    /// Durchschnittswerte für den Perioden-Chart
+    /// Durchschnittswerte (Basis kcal) für den Perioden-Chart
     var periodAverages: [PeriodAverageEntry] {
         [
-            PeriodAverageEntry(label: "7T",   days: 7,   value: avgActiveEnergyLast7Days),
-            PeriodAverageEntry(label: "14T",  days: 14,  value: avgActiveEnergyLast14Days),
-            PeriodAverageEntry(label: "30T",  days: 30,  value: avgActiveEnergyLast30Days),
-            PeriodAverageEntry(label: "90T",  days: 90,  value: avgActiveEnergyLast90Days),
-            PeriodAverageEntry(label: "180T", days: 180, value: avgActiveEnergyLast180Days),
-            PeriodAverageEntry(label: "365T", days: 365, value: avgActiveEnergyLast365Days)
+            .init(label: "7T",   days: 7,   value: avgActiveEnergyLast7Days),
+            .init(label: "14T",  days: 14,  value: avgActiveEnergyLast14Days),
+            .init(label: "30T",  days: 30,  value: avgActiveEnergyLast30Days),
+            .init(label: "90T",  days: 90,  value: avgActiveEnergyLast90Days),
+            .init(label: "180T", days: 180, value: avgActiveEnergyLast180Days),
+            .init(label: "365T", days: 365, value: avgActiveEnergyLast365Days)
         ]
     }
 
-    /// Durchschnitt der letzten `days` Tage – ohne heutigen Tag (wie bei Steps)
+    /// Durchschnitt der letzten `days` Tage – ohne heutigen Tag (Basis kcal)
     private func averageActiveEnergy(last days: Int) -> Int {
         guard dailyActiveEnergy365.count > 1 else { return 0 }
 
@@ -142,16 +142,77 @@ final class ActivityEnergyViewModel: ObservableObject {
         return sum / slice.count
     }
 
+    // MARK: - Unit Conversion & Formatting (kcal <-> kJ)
+
+    /// Basis ist immer kcal, Settings steuern nur Anzeige-Einheit
+    private func convertKcal(_ value: Int, to unit: EnergyUnit) -> Int {
+        guard value > 0 else { return 0 }
+
+        switch unit {
+        case .kcal:
+            return value
+        case .kilojoules:
+            // 1 kcal ≈ 4.184 kJ
+            return Int((Double(value) * 4.184).rounded())
+        }
+    }
+
+    private func formatEnergy(_ valueKcal: Int, unit: EnergyUnit) -> String {
+        let converted = convertKcal(valueKcal, to: unit)
+        guard converted > 0 else { return "–" }
+
+        let numberString = numberFormatter.string(from: NSNumber(value: converted))
+            ?? "\(converted)"
+
+        return "\(numberString) \(unit.label)"
+    }
+
     // MARK: - Formatting for the View
 
-    /// Formatierter Wert für "Current" (heute, inkl. Einheit "kcal")
+    /// Formatierter Wert für "Active Energy Today" inkl. Einheit (kcal/kJ)
     var formattedTodayActiveEnergy: String {
-        guard todayActiveEnergy > 0 else { return "–" }
+        let unit = settings.energyUnit
+        return formatEnergy(todayActiveEnergy, unit: unit)
+    }
 
-        let numberString = numberFormatter.string(from: NSNumber(value: todayActiveEnergy))
-            ?? "\(todayActiveEnergy)"
+    /// 90-Tage-Daten in der aktuell gewählten Einheit für das Chart
+    var last90DaysDataForChart: [DailyStepsEntry] {
+        let unit = settings.energyUnit
+        guard unit != .kcal else { return last90DaysData }
 
-        return "\(numberString) kcal"
+        return last90DaysData.map { entry in
+            let converted = convertKcal(entry.steps, to: unit)
+            return DailyStepsEntry(date: entry.date, steps: converted)
+        }
+    }
+
+    /// Monatsdaten in der aktuell gewählten Einheit
+    var monthlyActiveEnergyDataForChart: [MonthlyMetricEntry] {
+        let unit = settings.energyUnit
+        guard unit != .kcal else { return monthlyActiveEnergyData }
+
+        return monthlyActiveEnergyData.map { entry in
+            let converted = convertKcal(entry.value, to: unit)
+            return MonthlyMetricEntry(
+                monthShort: entry.monthShort,
+                value: converted
+            )
+        }
+    }
+
+    /// Perioden-Durchschnitte in der aktuell gewählten Einheit
+    var periodAveragesForChart: [PeriodAverageEntry] {
+        let unit = settings.energyUnit
+        guard unit != .kcal else { return periodAverages }
+
+        return periodAverages.map { entry in
+            let converted = convertKcal(entry.value, to: unit)
+            return PeriodAverageEntry(
+                label: entry.label,
+                days: entry.days,
+                value: converted
+            )
+        }
     }
 
     // MARK: - Number Formatter

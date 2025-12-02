@@ -21,17 +21,13 @@
 		D02F83272ED2A645005011A1 /* BasalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F83262ED2A645005011A1 /* BasalView.swift */; };
 		D02F83292ED2A68B005011A1 /* CarbBolusRatioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F83282ED2A68B005011A1 /* CarbBolusRatioView.swift */; };
 		D02F832B2ED2A6A2005011A1 /* GmiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F832A2ED2A6A2005011A1 /* GmiView.swift */; };
-		D02F832D2ED2A77E005011A1 /* CarbohdrateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F832C2ED2A77E005011A1 /* CarbohdrateView.swift */; };
 		D02F832F2ED2A7B8005011A1 /* ProteinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F832E2ED2A7B8005011A1 /* ProteinView.swift */; };
 		D02F83312ED2A7C5005011A1 /* FatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F83302ED2A7C5005011A1 /* FatView.swift */; };
-		D02F83332ED2A8EC005011A1 /* NutritionEnergyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F83322ED2A8EC005011A1 /* NutritionEnergyView.swift */; };
 		D02F83352ED2A971005011A1 /* DailyWeightEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F83342ED2A971005011A1 /* DailyWeightEntry.swift */; };
-		D02F83372ED2A9B0005011A1 /* CarbDayPeriodView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02F83362ED2A9B0005011A1 /* CarbDayPeriodView.swift */; };
 		D0306B5D2EC9DD49004BE9C2 /* GluVibProbeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B5C2EC9DD49004BE9C2 /* GluVibProbeApp.swift */; };
 		D0306B702EC9E0E5004BE9C2 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B6F2EC9E0D6004BE9C2 /* AppRouter.swift */; };
 		D0306B742EC9E1B7004BE9C2 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B732EC9E1B7004BE9C2 /* AppState.swift */; };
 		D0306B762EC9E2B0004BE9C2 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B752EC9E2B0004BE9C2 /* HomeView.swift */; };
-		D0306B7A2EC9E2FA004BE9C2 /* NutritionDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B792EC9E2FA004BE9C2 /* NutritionDashboard.swift */; };
 		D0306B802EC9E371004BE9C2 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B7F2EC9E371004BE9C2 /* HistoryView.swift */; };
 		D0306B832EC9E3BB004BE9C2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0306B822EC9E3BB004BE9C2 /* SettingsView.swift */; };
 		D0573AAF2ECB1E270025A4AE /* RangeSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0573AAE2ECB1E270025A4AE /* RangeSlider.swift */; };
@@ -70,6 +66,21 @@
 		D0D15E112EDDA93C00DD41E7 /* GluVibPrimaryButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D15E102EDDA93C00DD41E7 /* GluVibPrimaryButtonStyle.swift */; };
 		D0D15E142EDDC71300DD41E7 /* SettingsDomainPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D15E132EDDC71300DD41E7 /* SettingsDomainPicker.swift */; };
 		D0D15E1A2EDDDA2000DD41E7 /* SettingsButtonBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D15E152EDDCAA700DD41E7 /* SettingsButtonBar.swift */; };
+		D0E88E882EDEE84600A5E470 /* HealthStore+Carbs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E872EDEE84600A5E470 /* HealthStore+Carbs.swift */; };
+		D0E88E8A2EDEE85B00A5E470 /* DailyCarbsEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E892EDEE85B00A5E470 /* DailyCarbsEntry.swift */; };
+		D0E88E8C2EDEE99500A5E470 /* CarbsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E8B2EDEE99500A5E470 /* CarbsViewModel.swift */; };
+		D0E88E8E2EDEEA2900A5E470 /* CarbsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E8D2EDEEA2900A5E470 /* CarbsView.swift */; };
+		D0E88E902EDEEFFD00A5E470 /* NutritionDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E8F2EDEEFFD00A5E470 /* NutritionDashboardView.swift */; };
+		D0E88E922EDEF72A00A5E470 /* HealthStore+Protein.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E912EDEF72A00A5E470 /* HealthStore+Protein.swift */; };
+		D0E88E942EDEF82700A5E470 /* ProteinViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E932EDEF82700A5E470 /* ProteinViewModel.swift */; };
+		D0E88E962EDEF8A800A5E470 /* DailyProteinEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E952EDEF8A800A5E470 /* DailyProteinEntry.swift */; };
+		D0E88E982EDF064900A5E470 /* DailyFatEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E972EDF064900A5E470 /* DailyFatEntry.swift */; };
+		D0E88E9A2EDF066700A5E470 /* HealthStore+Fat.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E992EDF066700A5E470 /* HealthStore+Fat.swift */; };
+		D0E88E9C2EDF071E00A5E470 /* FatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E9B2EDF071E00A5E470 /* FatViewModel.swift */; };
+		D0E88E9E2EDF0AB500A5E470 /* DailyNutritionEnergyEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E9D2EDF0AB500A5E470 /* DailyNutritionEnergyEntry.swift */; };
+		D0E88EA02EDF0AD100A5E470 /* HealthStore+NutritionEnergy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88E9F2EDF0AD100A5E470 /* HealthStore+NutritionEnergy.swift */; };
+		D0E88EA22EDF0B5900A5E470 /* NutritionEnergyViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88EA12EDF0B5900A5E470 /* NutritionEnergyViewModel.swift */; };
+		D0E88EA42EDF0BA000A5E470 /* NutritionEnergyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E88EA32EDF0BA000A5E470 /* NutritionEnergyView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -87,24 +98,19 @@
 		D02F83262ED2A645005011A1 /* BasalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BasalView.swift; sourceTree = "<group>"; };
 		D02F83282ED2A68B005011A1 /* CarbBolusRatioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbBolusRatioView.swift; sourceTree = "<group>"; };
 		D02F832A2ED2A6A2005011A1 /* GmiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmiView.swift; sourceTree = "<group>"; };
-		D02F832C2ED2A77E005011A1 /* CarbohdrateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbohdrateView.swift; sourceTree = "<group>"; };
 		D02F832E2ED2A7B8005011A1 /* ProteinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProteinView.swift; sourceTree = "<group>"; };
 		D02F83302ED2A7C5005011A1 /* FatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FatView.swift; sourceTree = "<group>"; };
-		D02F83322ED2A8EC005011A1 /* NutritionEnergyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionEnergyView.swift; sourceTree = "<group>"; };
 		D02F83342ED2A971005011A1 /* DailyWeightEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyWeightEntry.swift; sourceTree = "<group>"; };
-		D02F83362ED2A9B0005011A1 /* CarbDayPeriodView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbDayPeriodView.swift; sourceTree = "<group>"; };
 		D0306B592EC9DD49004BE9C2 /* GluVibProbe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GluVibProbe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D0306B5C2EC9DD49004BE9C2 /* GluVibProbeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GluVibProbeApp.swift; sourceTree = "<group>"; };
 		D0306B6F2EC9E0D6004BE9C2 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		D0306B732EC9E1B7004BE9C2 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		D0306B752EC9E2B0004BE9C2 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
-		D0306B792EC9E2FA004BE9C2 /* NutritionDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionDashboard.swift; sourceTree = "<group>"; };
 		D0306B7F2EC9E371004BE9C2 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		D0306B822EC9E3BB004BE9C2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D0573AAE2ECB1E270025A4AE /* RangeSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RangeSlider.swift; sourceTree = "<group>"; };
 		D0573AB02ECB22250025A4AE /* LowerUpperRangeGlucoseSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LowerUpperRangeGlucoseSlider.swift; sourceTree = "<group>"; };
 		D0573AB32ECB4A320025A4AE /* HealthStore.swift .swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore.swift .swift"; sourceTree = "<group>"; };
-		D05873902ED32A620010C475 /* StepsView1_Archiv.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepsView1_Archiv.swift; sourceTree = "<group>"; };
 		D05873922ED32F7E0010C475 /* SettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModel.swift; sourceTree = "<group>"; };
 		D05873962ED4628D0010C475 /* HealthStore_archive.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HealthStore_archive.swift; sourceTree = "<group>"; };
 		D058739A2ED581140010C475 /* NutritionSectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionSectionCard.swift; sourceTree = "<group>"; };
@@ -130,7 +136,6 @@
 		D0D15DFB2EDAC0CA00DD41E7 /* HealthStore+Weight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+Weight.swift"; sourceTree = "<group>"; };
 		D0D15DFD2EDAC16300DD41E7 /* HealthStore+ActivityEnergy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+ActivityEnergy.swift"; sourceTree = "<group>"; };
 		D0D15DFF2EDAC1C400DD41E7 /* HealthStore+Steps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+Steps.swift"; sourceTree = "<group>"; };
-		D0D15E012EDAF8B100DD41E7 /* SettingsView_Archive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView_Archive.swift; sourceTree = "<group>"; };
 		D0D15E032EDAF8F900DD41E7 /* BodySettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodySettingsSection.swift; sourceTree = "<group>"; };
 		D0D15E052EDAFC8900DD41E7 /* SettingsUnits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsUnits.swift; sourceTree = "<group>"; };
 		D0D15E072EDB10F900DD41E7 /* ActivitySettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitySettingsSection.swift; sourceTree = "<group>"; };
@@ -140,6 +145,22 @@
 		D0D15E102EDDA93C00DD41E7 /* GluVibPrimaryButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GluVibPrimaryButtonStyle.swift; sourceTree = "<group>"; };
 		D0D15E132EDDC71300DD41E7 /* SettingsDomainPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsDomainPicker.swift; sourceTree = "<group>"; };
 		D0D15E152EDDCAA700DD41E7 /* SettingsButtonBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsButtonBar.swift; sourceTree = "<group>"; };
+		D0E88E872EDEE84600A5E470 /* HealthStore+Carbs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+Carbs.swift"; sourceTree = "<group>"; };
+		D0E88E892EDEE85B00A5E470 /* DailyCarbsEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyCarbsEntry.swift; sourceTree = "<group>"; };
+		D0E88E8B2EDEE99500A5E470 /* CarbsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbsViewModel.swift; sourceTree = "<group>"; };
+		D0E88E8D2EDEEA2900A5E470 /* CarbsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbsView.swift; sourceTree = "<group>"; };
+		D0E88E8F2EDEEFFD00A5E470 /* NutritionDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionDashboardView.swift; sourceTree = "<group>"; };
+		D0E88E912EDEF72A00A5E470 /* HealthStore+Protein.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+Protein.swift"; sourceTree = "<group>"; };
+		D0E88E932EDEF82700A5E470 /* ProteinViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProteinViewModel.swift; sourceTree = "<group>"; };
+		D0E88E952EDEF8A800A5E470 /* DailyProteinEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyProteinEntry.swift; sourceTree = "<group>"; };
+		D0E88E972EDF064900A5E470 /* DailyFatEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyFatEntry.swift; sourceTree = "<group>"; };
+		D0E88E992EDF066700A5E470 /* HealthStore+Fat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+Fat.swift"; sourceTree = "<group>"; };
+		D0E88E9B2EDF071E00A5E470 /* FatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FatViewModel.swift; sourceTree = "<group>"; };
+		D0E88E9D2EDF0AB500A5E470 /* DailyNutritionEnergyEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyNutritionEnergyEntry.swift; sourceTree = "<group>"; };
+		D0E88E9F2EDF0AD100A5E470 /* HealthStore+NutritionEnergy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+NutritionEnergy.swift"; sourceTree = "<group>"; };
+		D0E88EA12EDF0B5900A5E470 /* NutritionEnergyViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionEnergyViewModel.swift; sourceTree = "<group>"; };
+		D0E88EA32EDF0BA000A5E470 /* NutritionEnergyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionEnergyView.swift; sourceTree = "<group>"; };
+		D0E88EA52EDF416D00A5E470 /* 90barchart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = 90barchart.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -207,6 +228,10 @@
 		D02F831A2ED27366005011A1 /* Nutrition */ = {
 			isa = PBXGroup;
 			children = (
+				D0E88E892EDEE85B00A5E470 /* DailyCarbsEntry.swift */,
+				D0E88E952EDEF8A800A5E470 /* DailyProteinEntry.swift */,
+				D0E88E972EDF064900A5E470 /* DailyFatEntry.swift */,
+				D0E88E9D2EDF0AB500A5E470 /* DailyNutritionEnergyEntry.swift */,
 			);
 			path = Nutrition;
 			sourceTree = "<group>";
@@ -294,6 +319,10 @@
 				D02F83102ED26B11005011A1 /* ActivityEnergyViewModel.swift */,
 				D05873AD2ED8648E0010C475 /* SleepViewModel.swift */,
 				D0D15DF52ED9E1AC00DD41E7 /* WeightViewModel.swift */,
+				D0E88E8B2EDEE99500A5E470 /* CarbsViewModel.swift */,
+				D0E88E932EDEF82700A5E470 /* ProteinViewModel.swift */,
+				D0E88E9B2EDF071E00A5E470 /* FatViewModel.swift */,
+				D0E88EA12EDF0B5900A5E470 /* NutritionEnergyViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -326,12 +355,11 @@
 		D0306B782EC9E2DC004BE9C2 /* Nutrition */ = {
 			isa = PBXGroup;
 			children = (
-				D0306B792EC9E2FA004BE9C2 /* NutritionDashboard.swift */,
-				D02F832C2ED2A77E005011A1 /* CarbohdrateView.swift */,
+				D0E88E8F2EDEEFFD00A5E470 /* NutritionDashboardView.swift */,
+				D0E88E8D2EDEEA2900A5E470 /* CarbsView.swift */,
 				D02F832E2ED2A7B8005011A1 /* ProteinView.swift */,
 				D02F83302ED2A7C5005011A1 /* FatView.swift */,
-				D02F83322ED2A8EC005011A1 /* NutritionEnergyView.swift */,
-				D02F83362ED2A9B0005011A1 /* CarbDayPeriodView.swift */,
+				D0E88EA32EDF0BA000A5E470 /* NutritionEnergyView.swift */,
 			);
 			path = Nutrition;
 			sourceTree = "<group>";
@@ -342,7 +370,6 @@
 				D0B082052ED1C3D000D77F09 /* ActivityDashboardView.swift */,
 				D07C436C2ECB66160057682A /* StepsView.swift */,
 				D0C87F762ECF247C00658CC1 /* ActivityEnergyView.swift */,
-				D05873902ED32A620010C475 /* StepsView1_Archiv.swift */,
 			);
 			path = "Activity ";
 			sourceTree = "<group>";
@@ -366,7 +393,6 @@
 				D0D15E092EDB1A2800DD41E7 /* NutritionSettingsSection.swift */,
 				D0D15E0D2EDBFE9400DD41E7 /* MetabolicSettingsSection.swift */,
 				D0D15E0B2EDBF7F500DD41E7 /* UnitsSettingsSection.swift */,
-				D0D15E012EDAF8B100DD41E7 /* SettingsView_Archive.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -388,6 +414,7 @@
 				D0D15DF32ED99F9400DD41E7 /* BodySectionCard.swift */,
 				D058739A2ED581140010C475 /* NutritionSectionCard.swift */,
 				D058739C2ED5812E0010C475 /* MetabolicSectionCard.swift */,
+				D0E88EA52EDF416D00A5E470 /* 90barchart.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -398,9 +425,13 @@
 				D0573AB32ECB4A320025A4AE /* HealthStore.swift .swift */,
 				D0D15DF92EDABE1500DD41E7 /* HealthStore+Sleep.swift */,
 				D0D15DFB2EDAC0CA00DD41E7 /* HealthStore+Weight.swift */,
-				D05873962ED4628D0010C475 /* HealthStore_archive.swift */,
 				D0D15DFD2EDAC16300DD41E7 /* HealthStore+ActivityEnergy.swift */,
 				D0D15DFF2EDAC1C400DD41E7 /* HealthStore+Steps.swift */,
+				D05873962ED4628D0010C475 /* HealthStore_archive.swift */,
+				D0E88E872EDEE84600A5E470 /* HealthStore+Carbs.swift */,
+				D0E88E912EDEF72A00A5E470 /* HealthStore+Protein.swift */,
+				D0E88E992EDF066700A5E470 /* HealthStore+Fat.swift */,
+				D0E88E9F2EDF0AD100A5E470 /* HealthStore+NutritionEnergy.swift */,
 			);
 			path = HealthKit;
 			sourceTree = "<group>";
@@ -522,6 +553,7 @@
 				D0306B802EC9E371004BE9C2 /* HistoryView.swift in Sources */,
 				D0D15DFE2EDAC16300DD41E7 /* HealthStore+ActivityEnergy.swift in Sources */,
 				D02F83352ED2A971005011A1 /* DailyWeightEntry.swift in Sources */,
+				D0E88E8C2EDEE99500A5E470 /* CarbsViewModel.swift in Sources */,
 				D0D15E082EDB10F900DD41E7 /* ActivitySettingsSection.swift in Sources */,
 				D0306B832EC9E3BB004BE9C2 /* SettingsView.swift in Sources */,
 				D05873AA2ED707A50010C475 /* MetricScaleType.swift in Sources */,
@@ -531,54 +563,64 @@
 				D02F83312ED2A7C5005011A1 /* FatView.swift in Sources */,
 				D0C6B2392ECCB772000AC73E /* MonthlyBarChart.swift in Sources */,
 				D0D15E112EDDA93C00DD41E7 /* GluVibPrimaryButtonStyle.swift in Sources */,
+				D0E88E942EDEF82700A5E470 /* ProteinViewModel.swift in Sources */,
 				D02F83292ED2A68B005011A1 /* CarbBolusRatioView.swift in Sources */,
 				D02F83232ED2A606005011A1 /* TimeInRangeView.swift in Sources */,
 				D05873932ED32F7E0010C475 /* SettingsModel.swift in Sources */,
 				D058739B2ED581140010C475 /* NutritionSectionCard.swift in Sources */,
 				D05873A62ED700A30010C475 /* MetricDomain.swift in Sources */,
 				D0D15DFA2EDABE1500DD41E7 /* HealthStore+Sleep.swift in Sources */,
+				D0E88E962EDEF8A800A5E470 /* DailyProteinEntry.swift in Sources */,
+				D0E88EA42EDF0BA000A5E470 /* NutritionEnergyView.swift in Sources */,
 				D05873A82ED706C70010C475 /* AveragePeriodsBarChart.swift in Sources */,
 				D0D15E0C2EDBF7F500DD41E7 /* UnitsSettingsSection.swift in Sources */,
+				D0E88E9E2EDF0AB500A5E470 /* DailyNutritionEnergyEntry.swift in Sources */,
 				D0D15E0E2EDBFE9400DD41E7 /* MetabolicSettingsSection.swift in Sources */,
 				D0C6B23B2ECCE630000AC73E /* ActivitySectionCard.swift in Sources */,
 				D058739D2ED5812E0010C475 /* MetabolicSectionCard.swift in Sources */,
+				D0E88E8E2EDEEA2900A5E470 /* CarbsView.swift in Sources */,
 				D0306B5D2EC9DD49004BE9C2 /* GluVibProbeApp.swift in Sources */,
 				D0D15E0A2EDB1A2800DD41E7 /* NutritionSettingsSection.swift in Sources */,
-				D02F832D2ED2A77E005011A1 /* CarbohdrateView.swift in Sources */,
 				D02F83272ED2A645005011A1 /* BasalView.swift in Sources */,
+				D0E88EA22EDF0B5900A5E470 /* NutritionEnergyViewModel.swift in Sources */,
 				D0C87F772ECF247C00658CC1 /* ActivityEnergyView.swift in Sources */,
 				D02F83212ED2A498005011A1 /* WeightView.swift in Sources */,
 				D07C436D2ECB66160057682A /* StepsView.swift in Sources */,
 				D0D15DF62ED9E1AC00DD41E7 /* WeightViewModel.swift in Sources */,
 				D02F832B2ED2A6A2005011A1 /* GmiView.swift in Sources */,
 				D0D15DFC2EDAC0CA00DD41E7 /* HealthStore+Weight.swift in Sources */,
-				D0306B7A2EC9E2FA004BE9C2 /* NutritionDashboard.swift in Sources */,
 				D0D15DF12ED9895F00DD41E7 /* BodyDashboardView.swift in Sources */,
 				D0573AB42ECB4A320025A4AE /* HealthStore.swift .swift in Sources */,
 				D02F83142ED26B78005011A1 /* DefaultsStore.swift in Sources */,
-				D02F83372ED2A9B0005011A1 /* CarbDayPeriodView.swift in Sources */,
 				D0573AAF2ECB1E270025A4AE /* RangeSlider.swift in Sources */,
 				D00025D62ECC7A0300519269 /* Last90DaysBarChart.swift in Sources */,
+				D0E88EA02EDF0AD100A5E470 /* HealthStore+NutritionEnergy.swift in Sources */,
+				D0E88E8A2EDEE85B00A5E470 /* DailyCarbsEntry.swift in Sources */,
+				D0E88E9C2EDF071E00A5E470 /* FatViewModel.swift in Sources */,
 				D085FBCD2ECC5716009DDAB1 /* GluBottomTabBar.swift in Sources */,
 				D0B082062ED1C3D000D77F09 /* ActivityDashboardView.swift in Sources */,
 				D0D15E042EDAF8F900DD41E7 /* BodySettingsSection.swift in Sources */,
 				D02F83252ED2A637005011A1 /* BolusView.swift in Sources */,
+				D0E88E922EDEF72A00A5E470 /* HealthStore+Protein.swift in Sources */,
 				D0306B762EC9E2B0004BE9C2 /* HomeView.swift in Sources */,
 				D05873AE2ED8648E0010C475 /* SleepViewModel.swift in Sources */,
 				D02F831F2ED2A3CB005011A1 /* SleepView.swift in Sources */,
 				D02F83182ED2733F005011A1 /* ActivityEnergyEntry.swift in Sources */,
 				D02F83112ED26B11005011A1 /* ActivityEnergyViewModel.swift in Sources */,
-				D02F83332ED2A8EC005011A1 /* NutritionEnergyView.swift in Sources */,
+				D0E88E9A2EDF066700A5E470 /* HealthStore+Fat.swift in Sources */,
 				D0C6B2352ECC9F80000AC73E /* Color+GluVibe.swift in Sources */,
 				D05873AC2ED72E1A0010C475 /* ChartCard.swift in Sources */,
 				D02F830D2ED26AA2005011A1 /* DailyStepsEntry.swift in Sources */,
 				D0573AB12ECB22250025A4AE /* LowerUpperRangeGlucoseSlider.swift in Sources */,
 				D07C43712ECB68A00057682A /* SectionHeader.swift in Sources */,
 				D0D15E1A2EDDDA2000DD41E7 /* SettingsButtonBar.swift in Sources */,
+				D0E88E902EDEEFFD00A5E470 /* NutritionDashboardView.swift in Sources */,
 				D0306B742EC9E1B7004BE9C2 /* AppState.swift in Sources */,
 				D0D15E002EDAC1C400DD41E7 /* HealthStore+Steps.swift in Sources */,
 				D0D15E142EDDC71300DD41E7 /* SettingsDomainPicker.swift in Sources */,
 				D02F830F2ED26AE7005011A1 /* StepsViewModel.swift in Sources */,
+				D0E88E982EDF064900A5E470 /* DailyFatEntry.swift in Sources */,
+				D0E88E882EDEE84600A5E470 /* HealthStore+Carbs.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

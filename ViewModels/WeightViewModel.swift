@@ -11,7 +11,7 @@ final class WeightViewModel: ObservableObject {
 
     // MARK: - Published Output für die View
 
-    /// Letztes bekanntes Gewicht (kg)
+    /// Letztes bekanntes Gewicht (kg, Basis in kg)
     @Published var todayWeightKg: Int = 0
 
     /// Rohdaten: Gewicht der letzten 90 Tage (direkt aus HealthStore)
@@ -27,11 +27,16 @@ final class WeightViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let healthStore: HealthStore
+    private let settings: SettingsModel
 
     // MARK: - Init
 
-    init(healthStore: HealthStore = .shared) {
+    init(
+        healthStore: HealthStore = .shared,
+        settings: SettingsModel = .shared
+    ) {
         self.healthStore = healthStore
+        self.settings = settings
     }
 
     // MARK: - Lifecycle
@@ -155,11 +160,12 @@ final class WeightViewModel: ObservableObject {
 
     // MARK: - Formatting für die View
 
-    // MARK: - Formatting für die View
-
     /// Formatierter Wert für die KPI "Weight Today" inkl. Einheit
+    /// nutzt SettingsModel.weightUnit + WeightUnit-Extension
     var formattedTodayWeightKg: String {
         guard todayWeightKg > 0 else { return "–" }
-        return "\(todayWeightKg) kg"
+
+        let unit = settings.weightUnit       // .kg oder .lbs
+        return unit.formatted(fromKg: todayWeightKg)
     }
 }

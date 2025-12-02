@@ -2,7 +2,13 @@
 //  DailyNutritionEnergyEntry.swift
 //  GluVibProbe
 //
-//  Created by MacBookAir on 02.12.25.
+//  Nutrition-Domain: tägliche Nahrungsenergie (immer in kcal gespeichert)
 //
 
 import Foundation
+
+struct DailyNutritionEnergyEntry: Identifiable, Hashable {
+    let id = UUID()
+    let date: Date
+    let energyKcal: Int
+}

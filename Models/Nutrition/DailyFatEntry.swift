@@ -1,8 +1,12 @@
-//
 //  DailyFatEntry.swift
 //  GluVibProbe
 //
-//  Created by MacBookAir on 02.12.25.
-//
+//  Nutrition-Domain: Fat (g) – tägliche Summen
 
 import Foundation
+
+struct DailyFatEntry: Identifiable, Hashable {
+    let id = UUID()
+    let date: Date
+    let grams: Int
+}

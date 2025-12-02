@@ -223,20 +223,23 @@ private extension BodySectionCard {
                 KPICard(
                     title: "Target",
                     valueText: kpiTargetText,
-                    unit: nil
+                    unit: nil,
+                    domain: .body
                 )
 
                 KPICard(
                     title: "Current",
                     valueText: kpiCurrentText,
-                    unit: nil
+                    unit: nil,
+                    domain: .body
                 )
 
                 KPICard(
                     title: "Delta",
                     valueText: kpiDeltaText,
                     unit: nil,
-                    valueColor: deltaColor
+                    valueColor: deltaColor,
+                    domain: .body
                 )
             } else {
                 // 🔹 Kein Ziel: nur Current, zentriert
@@ -245,7 +248,8 @@ private extension BodySectionCard {
                 KPICard(
                     title: "Current",
                     valueText: kpiCurrentText,
-                    unit: nil
+                    unit: nil,
+                    domain: .body
                 )
 
                 Spacer(minLength: 0)

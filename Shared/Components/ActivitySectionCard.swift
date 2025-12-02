@@ -207,7 +207,7 @@ private extension ActivitySectionCard {
         }
     }
 
-    // MARK: KPI-Header
+    // MARK: - KPI-Header
     var kpiHeader: some View {
         HStack(alignment: .top, spacing: 10) {
 
@@ -216,20 +216,23 @@ private extension ActivitySectionCard {
                 KPICard(
                     title: "Target",
                     valueText: kpiTargetText,
-                    unit: nil
+                    unit: nil,
+                    domain: .activity
                 )
 
                 KPICard(
                     title: "Current",
                     valueText: kpiCurrentText,
-                    unit: nil
+                    unit: nil,
+                    domain: .activity
                 )
 
                 KPICard(
                     title: "Delta",
                     valueText: kpiDeltaText,
                     unit: nil,
-                    valueColor: deltaColor
+                    valueColor: deltaColor,
+                    domain: .activity
                 )
             } else {
                 // 🔹 Kein Ziel: nur Current, zentriert
@@ -238,7 +241,8 @@ private extension ActivitySectionCard {
                 KPICard(
                     title: "Current",
                     valueText: kpiCurrentText,
-                    unit: nil
+                    unit: nil,
+                    domain: .activity
                 )
 
                 Spacer(minLength: 0)

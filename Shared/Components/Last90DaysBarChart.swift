@@ -170,6 +170,8 @@ struct Last90DaysBarChart: View {
             let upperHours = ceil(maxHours)           // z.B. 7.4 → 8 h
             let upperMinutes = Int(upperHours * 60.0) // zurück nach Minuten
             return Array(stride(from: 0, through: upperMinutes, by: 60)) // 60 Min = 1 h
+            
+            
         }
     }
 

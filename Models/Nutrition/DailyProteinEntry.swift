@@ -2,7 +2,14 @@
 //  DailyProteinEntry.swift
 //  GluVibProbe
 //
-//  Created by MacBookAir on 02.12.25.
-//
 
 import Foundation
+
+/// Täglicher Protein-Wert in Gramm (g)
+struct DailyProteinEntry: Identifiable, Hashable {
+    let date: Date
+    let grams: Int
+
+    // Für Charts meist eindeutig genug
+    var id: Date { date }
+}

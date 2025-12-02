@@ -86,6 +86,8 @@ struct MonthlyBarChart: View {
 
         case .percent:
             return Array(stride(from: 0, through: 100, by: 20))
+            
+            
 
         case .hours:
             // 🔥 Sleep: Werte in Minuten → Achse in Stunden

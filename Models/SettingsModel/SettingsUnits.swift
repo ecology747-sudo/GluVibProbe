@@ -54,3 +54,26 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String { rawValue }
 }
+
+// MARK: - WeightUnit – zentrale Umrechnung & Formatierung
+
+extension WeightUnit {
+
+    /// Wandelt einen kg-Wert in die aktuell gewünschte Einheit um.
+    /// - kg → kg
+    /// - kg → lbs (gerundet)
+    func convertedValue(fromKg kg: Int) -> Int {
+        switch self {
+        case .kg:
+            return kg
+        case .lbs:
+            return Int((Double(kg) * 2.20462).rounded())
+        }
+    }
+
+    /// Formatiert einen kg-Wert inkl. Einheit,
+    /// z. B. "82 kg" oder "181 lbs"
+    func formatted(fromKg kg: Int) -> String {
+        "\(convertedValue(fromKg: kg)) \(label)"
+    }
+}

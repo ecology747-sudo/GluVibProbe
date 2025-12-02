@@ -364,7 +364,8 @@ struct SettingsView: View {
                 glucoseUnit:  $glucoseUnit,
                 distanceUnit: $distanceUnit,
                 weightUnit:   $weightUnit,
-                heightUnit:   $heightUnit
+                heightUnit:   $heightUnit,
+                energyUnit:   $energyUnit      // 🔥 neu
             )
         }
     }

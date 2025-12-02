@@ -27,7 +27,7 @@ struct ContentView: View {
                     BodyDashboardView()
 
                 case .nutrition:
-                    NutritionDashboard()    // 👈 jetzt echte View
+                    NutritionDashboardView()    // 👈 neues Nutrition-Dashboard
 
                 case .home:
                     HomeView()     //ist Metabolic

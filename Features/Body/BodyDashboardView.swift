@@ -1,10 +1,15 @@
+//
+//  BodyDashboardView.swift
+//  GluVibProbe
+//
+
 import SwiftUI
 
-/// Dashboard für Body-Daten:
+/// Dashboard für die Body-Domain:
 /// - Sleep
 /// - Weight
 ///
-/// Die Activity-Daten liegen im ActivityDashboardView.
+/// Steuert, welche Detail-View angezeigt wird, basierend auf appState.currentStatsScreen.
 struct BodyDashboardView: View {
 
     @EnvironmentObject var appState: AppState
@@ -13,38 +18,32 @@ struct BodyDashboardView: View {
     var body: some View {
         switch appState.currentStatsScreen {
 
+        // 🟠 BODY-DOMAIN
+
         case .sleep:
-            // SleepView mit Metric-Navigation
             SleepView(onMetricSelected: handleMetricSelection)
 
         case .weight:
-            // WeightView mit den gleichen Body-Metric-Chips (Sleep / Weight)
             WeightView(onMetricSelected: handleMetricSelection)
 
-        // Falls Nutzer in der Body-Domain einmal „falsch“ auf Steps/Activity landet:
-        // Übergangsweise zurück auf Sleep (bis Tabs alles sauber trennen)
-        case .steps, .activityEnergy:
+        // Alle anderen Fälle (Activity / Nutrition / Metabolic)
+        // → Fallback: Body-Standard „Sleep“ anzeigen,
+        //   damit der Switch exhaustiv bleibt und wir
+        //   NICHT wieder im Activity-Layout landen.
+        case .steps, .activityEnergy, .carbs, .protein, .fat, .calories:
             SleepView(onMetricSelected: handleMetricSelection)
         }
     }
 
-    // MARK: - Metric Navigation (Sleep <-> Weight)
+    // MARK: - Navigation durch Body-Metric-Chips
 
     private func handleMetricSelection(_ metric: String) {
         switch metric {
-
         case "Sleep":
             appState.currentStatsScreen = .sleep
 
         case "Weight":
             appState.currentStatsScreen = .weight
-
-        // Falls in Body-Domain jemand „Steps“ oder „Activity Energy“ antippt:
-        case "Steps":
-            appState.currentStatsScreen = .steps
-
-        case "Activity Energy":
-            appState.currentStatsScreen = .activityEnergy
 
         default:
             break
@@ -52,10 +51,9 @@ struct BodyDashboardView: View {
     }
 }
 
-#Preview {
+#Preview("BodyDashboardView") {
     let previewStore = HealthStore.preview()
     let previewState = AppState()
-    previewState.currentStatsScreen = .sleep
 
     return BodyDashboardView()
         .environmentObject(previewStore)

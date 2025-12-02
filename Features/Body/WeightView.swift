@@ -22,80 +22,64 @@ struct WeightView: View {
 
     var body: some View {
 
-        // MARK: - Helper für kg/lbs
-
-        func convertKg(_ value: Int, to unit: WeightUnit) -> Int {
-            guard value > 0 else { return 0 }
-
-            switch unit {
-            case .kg:
-                return value
-            case .lbs:
-                return Int((Double(value) * 2.20462).rounded())
-            }
-        }
-
-        func formatWeight(_ valueKg: Int, unit: WeightUnit) -> String {
-            let v = convertKg(valueKg, to: unit)
-            guard v > 0 else { return "–" }
-            return "\(v) \(unit.label)"
-        }
-
-        // MARK: - KPI-Logik (Target / Current / Delta)
+        // MARK: - Basis: aktuelle Einheit + kg-Werte aus Model
 
         let unit           = settings.weightUnit          // .kg oder .lbs
         let targetWeightKg = settings.targetWeightKg      // Basis immer kg
         let currentKg      = viewModel.todayWeightKg      // Basis immer kg
 
-        let targetWeightText: String  = formatWeight(targetWeightKg, unit: unit)
-        let currentWeightText: String = formatWeight(currentKg,      unit: unit)
+        // MARK: - KPI-Texte (nutzen zentrale WeightUnit-Logik)
+
+        let targetWeightText: String = unit.formatted(fromKg: targetWeightKg)
+        let currentWeightText: String = unit.formatted(fromKg: currentKg)
 
         let deltaText: String = {
             guard currentKg > 0, targetWeightKg > 0 else { return "–" }
 
-            let current = convertKg(currentKg,      to: unit)
-            let target  = convertKg(targetWeightKg, to: unit)
-            let diff    = current - target
+            // Differenz immer in kg berechnen
+            let diffKg = currentKg - targetWeightKg
+            if diffKg == 0 {
+                return "0 \(unit.label)"
+            }
 
-            if diff == 0 { return "0 \(unit.label)" }
-
-            let sign = diff > 0 ? "+" : "−"
-            return "\(sign)\(abs(diff)) \(unit.label)"
+            let sign = diffKg > 0 ? "+" : "−"
+            let diffDisplay = unit.convertedValue(fromKg: abs(diffKg))
+            return "\(sign)\(diffDisplay) \(unit.label)"
         }()
 
         // Zielwert für grüne Linie im Chart (in Anzeigeneinheit)
         let goalForChart: Int? = {
             guard targetWeightKg > 0 else { return nil }
-            let converted = convertKg(targetWeightKg, to: unit)
+            let converted = unit.convertedValue(fromKg: targetWeightKg)
             return converted > 0 ? converted : nil
         }()
 
         // Last-90-Days-Chart in gewünschter Einheit
         let last90DaysForChart: [DailyStepsEntry] = {
-            let source = viewModel.last90DaysDataForChart
+            let source = viewModel.last90DaysDataForChart  // immer kg
 
             // kg → direkt
             if unit == .kg { return source }
 
-            // lbs → Werte konvertieren
+            // lbs → Werte konvertieren über WeightUnit
             return source.map { entry in
-                let lbs = convertKg(entry.steps, to: .lbs)
-                return DailyStepsEntry(date: entry.date, steps: lbs)
+                let converted = unit.convertedValue(fromKg: entry.steps)
+                return DailyStepsEntry(date: entry.date, steps: converted)
             }
         }()
 
         // Perioden-Durchschnitte in gewünschter Einheit
         let periodAveragesForUnit: [PeriodAverageEntry] = {
-            let base = viewModel.periodAverages
+            let base = viewModel.periodAverages   // Werte in kg
 
             if unit == .kg { return base }
 
             return base.map { entry in
-                let lbsValue = convertKg(entry.value, to: .lbs)
+                let converted = unit.convertedValue(fromKg: entry.value)
                 return PeriodAverageEntry(
                     label: entry.label,
                     days: entry.days,
-                    value: lbsValue
+                    value: converted
                 )
             }
         }()
@@ -119,12 +103,12 @@ struct WeightView: View {
                         kpiDeltaText: deltaText,                  // 🔺 Delta inkl. Einheit
                         hasTarget: true,                          // ✅ 3 KPIs aktiv
                         last90DaysData: last90DaysForChart,       // 📈 Daten in kg oder lbs
-                        monthlyData: viewModel.monthlyWeightData, // (Monatschart aktuell aus)
+                        monthlyData: viewModel.monthlyWeightData, // Monatsdaten (aktuell optional)
                         dailyGoalForChart: goalForChart,          // ✅ Linie in derselben Einheit
                         onMetricSelected: onMetricSelected,
                         metrics: ["Sleep", "Weight"],
                         monthlyMetricLabel: "Weight / Month",
-                        periodAverages: periodAveragesForUnit,    // Balken 7T/14T/... in kg/lbs
+                        periodAverages: periodAveragesForUnit,    // 7T/14T/... in kg/lbs
                         showMonthlyChart: false,                  // Weight: kein Monats-Chart
                         scaleType: .smallInteger
                     )

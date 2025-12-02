@@ -11,6 +11,9 @@ struct ActivityEnergyView: View {
 
     @StateObject private var viewModel: ActivityEnergyViewModel
 
+    // 🔗 globale Settings (u. a. Energy-Unit: kcal / kJ)
+    @ObservedObject private var settings = SettingsModel.shared
+
     // Callback aus dem Dashboard (für Metric-Chips)
     let onMetricSelected: (String) -> Void
 
@@ -31,7 +34,20 @@ struct ActivityEnergyView: View {
     }
 
     var body: some View {
-        ZStack {
+
+        // 🔧 Skala abhängig von der Energy-Unit wählen:
+        // - kcal  → kleine Werte → .smallInteger
+        // - kJ    → große Werte  → .steps (wie Steps, mit größeren Achsenabständen)
+        let scaleType: MetricScaleType = {
+            switch settings.energyUnit {
+            case .kcal:
+                return .smallInteger
+            case .kilojoules:
+                return .steps
+            }
+        }()
+
+        return ZStack {
             // Hintergrund für den Bereich „Körper & Aktivität“
             Color.Glu.activityAccent.opacity(0.18)
                 .ignoresSafeArea()
@@ -55,7 +71,7 @@ struct ActivityEnergyView: View {
                         metrics: ["Steps", "Activity Energy"],
                         monthlyMetricLabel: "Active Energy / Month",
                         periodAverages: viewModel.periodAverages,
-                        scaleType: .smallInteger                      // kcal = smallInteger
+                        scaleType: scaleType                          // ⬅️ hier dynamisch
                     )
                     .padding(.horizontal)
                 }
@@ -71,6 +87,7 @@ struct ActivityEnergyView: View {
     }
 }
 
+// MARK: - Preview
 
 #Preview("ActivityEnergyView – Activity") {
     let previewStore = HealthStore.preview()
