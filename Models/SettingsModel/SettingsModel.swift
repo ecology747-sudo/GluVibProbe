@@ -31,6 +31,9 @@ final class SettingsModel: ObservableObject {
 
     /// Tagesziel für Schritte
     @Published var dailyStepGoal: Int = 10_000
+
+    /// Tagesziel für Schlaf in Minuten (z. B. 8 h = 480)
+    @Published var dailySleepGoalMinutes: Int = 8 * 60
     
     // MARK: - Personal Settings
 
@@ -73,7 +76,8 @@ final class SettingsModel: ObservableObject {
     private enum Keys {
 
         // Steps
-        static let dailyStepGoal = "settings_dailyStepGoal"
+        static let dailyStepGoal          = "settings_dailyStepGoal"
+        static let dailySleepGoalMinutes  = "settings_dailySleepGoalMinutes"
 
         // Personal
         static let gender         = "settings_gender"
@@ -117,11 +121,14 @@ final class SettingsModel: ObservableObject {
     /// Wird beim App-Start im init() ausgeführt.
     func loadFromDefaults() {
 
-        // Schrittziel laden, falls vorhanden
+        // MARK: Steps / Sleep
         if defaults.object(forKey: Keys.dailyStepGoal) != nil {
             self.dailyStepGoal = defaults.integer(forKey: Keys.dailyStepGoal)
         }
-        
+
+        if defaults.object(forKey: Keys.dailySleepGoalMinutes) != nil {
+            self.dailySleepGoalMinutes = defaults.integer(forKey: Keys.dailySleepGoalMinutes)
+        }
         
         // MARK: Personal
         if let genderValue = defaults.string(forKey: Keys.gender) {
@@ -219,15 +226,16 @@ final class SettingsModel: ObservableObject {
     /// Wird später vom Save-Button in der SettingsView aufgerufen.
     func saveToDefaults() {
 
-        // MARK: Steps
-        defaults.set(dailyStepGoal, forKey: Keys.dailyStepGoal)
+        // MARK: Steps / Sleep
+        defaults.set(dailyStepGoal,          forKey: Keys.dailyStepGoal)
+        defaults.set(dailySleepGoalMinutes,  forKey: Keys.dailySleepGoalMinutes)
 
         // MARK: Personal
-        defaults.set(gender, forKey: Keys.gender)
+        defaults.set(gender,                        forKey: Keys.gender)
         defaults.set(birthDate.timeIntervalSince1970, forKey: Keys.birthDate)
-        defaults.set(heightCm, forKey: Keys.heightCm)
-        defaults.set(weightKg, forKey: Keys.weightKg)
-        defaults.set(targetWeightKg, forKey: Keys.targetWeightKg)
+        defaults.set(heightCm,                      forKey: Keys.heightCm)
+        defaults.set(weightKg,                      forKey: Keys.weightKg)
+        defaults.set(targetWeightKg,                forKey: Keys.targetWeightKg)
 
         // MARK: Units
         defaults.set(weightUnit.rawValue,   forKey: Keys.weightUnit)

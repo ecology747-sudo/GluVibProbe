@@ -5,6 +5,7 @@
 
 import Foundation
 import Combine
+import SwiftUI
 
 /// Verantwortlich für alle Sleep-Daten & KPIs (MVVM)
 final class SleepViewModel: ObservableObject {
@@ -14,8 +15,8 @@ final class SleepViewModel: ObservableObject {
     /// Schlaf heute in Minuten
     @Published var todaySleepMinutes: Int = 0
 
-    /// Ziel-Schlafdauer in Minuten (z. B. 8 h)
-    @Published var targetSleepMinutes: Int = 8 * 60   // später aus SettingsModel laden
+    /// Ziel-Schlafdauer in Minuten (aus SettingsModel)
+    @Published var targetSleepMinutes: Int = 8 * 60   // wird im Init an Settings angebunden
 
     /// Schlaf der letzten 90 Tage (Basis für 90d-Chart)
     @Published var last90DaysSleep: [DailySleepEntry] = []
@@ -29,12 +30,22 @@ final class SleepViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let healthStore: HealthStore
+    private let settings: SettingsModel
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Init
 
-    init(healthStore: HealthStore = .shared) {
+    init(
+        healthStore: HealthStore = .shared,
+        settings: SettingsModel = .shared
+    ) {
         self.healthStore = healthStore
+        self.settings = settings
+
+        // Sleep-Ziel immer mit SettingsModel verknüpfen
+        settings.$dailySleepGoalMinutes
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$targetSleepMinutes)
     }
 
     // MARK: - Lifecycle
@@ -66,8 +77,7 @@ final class SleepViewModel: ObservableObject {
         todaySleepMinutes = healthStore.todaySleepMinutes
         last90DaysSleep   = healthStore.last90DaysSleep
         monthlySleepData  = healthStore.monthlySleep
-
-        // 🔜 später: targetSleepMinutes aus SettingsModel übernehmen
+        // targetSleepMinutes kommt aus SettingsModel (Binding im Init)
     }
 
     private func loadExtendedSleepData() {
@@ -141,9 +151,27 @@ final class SleepViewModel: ObservableObject {
         Self.formatDeltaMinutes(deltaSleepMinutes)
     }
 
+    /// Farblogik für Delta wie bei Steps:
+    /// + → grün, – → rot, 0 → blau
+    var deltaColor: Color {
+        if deltaSleepMinutes > 0 {
+            return .green
+        } else if deltaSleepMinutes < 0 {
+            return .red
+        } else {
+            return Color.Glu.primaryBlue
+        }
+    }
+
+    // MARK: - Chart Goal (für gestrichelte Linie)
+
+    /// Zielwert für das Chart; je nach Chart in Minuten oder Stunden genutzt
+    var goalValueForChart: Double {
+        Double(targetSleepMinutes)
+    }
+
     // MARK: - Formatting
 
-    /// Formatierter Wert, z. B. "7 h 15 min" oder "–"
     static func formatMinutes(_ minutes: Int) -> String {
         guard minutes > 0 else { return "–" }
 
@@ -152,32 +180,40 @@ final class SleepViewModel: ObservableObject {
 
         switch (hours, mins) {
         case (0, let m):
-            return "\(m) min"
+            // nur Minuten, z. B. "45m"
+            return "\(m)m"
         case (let h, 0):
-            return "\(h) h"
+            // nur Stunden, z. B. "8h"
+            return "\(h)h"
         default:
-            return "\(hours) h \(mins) min"
+            // kompakt, z. B. "7h 40m"
+            return "\(hours)h \(mins)m"
         }
     }
 
-    /// Formatierter Delta-Wert mit Vorzeichen, z. B. "+45 min", "–1 h 15 min"
     static func formatDeltaMinutes(_ delta: Int) -> String {
         if delta == 0 {
-            return "0 min"
+            return "0m"
         }
 
-        let sign = delta > 0 ? "+" : "–"
+        // WICHTIG: normales Minus "-" verwenden,
+        // damit BodySectionCard.deltaColor es erkennt
+        let sign = delta > 0 ? "+" : "-"
+
         let absMinutes = abs(delta)
         let hours = absMinutes / 60
         let mins  = absMinutes % 60
 
         switch (hours, mins) {
         case (0, let m):
-            return "\(sign)\(m) min"
+            // z. B. "+15m" oder "-15m"
+            return "\(sign)\(m)m"
         case (let h, 0):
-            return "\(sign)\(h) h"
+            // z. B. "-1h"
+            return "\(sign)\(h)h"
         default:
-            return "\(sign)\(hours) h \(mins) min"
+            // z. B. "-1h 5m"
+            return "\(sign)\(hours)h \(mins)m"
         }
     }
 }

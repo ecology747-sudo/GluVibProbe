@@ -38,7 +38,7 @@ struct SleepView: View {
                         // 👉 Sleep-Daten in generische Entries gemapped
                         last90DaysData: viewModel.last90DaysDataForChart,
                         monthlyData: viewModel.monthlySleepData,
-                        dailyGoalForChart: nil,
+                        dailyGoalForChart: Int(viewModel.goalValueForChart),
                         onMetricSelected: onMetricSelected,
                         metrics: ["Sleep", "Weight"],
                         monthlyMetricLabel: "Sleep / Month",

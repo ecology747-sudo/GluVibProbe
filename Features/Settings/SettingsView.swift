@@ -12,6 +12,7 @@ private struct SettingsSnapshot: Equatable {
     var height: Int
     var weightKg: Int
     var targetWeight: Int
+    var dailySleepGoalMinutes: Int   // 🔹 neu
 
     var glucoseUnit: GlucoseUnit
     var weightUnit: WeightUnit
@@ -44,6 +45,7 @@ struct SettingsView: View {
     @State private var height: Int = 170
     @State private var weightKg: Int = 75
     @State private var targetWeight: Int = 75
+    @State private var dailySleepGoalMinutes: Int = 8 * 60    // 🔹 neu
 
     // MARK: - Units
 
@@ -97,6 +99,7 @@ struct SettingsView: View {
             height: height,
             weightKg: weightKg,
             targetWeight: targetWeight,
+            dailySleepGoalMinutes: dailySleepGoalMinutes,  // 🔹 neu
             glucoseUnit: glucoseUnit,
             weightUnit: weightUnit,
             heightUnit: heightUnit,
@@ -137,6 +140,7 @@ struct SettingsView: View {
         settings.heightCm       = height
         settings.weightKg       = weightKg
         settings.targetWeightKg = targetWeight
+        settings.dailySleepGoalMinutes = dailySleepGoalMinutes   // 🔹 neu
 
         // Units
         settings.weightUnit     = weightUnit
@@ -170,11 +174,12 @@ struct SettingsView: View {
         dailyStepTarget = settings.dailyStepGoal
 
         // Personal / Body
-        gender       = settings.gender
-        birthDate    = settings.birthDate
-        height       = settings.heightCm
-        weightKg     = settings.weightKg
-        targetWeight = settings.targetWeightKg
+        gender                = settings.gender
+        birthDate             = settings.birthDate
+        height                = settings.heightCm
+        weightKg              = settings.weightKg
+        targetWeight          = settings.targetWeightKg
+        dailySleepGoalMinutes = settings.dailySleepGoalMinutes   // 🔹 neu
 
         // Units
         weightUnit   = settings.weightUnit
@@ -256,11 +261,12 @@ struct SettingsView: View {
             dailyStepTarget = settings.dailyStepGoal
 
             // Personal / Body
-            gender       = settings.gender
-            birthDate    = settings.birthDate
-            height       = settings.heightCm
-            weightKg     = settings.weightKg
-            targetWeight = settings.targetWeightKg
+            gender                = settings.gender
+            birthDate             = settings.birthDate
+            height                = settings.heightCm
+            weightKg              = settings.weightKg
+            targetWeight          = settings.targetWeightKg
+            dailySleepGoalMinutes = settings.dailySleepGoalMinutes   // 🔹 neu
 
             // Units
             weightUnit   = settings.weightUnit
@@ -326,12 +332,15 @@ struct SettingsView: View {
                 heightCm: $height,
                 weightKg: $weightKg,
                 targetWeightKg: $targetWeight,
+                dailySleepGoalMinutes: $dailySleepGoalMinutes,
                 heightUnit: heightUnit,
                 weightUnit: weightUnit
             )
 
         case .activity:
-            ActivitySettingsSection(dailyStepTarget: $dailyStepTarget)
+            ActivitySettingsSection(
+                dailyStepTarget: $dailyStepTarget
+            )
 
         case .metabolic:
             MetabolicSettingsSection(
