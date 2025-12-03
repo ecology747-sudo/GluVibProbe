@@ -45,14 +45,22 @@ struct NutritionSectionCard: View {
     /// Durchschnittswerte für 7D–365D
     let periodAverages: [PeriodAverageEntry]
 
-    /// Skala für die Charts:
-    ///  - `dailyScaleType`: Last90Days + Period-Averages
-    ///  - `monthlyScaleType`: Monats-Chart
+    /// Skala für die Charts (altes System)
     let dailyScaleType: MetricScaleType
     let monthlyScaleType: MetricScaleType
 
     /// Steuert, ob der Monats-Chart angezeigt wird
     let showMonthlyChart: Bool
+
+    // MARK: - NEU: optionale Skalen-Ergebnisse NUR für den 90d-Chart
+
+    /// Wenn gesetzt → der 90d-Chart nutzt Last90DaysScaledBarChart.
+    /// Wenn `nil` → der alte Last90DaysBarChart wird verwendet.
+    let dailyScaleResult: MetricScaleResult?
+
+    /// Reserviert, falls wir später einmal Monthly skaliert anbinden wollen.
+    /// Aktuell NICHT verwendet, damit es einfach bleibt.
+    let monthlyScaleResult: MetricScaleResult?
 
     // MARK: - Formatter
 
@@ -81,7 +89,9 @@ struct NutritionSectionCard: View {
         periodAverages: [PeriodAverageEntry] = [],
         showMonthlyChart: Bool = true,
         dailyScaleType: MetricScaleType = .smallInteger,
-        monthlyScaleType: MetricScaleType = .smallInteger
+        monthlyScaleType: MetricScaleType = .smallInteger,
+        dailyScaleResult: MetricScaleResult? = nil,
+        monthlyScaleResult: MetricScaleResult? = nil
     ) {
         self.sectionTitle = sectionTitle
         self.title = title
@@ -100,6 +110,8 @@ struct NutritionSectionCard: View {
         self.showMonthlyChart = showMonthlyChart
         self.dailyScaleType = dailyScaleType
         self.monthlyScaleType = monthlyScaleType
+        self.dailyScaleResult = dailyScaleResult
+        self.monthlyScaleResult = monthlyScaleResult
     }
 
     // MARK: - Body
@@ -121,19 +133,37 @@ struct NutritionSectionCard: View {
 
             // 90-Tage-Chart in Kachel
             ChartCard(borderColor: Color.Glu.nutritionAccent) {
-                Last90DaysBarChart(
-                    entries: last90DaysData,
-                    metricLabel: title,
-                    dailyStepsGoal: dailyGoalForChart,
-                    barColor: Color.Glu.nutritionAccent,
-                    scaleType: dailyScaleType
-                )
-                .frame(height: 260)
+                if let scale = dailyScaleResult {
+                    // 🔹 NEUES SYSTEM: skaliert über MetricScaleHelper (NUR 90d-Chart)
+                    Last90DaysScaledBarChart(
+                        data: last90DaysData,
+                        yAxisTicks: scale.yAxisTicks,
+                        yMax: scale.yMax,
+                        valueLabel: scale.valueLabel,
+                        barColor: Color.Glu.nutritionAccent,
+                        goalValue: dailyGoalForChart.map { Double($0) },
+                        barWidth: 8,
+                        xValue: { $0.date },
+                        yValue: { Double($0.steps) }
+                    )
+                    .frame(height: 260)
+                } else {
+                    // 🔹 ALTES SYSTEM: klassischer Chart mit MetricScaleType
+                    Last90DaysBarChart(
+                        entries: last90DaysData,
+                        metricLabel: title,
+                        dailyStepsGoal: dailyGoalForChart,
+                        barColor: Color.Glu.nutritionAccent,
+                        scaleType: dailyScaleType
+                    )
+                    .frame(height: 260)
+                }
             }
 
             // Durchschnitts-Chart in Kachel
             if !periodAverages.isEmpty {
                 ChartCard(borderColor: Color.Glu.nutritionAccent) {
+                    // 👉 Vorerst: IMMER alter AveragePeriodsBarChart
                     AveragePeriodsBarChart(
                         data: periodAverages,
                         metricLabel: title,
@@ -153,6 +183,7 @@ struct NutritionSectionCard: View {
             // Monats-Chart in Kachel (optional)
             if showMonthlyChart {
                 ChartCard(borderColor: Color.Glu.nutritionAccent) {
+                    // 👉 Vorerst: IMMER alter MonthlyBarChart
                     MonthlyBarChart(
                         data: monthlyData,
                         metricLabel: monthlyMetricLabel,
@@ -285,7 +316,7 @@ private extension NutritionSectionCard {
     let calendar = Calendar.current
     let today = calendar.startOfDay(for: Date())
 
-    // Demo: 30 Tage Carbs in Gramm (wir packen es in DailyStepsEntry.steps)
+    // Demo: 30 Tage Carbs in Gramm
     let last30: [DailyStepsEntry] = (0..<30).compactMap { offset in
         guard let d = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
         let grams = Int.random(in: 80...260)
@@ -302,11 +333,14 @@ private extension NutritionSectionCard {
     ]
 
     let periodDemo: [PeriodAverageEntry] = [
-        .init(label: "7T",   days: 7,   value: 180),
-        .init(label: "14T",  days: 14,  value: 190),
-        .init(label: "30T",  days: 30,  value: 200),
-        .init(label: "90T",  days: 90,  value: 210)
+        .init(label: "7",   days: 7,   value: 180),
+        .init(label: "14",  days: 14,  value: 190),
+        .init(label: "30",  days: 30,  value: 200),
+        .init(label: "90",  days: 90,  value: 210)
     ]
+
+    // Dummy-Skala für Preview (nur für den 90d-Chart)
+    let dummyScale = MetricScaleHelper.scale(for: [80, 260, 200], type: .smallInteger)
 
     NutritionSectionCard(
         sectionTitle: "Nutrition",
@@ -325,7 +359,9 @@ private extension NutritionSectionCard {
         periodAverages: periodDemo,
         showMonthlyChart: true,
         dailyScaleType: .smallInteger,
-        monthlyScaleType: .smallInteger
+        monthlyScaleType: .smallInteger,
+        dailyScaleResult: dummyScale,
+        monthlyScaleResult: nil
     )
     .padding()
     .background(Color.Glu.backgroundSurface)

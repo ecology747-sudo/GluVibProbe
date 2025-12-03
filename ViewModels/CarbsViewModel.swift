@@ -29,6 +29,14 @@ final class CarbsViewModel: ObservableObject {
     /// Tägliche Carbs der letzten 365 Tage (für Durchschnittswerte)
     @Published var dailyCarbs365: [DailyCarbsEntry] = []
 
+    // MARK: - NEU: Skalen-Ergebnisse für Charts
+
+    /// Skala für 90-Tage- und Average-Periods-Chart (Carbs in g)
+    @Published var dailyScale: MetricScaleResult = MetricScaleHelper.scale(for: [], type: .smallInteger)
+
+    /// Skala für Monats-Chart (Carbs in g/Monat)
+    @Published var monthlyScale: MetricScaleResult = MetricScaleHelper.scale(for: [], type: .smallInteger)
+
     // MARK: - Dependencies
 
     private let healthStore: HealthStore
@@ -80,12 +88,43 @@ final class CarbsViewModel: ObservableObject {
         last90DaysCarbs  = healthStore.last90DaysCarbs
         monthlyCarbsData = healthStore.monthlyCarbs
         // targetCarbsGrams kommt aus SettingsModel (Binding im Init)
+
+        // 🔹 NEU: Skalen nach dem Laden der Daten aktualisieren
+        updateScales()
     }
 
     private func loadExtendedCarbsData() {
         healthStore.fetchCarbsDaily(last: 365) { [weak self] entries in
-            self?.dailyCarbs365 = entries
+            DispatchQueue.main.async {
+                self?.dailyCarbs365 = entries
+                // 🔹 Skala kann sich durch neue Werte ändern
+                self?.updateScales()
+            }
         }
+    }
+
+    // MARK: - NEU: Skalen-Berechnung über MetricScaleHelper
+
+    /// Berechnet die Skala für 90d-/Average-Chart und Monats-Chart.
+    ///
+    /// Verwendet:
+    ///  - .smallInteger, da Carbs in g typischerweise O(0–400) liegen
+    private func updateScales() {
+        // Tages-Werte (90d) in Double
+        let dailyValues: [Double] = last90DaysCarbs.map { Double($0.grams) }
+
+        // Monats-Summen in Double
+        let monthlyValues: [Double] = monthlyCarbsData.map { Double($0.value) }
+
+        dailyScale = MetricScaleHelper.scale(
+            for: dailyValues,
+            type: .smallInteger
+        )
+
+        monthlyScale = MetricScaleHelper.scale(
+            for: monthlyValues,
+            type: .smallInteger
+        )
     }
 
     // MARK: - Durchschnittswerte (g) – basierend auf dailyCarbs365

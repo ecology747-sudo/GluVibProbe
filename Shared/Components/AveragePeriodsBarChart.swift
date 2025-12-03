@@ -48,6 +48,8 @@ struct AveragePeriodsBarChart: View {
 
         switch scaleType {
 
+        
+            
         case .steps:
             // Schrittweite 2000 ähnlich wie in Last90DaysBarChart
             let step = 2_000
@@ -62,6 +64,25 @@ struct AveragePeriodsBarChart: View {
             else { step = 100 }
             let upper = ((maxValue + step - 1) / step) * step
             return Array(stride(from: 0, through: upper, by: step))
+            
+            // 🔥 Neu: Nutrition Energy Daily → fixe 250er-Intervalle
+            case .nutritionEnergyDaily:
+                let step = 250
+                let upper = ((maxValue + step - 1) / step) * step
+                return Array(stride(from: 0, through: upper, by: step))
+
+            // Für Monthly nur „fallback“ wie eine kleine Zahlenskala
+            case .nutritionEnergyMonthly:
+                let step: Int
+                if maxValue <= 2_000 {
+                    step = 250
+                } else if maxValue <= 10_000 {
+                    step = 500
+                } else {
+                    step = 1_000
+                }
+                let upper = ((maxValue + step - 1) / step) * step
+                return Array(stride(from: 0, through: upper, by: step))
 
         case .percent:
             return Array(stride(from: 0, through: 100, by: 20))
@@ -151,8 +172,12 @@ struct AveragePeriodsBarChart: View {
                                 Text("\(v)")
                             }
 
-                        case .smallInteger:
-                            Text("\(v)")
+                            // 👉 neue Fälle einfach zusammen mit smallInteger behandeln
+                            case .smallInteger,
+                                 .nutritionEnergyDaily,
+                                 .nutritionEnergyMonthly:
+                                Text("\(v)")
+                       
 
                         case .percent:
                             Text("\(v)%")

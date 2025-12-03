@@ -59,7 +59,10 @@ struct CarbsView: View {
                         periodAverages: viewModel.periodAverages,
                         showMonthlyChart: true,
                         dailyScaleType: .smallInteger,
-                        monthlyScaleType: .smallInteger
+                        monthlyScaleType: .smallInteger,
+                        // 🔹 NEU: Skalen aus dem ViewModel einspeisen
+                        dailyScaleResult: viewModel.dailyScale,
+                        monthlyScaleResult: viewModel.monthlyScale
                     )
                     .padding(.horizontal)
                 }

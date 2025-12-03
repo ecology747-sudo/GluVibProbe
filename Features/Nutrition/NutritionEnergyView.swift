@@ -2,7 +2,7 @@
 //  NutritionEnergyView.swift
 //  GluVibProbe
 //
-//  Nutrition-Domain: Energy (kcal)
+//  Nutrition-Domain: Energy (kcal / kJ)
 //
 
 import SwiftUI
@@ -25,7 +25,7 @@ struct NutritionEnergyView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    NutritionSectionCard(
+                    NutritionEnergySectionCardScaled(
                         sectionTitle: "Nutrition",
                         title: "Nutrition Energy",
                         kpiTitle: "Energy Today",
@@ -34,16 +34,14 @@ struct NutritionEnergyView: View {
                         kpiDeltaText: viewModel.deltaText,
                         hasTarget: true,
                         last90DaysData: viewModel.last90DaysForChart,
-                        monthlyData: viewModel.monthlyEnergy,
-                        // chartGoalValue ist wahrscheinlich Int? → direkt übergeben
-                        dailyGoalForChart: viewModel.chartGoalValue,
-                        onMetricSelected: onMetricSelected,
-                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"],
-                        monthlyMetricLabel: "Energy / Month",
                         periodAverages: viewModel.periodAverages,
-                        showMonthlyChart: true,
-                        dailyScaleType: .smallInteger,
-                        monthlyScaleType: .smallInteger
+                        monthlyData: viewModel.monthlyEnergyForChart,
+                        dailyScale: viewModel.energyScaleDaily,
+                        periodScale: viewModel.energyScalePeriod,
+                        monthlyScale: viewModel.energyScaleMonthly,
+                        goalValue: viewModel.chartGoalValue,
+                        onMetricSelected: onMetricSelected,
+                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"]
                     )
                     .padding(.horizontal)
                 }

@@ -120,6 +120,18 @@ struct Last90DaysBarChart: View {
 
         switch scaleType {
 
+        case .nutritionEnergyDaily:
+            // Nutrition Energy Daily (90-Tage-Chart) → alle 250 kcal
+            let step = 250
+            let upper = ((maxValue + step - 1) / step) * step
+            return Array(stride(from: 0, through: upper, by: step))
+
+        case .nutritionEnergyMonthly:
+            // Monthly hier evtl. nicht gebraucht, aber Switch muss vollständig sein
+            let step = 10000
+            let upper = ((maxValue + step - 1) / step) * step
+            return Array(stride(from: 0, through: upper, by: step))
+            
         case .percent:
             // 0–100% (oder leicht darüber), Ticks alle 10%
             let upper = max(100, ((maxValue + 9) / 10) * 10)
@@ -236,59 +248,52 @@ struct Last90DaysBarChart: View {
                 }
             }
             .chartYAxis {
-                AxisMarks(
-                    position: .trailing,
-                    values: yAxisTickValues
-                ) { value in
-                    AxisGridLine()
-                        .foregroundStyle(Color.gray.opacity(0.25))
+                AxisMarks(position: .trailing, values: yAxisTickValues) { value in
 
+                    AxisGridLine().foregroundStyle(Color.gray.opacity(0.25))
                     AxisTick()
 
                     AxisValueLabel {
-                        if let intValue = value.as(Int.self) {
+                        if let v = value.as(Int.self) {
+                            switch scaleType {
 
-                            if intValue == 0 {
-                                // 0 bleibt ausgeblendet wie bisher
-                                EmptyView()
-                            } else {
-                                switch scaleType {
-
-                                case .percent:
-                                    Text("\(intValue)%")
-                                        .font(.system(size: 9, weight: .semibold))
-                                        .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
-
-                                case .smallInteger:
-                                    // z.B. Insulin-Einheiten, kleine kcal-Bereiche
-                                    Text("\(intValue)")
-                                        .font(.system(size: 9, weight: .semibold))
-                                        .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
-
-                                case .steps:
-                                    // Steps: ab 1 000 → „T“ (Tausend)
-                                    if intValue >= 1_000 {
-                                        Text("\(intValue / 1_000)T")
-                                            .font(.system(size: 9, weight: .semibold))
-                                            .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
-                                    } else {
-                                        Text("\(intValue)")
-                                            .font(.system(size: 9, weight: .semibold))
-                                            .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
-                                    }
-
-                                case .hours:
-                                    // 🔥 Sleep: Minuten → Stunden
-                                    let hours = Double(intValue) / 60.0
-                                    Text(String(format: "%.1f h", hours))
-                                        .font(.system(size: 9, weight: .semibold))
-                                        .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
+                            case .steps:
+                                if v >= 1_000 {
+                                    Text("\(v / 1_000)T")
+                                } else {
+                                    Text("\(v)")
                                 }
+
+                            case .smallInteger:
+                                Text("\(v)")
+
+                            case .nutritionEnergyDaily:
+                                // tägliche kcal → Rohwert anzeigen
+                                Text("\(v)")
+
+                            case .nutritionEnergyMonthly:
+                                // Monatswerte → in "k" darstellen
+                                let k = v / 1000
+                                Text("\(k)k")
+
+                            case .percent:
+                                Text("\(v)%")
+
+                            case .hours:
+                                // Minuten → Stunden
+                                let hours = Int((Double(v) / 60.0).rounded())
+                                Text("\(hours) h")
                             }
                         }
                     }
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.85))
                 }
             }
+                        
+                    
+                
+            
             .frame(height: 220)
         }
         .padding(.horizontal, 4)
