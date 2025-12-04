@@ -11,9 +11,6 @@ struct ActivityEnergyView: View {
 
     @StateObject private var viewModel: ActivityEnergyViewModel
 
-    // 🔗 globale Settings (u. a. Energy-Unit: kcal / kJ)
-    @ObservedObject private var settings = SettingsModel.shared
-
     // Callback aus dem Dashboard (für Metric-Chips)
     let onMetricSelected: (String) -> Void
 
@@ -34,20 +31,7 @@ struct ActivityEnergyView: View {
     }
 
     var body: some View {
-
-        // 🔧 Skala abhängig von der Energy-Unit wählen:
-        // - kcal  → kleine Werte → .smallInteger
-        // - kJ    → große Werte  → .steps (wie Steps, mit größeren Achsenabständen)
-        let scaleType: MetricScaleType = {
-            switch settings.energyUnit {
-            case .kcal:
-                return .smallInteger
-            case .kilojoules:
-                return .steps
-            }
-        }()
-
-        return ZStack {
+        ZStack {
             // Hintergrund für den Bereich „Körper & Aktivität“
             Color.Glu.activityAccent.opacity(0.18)
                 .ignoresSafeArea()
@@ -55,23 +39,24 @@ struct ActivityEnergyView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    // Haupt-Section mit KPI + Charts (Activity Energy)
-                    ActivitySectionCard(
+                    // Haupt-Section mit KPI + Charts (Activity Energy) – SCALED
+                    ActivitySectionCardScaled(
                         sectionTitle: "Activity",
                         title: "Activity Energy",
                         kpiTitle: "Active Energy Today",
-                        kpiTargetText: "–",                          // aktuell kein Ziel
+                        kpiTargetText: "–",                              // aktuell kein Ziel
                         kpiCurrentText: viewModel.formattedTodayActiveEnergy,
-                        kpiDeltaText: "–",                            // kein Delta, da kein Ziel
-                        hasTarget: false,                             // ❗ nur Current-KPI
-                        last90DaysData: viewModel.last90DaysData,
-                        monthlyData: viewModel.monthlyActiveEnergyData,
-                        dailyGoalForChart: nil,                       // keine RuleMark-Linie
+                        kpiDeltaText: "–",                                // kein Delta, da kein Ziel
+                        hasTarget: false,                                 // ❗ nur Current-KPI
+                        last90DaysData: viewModel.last90DaysDataForChart,
+                        periodAverages: viewModel.periodAveragesForChart,
+                        monthlyData: viewModel.monthlyData,
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
+                        goalValue: nil,                                   // keine RuleMark-Linie
                         onMetricSelected: onMetricSelected,
-                        metrics: ["Steps", "Activity Energy"],
-                        monthlyMetricLabel: "Active Energy / Month",
-                        periodAverages: viewModel.periodAverages,
-                        scaleType: scaleType                          // ⬅️ hier dynamisch
+                        metrics: ["Steps", "Activity Energy"]
                     )
                     .padding(.horizontal)
                 }

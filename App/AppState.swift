@@ -4,23 +4,31 @@
 //
 
 import SwiftUI
-import Combine   // 🔥 WICHTIG für ObservableObject + @Published
+import Combine
 
 @MainActor
 final class AppState: ObservableObject {
 
     enum StatsScreen {
+        // 🔹 Kein Detail-Screen aktiv → Overview anzeigen
+        case none
+
+        // 🔹 Nutrition Overview (Einstiegsseite im Nutrition-Tab)
+        case nutritionOverview
+
+        // 🔹 Nutrition-Metriken (Detail-Screens)
+        case carbs
+        case protein
+        case fat
+        case calories     // Nutrition Energy
+
+        // 🔹 Andere Domains (falls Navigation ausgebaut wird)
         case steps
         case activityEnergy
         case weight
         case sleep
-
-        // 🔹 Nutrition-Domain
-        case carbs
-        case protein
-        case fat
-        case calories
     }
 
-    @Published var currentStatsScreen: StatsScreen = .steps
+    // Beim Start steht kein Detail-Screen fest
+    @Published var currentStatsScreen: StatsScreen = .none
 }

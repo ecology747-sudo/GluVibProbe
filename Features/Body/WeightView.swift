@@ -47,70 +47,42 @@ struct WeightView: View {
             return "\(sign)\(diffDisplay) \(unit.label)"
         }()
 
-        // Zielwert für grüne Linie im Chart (in Anzeigeneinheit)
+        // Zielwert für Linie im Chart (in Anzeigeneinheit)
         let goalForChart: Int? = {
             guard targetWeightKg > 0 else { return nil }
             let converted = unit.convertedValue(fromKg: targetWeightKg)
             return converted > 0 ? converted : nil
         }()
 
-        // Last-90-Days-Chart in gewünschter Einheit
-        let last90DaysForChart: [DailyStepsEntry] = {
-            let source = viewModel.last90DaysDataForChart  // immer kg
-
-            // kg → direkt
-            if unit == .kg { return source }
-
-            // lbs → Werte konvertieren über WeightUnit
-            return source.map { entry in
-                let converted = unit.convertedValue(fromKg: entry.steps)
-                return DailyStepsEntry(date: entry.date, steps: converted)
-            }
-        }()
-
-        // Perioden-Durchschnitte in gewünschter Einheit
-        let periodAveragesForUnit: [PeriodAverageEntry] = {
-            let base = viewModel.periodAverages   // Werte in kg
-
-            if unit == .kg { return base }
-
-            return base.map { entry in
-                let converted = unit.convertedValue(fromKg: entry.value)
-                return PeriodAverageEntry(
-                    label: entry.label,
-                    days: entry.days,
-                    value: converted
-                )
-            }
-        }()
-
         // MARK: - View
 
         return ZStack {
-            // 👉 Body-Domain-Hintergrund (Orange, leicht transparent)
+            // 👉 Body-Domain-Hintergrund
             Color.Glu.bodyAccent.opacity(0.18)
                 .ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    BodySectionCard(
+                    BodySectionCardScaled(
                         sectionTitle: "Body",
                         title: "Weight",
                         kpiTitle: "Weight Today",
-                        kpiTargetText: targetWeightText,          // 🎯 Target inkl. Einheit
-                        kpiCurrentText: currentWeightText,        // 📊 Current inkl. Einheit
-                        kpiDeltaText: deltaText,                  // 🔺 Delta inkl. Einheit
-                        hasTarget: true,                          // ✅ 3 KPIs aktiv
-                        last90DaysData: last90DaysForChart,       // 📈 Daten in kg oder lbs
-                        monthlyData: viewModel.monthlyWeightData, // Monatsdaten (aktuell optional)
-                        dailyGoalForChart: goalForChart,          // ✅ Linie in derselben Einheit
+                        kpiTargetText: targetWeightText,
+                        kpiCurrentText: currentWeightText,
+                        kpiDeltaText: deltaText,
+                        hasTarget: true,
+                        last90DaysData: viewModel.last90DaysDataForChart,
+                        periodAverages: viewModel.periodAveragesForChart,
+                        monthlyData: viewModel.monthlyData,
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
+                        goalValue: goalForChart,
                         onMetricSelected: onMetricSelected,
                         metrics: ["Sleep", "Weight"],
-                        monthlyMetricLabel: "Weight / Month",
-                        periodAverages: periodAveragesForUnit,    // 7T/14T/... in kg/lbs
-                        showMonthlyChart: false,                  // Weight: kein Monats-Chart
-                        scaleType: .smallInteger
+                        showMonthlyChart: false,
+                        scaleType: .weightKg       // ⬅️ neu
                     )
                     .padding(.horizontal)
 

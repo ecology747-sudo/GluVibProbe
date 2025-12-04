@@ -178,7 +178,7 @@ struct Last90DaysScaledBarChart<DataPoint>: View {
     .sorted { $0.date < $1.date }
 
     let values = entries.map { Double($0.steps) }
-    let scale = MetricScaleHelper.energyKcalScale(for: values)
+    let scale = MetricScaleHelper.scale(values, for: .energyDaily)
 
     Last90DaysScaledBarChart(
         data: entries,

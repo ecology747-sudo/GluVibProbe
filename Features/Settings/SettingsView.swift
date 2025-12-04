@@ -31,6 +31,8 @@ private struct SettingsSnapshot: Equatable {
     var dailyProtein: Int
     var dailyCalories: Int
     var dailyFat: Int
+    /// 🔹 NEU: Resting Energy
+    var restingEnergy: Int
 }
 
 struct SettingsView: View {
@@ -72,6 +74,8 @@ struct SettingsView: View {
     @State private var dailyProtein: Int = 80
     @State private var dailyCalories: Int = 2500
     @State private var dailyFat: Int = 70
+    /// 🔹 NEU: Resting Energy (kcal)
+    @State private var restingEnergy: Int = 1800
 
     // MARK: - Aktive Domain
 
@@ -113,7 +117,8 @@ struct SettingsView: View {
             dailyCarbs: dailyCarbs,
             dailyProtein: dailyProtein,
             dailyCalories: dailyCalories,
-            dailyFat: dailyFat
+            dailyFat: dailyFat,
+            restingEnergy: restingEnergy         // 🔹 neu
         )
     }
 
@@ -160,6 +165,7 @@ struct SettingsView: View {
         settings.dailyProtein  = dailyProtein
         settings.dailyCalories = dailyCalories
         settings.dailyFat      = dailyFat
+        settings.restingEnergy = restingEnergy          // 🔹 neu
 
         // In UserDefaults speichern
         settings.saveToDefaults()
@@ -199,6 +205,7 @@ struct SettingsView: View {
         dailyProtein  = settings.dailyProtein
         dailyCalories = settings.dailyCalories
         dailyFat      = settings.dailyFat
+        restingEnergy = settings.restingEnergy          // 🔹 neu
 
         // UI- & Model-Flags zurücksetzen
         saveButtonState = .idle
@@ -286,6 +293,7 @@ struct SettingsView: View {
             dailyProtein  = settings.dailyProtein
             dailyCalories = settings.dailyCalories
             dailyFat      = settings.dailyFat
+            restingEnergy = settings.restingEnergy          // 🔹 neu
 
             DispatchQueue.main.async {
                 didInitialLoad = true
@@ -356,7 +364,8 @@ struct SettingsView: View {
                 dailyCarbs:    $dailyCarbs,
                 dailyProtein:  $dailyProtein,
                 dailyFat:      $dailyFat,
-                dailyCalories: $dailyCalories
+                dailyCalories: $dailyCalories,
+                restingEnergy: $restingEnergy      // 🔹 NEU: hier einhängen
             )
 
         case .units:
@@ -365,7 +374,7 @@ struct SettingsView: View {
                 distanceUnit: $distanceUnit,
                 weightUnit:   $weightUnit,
                 heightUnit:   $heightUnit,
-                energyUnit:   $energyUnit      // 🔥 neu
+                energyUnit:   $energyUnit
             )
         }
     }

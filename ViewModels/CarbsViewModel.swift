@@ -29,14 +29,6 @@ final class CarbsViewModel: ObservableObject {
     /// Tägliche Carbs der letzten 365 Tage (für Durchschnittswerte)
     @Published var dailyCarbs365: [DailyCarbsEntry] = []
 
-    // MARK: - NEU: Skalen-Ergebnisse für Charts
-
-    /// Skala für 90-Tage- und Average-Periods-Chart (Carbs in g)
-    @Published var dailyScale: MetricScaleResult = MetricScaleHelper.scale(for: [], type: .smallInteger)
-
-    /// Skala für Monats-Chart (Carbs in g/Monat)
-    @Published var monthlyScale: MetricScaleResult = MetricScaleHelper.scale(for: [], type: .smallInteger)
-
     // MARK: - Dependencies
 
     private let healthStore: HealthStore
@@ -88,60 +80,63 @@ final class CarbsViewModel: ObservableObject {
         last90DaysCarbs  = healthStore.last90DaysCarbs
         monthlyCarbsData = healthStore.monthlyCarbs
         // targetCarbsGrams kommt aus SettingsModel (Binding im Init)
-
-        // 🔹 NEU: Skalen nach dem Laden der Daten aktualisieren
-        updateScales()
     }
 
     private func loadExtendedCarbsData() {
         healthStore.fetchCarbsDaily(last: 365) { [weak self] entries in
-            DispatchQueue.main.async {
-                self?.dailyCarbs365 = entries
-                // 🔹 Skala kann sich durch neue Werte ändern
-                self?.updateScales()
-            }
+            self?.dailyCarbs365 = entries
         }
-    }
-
-    // MARK: - NEU: Skalen-Berechnung über MetricScaleHelper
-
-    /// Berechnet die Skala für 90d-/Average-Chart und Monats-Chart.
-    ///
-    /// Verwendet:
-    ///  - .smallInteger, da Carbs in g typischerweise O(0–400) liegen
-    private func updateScales() {
-        // Tages-Werte (90d) in Double
-        let dailyValues: [Double] = last90DaysCarbs.map { Double($0.grams) }
-
-        // Monats-Summen in Double
-        let monthlyValues: [Double] = monthlyCarbsData.map { Double($0.value) }
-
-        dailyScale = MetricScaleHelper.scale(
-            for: dailyValues,
-            type: .smallInteger
-        )
-
-        monthlyScale = MetricScaleHelper.scale(
-            for: monthlyValues,
-            type: .smallInteger
-        )
     }
 
     // MARK: - Durchschnittswerte (g) – basierend auf dailyCarbs365
 
-    /// Durchschnittliche Carbs der letzten `days` Tage (ohne heutigen Tag)
+    // 🔴 ALT (vorherige Logik – über reine Daten-Suffixe, inkl. "Lücken" als 0,
+    //     und mit "dropLast()" für heute)
+    //
+    // private func averageGrams(last days: Int) -> Int {
+    //     guard dailyCarbs365.count > 1 else { return 0 }
+    //
+    //     let sorted = dailyCarbs365.sorted { $0.date < $1.date }
+    //     let withoutToday = Array(sorted.dropLast())
+    //     guard !withoutToday.isEmpty else { return 0 }
+    //
+    //     let slice = withoutToday.suffix(days)
+    //     guard !slice.isEmpty else { return 0 }
+    //
+    //     let sum = slice.reduce(0) { $0 + $1.grams }
+    //     return sum / slice.count
+    // }
+
+    /// 🟢 NEU:
+    /// Durchschnittliche Carbs der letzten `days` **Kalendertage vor heute**
+    /// (Zeitraum bleibt gleich, z.B. 7 Tage), aber:
+    ///   - Tage ohne Eintrag (grams <= 0) werden NICHT mitgerechnet
+    ///   - geteilt wird durch die Anzahl der **Tage mit Eintrag**, nicht durch `days`
     private func averageGrams(last days: Int) -> Int {
-        guard dailyCarbs365.count > 1 else { return 0 }
+        guard !dailyCarbs365.isEmpty else { return 0 }
 
-        let sorted = dailyCarbs365.sorted { $0.date < $1.date }
-        let withoutToday = Array(sorted.dropLast())
-        guard !withoutToday.isEmpty else { return 0 }
+        let calendar = Calendar.current
 
-        let slice = withoutToday.suffix(days)
-        guard !slice.isEmpty else { return 0 }
+        // "Heute" als Start-of-Day
+        let today = calendar.startOfDay(for: Date())
 
-        let sum = slice.reduce(0) { $0 + $1.grams }
-        return sum / slice.count
+        // Enddatum = gestern (heutiger Tag bleibt wie vorher draußen)
+        guard let endDate = calendar.date(byAdding: .day, value: -1, to: today),
+              let startDate = calendar.date(byAdding: .day, value: -days, to: today) else {
+            return 0
+        }
+
+        // Nur Einträge im Kalenderraster [startDate ... endDate], mit grams > 0
+        let filtered = dailyCarbs365.filter { entry in
+            let d = calendar.startOfDay(for: entry.date)
+            return d >= startDate && d <= endDate && entry.grams > 0
+        }
+
+        // Wenn keine gültigen Tage → 0
+        guard !filtered.isEmpty else { return 0 }
+
+        let sum = filtered.reduce(0) { $0 + $1.grams }
+        return sum / filtered.count
     }
 
     var avgCarbsLast7Days: Int   { averageGrams(last: 7) }
@@ -164,9 +159,9 @@ final class CarbsViewModel: ObservableObject {
         ]
     }
 
-    // MARK: - Daten für Charts
+    // MARK: - Daten für Charts (generisches Format)
 
-    /// Mapping Carbs → generisches DailyStepsEntry für Last90DaysBarChart
+    /// Mapping Carbs → generisches DailyStepsEntry für 90-Tage-Chart
     var last90DaysDataForChart: [DailyStepsEntry] {
         last90DaysCarbs.map { entry in
             DailyStepsEntry(date: entry.date, steps: entry.grams)
@@ -201,5 +196,25 @@ final class CarbsViewModel: ObservableObject {
 
         let sign = diff > 0 ? "+" : "-"
         return "\(sign)\(abs(diff)) g"
+    }
+
+    // MARK: - Skalen für das neue Helper-System (GRAMM) – zentral über MetricScaleHelper
+
+    /// Skala für den 90-Tage-Chart (Last90DaysScaledBarChart)
+    var dailyScale: MetricScaleResult {
+        let values = last90DaysDataForChart.map { Double($0.steps) }
+        return MetricScaleHelper.scale(values, for: .grams)
+    }
+
+    /// Skala für AveragePeriodsScaledBarChart
+    var periodScale: MetricScaleResult {
+        let values = periodAverages.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .grams)
+    }
+
+    /// Skala für MonthlyScaledBarChart
+    var monthlyScale: MetricScaleResult {
+        let values = monthlyCarbsData.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .grams)
     }
 }

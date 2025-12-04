@@ -34,7 +34,7 @@ struct FatView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    NutritionSectionCard(
+                    NutritionSectionCardScaled(
                         sectionTitle: "Nutrition",
                         title: "Fat",
                         kpiTitle: "Fat Today",
@@ -43,16 +43,14 @@ struct FatView: View {
                         kpiDeltaText: viewModel.formattedDeltaFat,
                         hasTarget: true,
                         last90DaysData: viewModel.last90DaysDataForChart,
-                        monthlyData: viewModel.monthlyFatData,
-                        // ⬇️ wieder: Int? direkt übergeben
-                        dailyGoalForChart: viewModel.goalValueForChart,
-                        onMetricSelected: onMetricSelected,
-                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"],
-                        monthlyMetricLabel: "Fat / Month",
                         periodAverages: viewModel.periodAverages,
-                        showMonthlyChart: true,
-                        dailyScaleType: .smallInteger,
-                        monthlyScaleType: .smallInteger
+                        monthlyData: viewModel.monthlyFatData,
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
+                        goalValue: viewModel.goalValueForChart,
+                        onMetricSelected: onMetricSelected,
+                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"]
                     )
                     .padding(.horizontal)
                 }

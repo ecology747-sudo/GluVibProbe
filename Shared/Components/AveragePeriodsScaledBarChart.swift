@@ -29,6 +29,11 @@ struct AveragePeriodsScaledBarChart: View {
         data.sorted { $0.days > $1.days }
     }
 
+    /// Kleine Luft nach oben, damit Labels über hohen Balken nicht abgeschnitten werden
+    private var yMaxWithHeadroom: Double {
+        yMax * 1.06      // 8 % Headroom
+    }
+
     // MARK: - Init
 
     init(
@@ -54,11 +59,13 @@ struct AveragePeriodsScaledBarChart: View {
     var body: some View {
         Chart {
 
-            // 🔸 Balken – Liquid-Glas Design
+            // 🔸 Balken – Liquid-Glas Design + Wert oben drüber
             ForEach(sortedData) { entry in
+                let doubleValue = Double(entry.value)
+
                 BarMark(
                     x: .value("Period", entry.label),
-                    y: .value(metricLabel, Double(entry.value))
+                    y: .value(metricLabel, doubleValue)
                 )
                 .foregroundStyle(
                     .linearGradient(
@@ -77,6 +84,13 @@ struct AveragePeriodsScaledBarChart: View {
                     x: 0,
                     y: 1.5
                 )
+                // 🔹 Wert direkt über dem Balken – nur Zahl, keine Einheit
+                .annotation(position: .top, alignment: .center) {
+                    Text("\(Int(doubleValue.rounded()))")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                        .padding(.bottom, 2)
+                }
             }
 
             // 🔹 Ziel-Linie
@@ -99,8 +113,8 @@ struct AveragePeriodsScaledBarChart: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         }
 
-        // 🔹 Y-Achse – extern gesteuert
-        .chartYScale(domain: 0...yMax)
+        // 🔹 Y-Achse – extern gesteuert + Headroom
+        .chartYScale(domain: 0...yMaxWithHeadroom)
         .chartYAxis {
             AxisMarks(position: .trailing, values: yAxisTicks) { val in
                 AxisGridLine().foregroundStyle(Color.gray.opacity(0.22))
@@ -116,7 +130,7 @@ struct AveragePeriodsScaledBarChart: View {
             }
         }
 
-        // 🔹 X-Achse – jetzt größer + dicker + Ø
+        // 🔹 X-Achse – Ø dünn, Zahl fett
         .chartXAxis {
             AxisMarks { value in
 
@@ -126,9 +140,16 @@ struct AveragePeriodsScaledBarChart: View {
                 AxisValueLabel {
                     if let raw = value.as(String.self) {
                         let numberPart = raw.trimmingCharacters(in: .letters)
-                        Text("Ø\(numberPart)")
-                            .font(.system(size: 13, weight: .bold)) // ⭐ größer + dicker
-                            .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+
+                        HStack(spacing: 0) {
+                            Text("Ø")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+
+                            Text(numberPart)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                        }
                     }
                 }
             }
@@ -141,22 +162,22 @@ struct AveragePeriodsScaledBarChart: View {
 
 #Preview("AveragePeriodsScaledBarChart – Demo") {
     let demoData: [PeriodAverageEntry] = [
-        .init(label: "7T",   days: 7,   value: 2100),
-        .init(label: "14T",  days: 14,  value: 2200),
-        .init(label: "30T",  days: 30,  value: 2300),
-        .init(label: "90T",  days: 90,  value: 2400),
-        .init(label: "180T", days: 180, value: 2450),
-        .init(label: "365T", days: 365, value: 2500)
+        .init(label: "7T",   days: 7,   value: 216),
+        .init(label: "14T",  days: 14,  value: 199),
+        .init(label: "30T",  days: 30,  value: 188),
+        .init(label: "90T",  days: 90,  value: 171),
+        .init(label: "180T", days: 180, value: 180),
+        .init(label: "365T", days: 365, value: 190)
     ]
 
     let values = demoData.map { Double($0.value) }
-    let scale = MetricScaleHelper.energyKcalScale(for: values)
+    let scale = MetricScaleHelper.scale(values, for: .grams)
 
     AveragePeriodsScaledBarChart(
         data: demoData,
-        metricLabel: "Energy",
+        metricLabel: "Carbs",
         barColor: Color.Glu.nutritionAccent,
-        goalValue: 2300,
+        goalValue: 250,
         yAxisTicks: scale.yAxisTicks,
         yMax: scale.yMax,
         valueLabel: scale.valueLabel

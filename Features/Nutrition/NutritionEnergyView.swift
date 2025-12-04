@@ -25,7 +25,8 @@ struct NutritionEnergyView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    NutritionEnergySectionCardScaled(
+                    // ✅ NEU: helper-basiertes, skaliertes System
+                    NutritionSectionCardScaled(
                         sectionTitle: "Nutrition",
                         title: "Nutrition Energy",
                         kpiTitle: "Energy Today",
@@ -35,10 +36,13 @@ struct NutritionEnergyView: View {
                         hasTarget: true,
                         last90DaysData: viewModel.last90DaysForChart,
                         periodAverages: viewModel.periodAverages,
+                        // 🔹 Monatsdaten bereits in richtige Einheit konvertiert
                         monthlyData: viewModel.monthlyEnergyForChart,
-                        dailyScale: viewModel.energyScaleDaily,
-                        periodScale: viewModel.energyScalePeriod,
-                        monthlyScale: viewModel.energyScaleMonthly,
+                        // 🔹 neue Scale-Profile aus dem ViewModel
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
+                        // 🔹 Ziellinie (kcal / kJ)
                         goalValue: viewModel.chartGoalValue,
                         onMetricSelected: onMetricSelected,
                         metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"]

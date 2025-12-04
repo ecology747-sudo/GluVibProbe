@@ -66,6 +66,9 @@ final class SettingsModel: ObservableObject {
     @Published var dailyCalories: Int = 2500   // kcal
     @Published var dailyFat: Int = 70          // g
 
+    /// 🔹 NEU: Resting Energy (z. B. Grundumsatz in kcal/Tag)
+    @Published var restingEnergy: Int = 1800   // kcal (Startwert, beliebig anpassbar)
+
 
     // MARK: - Persistenz (UserDefaults)
 
@@ -104,6 +107,8 @@ final class SettingsModel: ObservableObject {
         static let dailyProtein  = "settings_dailyProtein"
         static let dailyCalories = "settings_dailyCalories"
         static let dailyFat      = "settings_dailyFat"
+        /// 🔹 NEU: Resting Energy
+        static let restingEnergy = "settings_restingEnergy"
     }
 
 
@@ -214,6 +219,10 @@ final class SettingsModel: ObservableObject {
         if defaults.object(forKey: Keys.dailyFat) != nil {
             dailyFat = defaults.integer(forKey: Keys.dailyFat)
         }
+        /// 🔹 NEU: Resting Energy laden
+        if defaults.object(forKey: Keys.restingEnergy) != nil {
+            restingEnergy = defaults.integer(forKey: Keys.restingEnergy)
+        }
 
         // Nach dem Laden: Zustand ist konsistent → keine unsaved changes
         clearUnsavedChanges()
@@ -255,6 +264,8 @@ final class SettingsModel: ObservableObject {
         defaults.set(dailyProtein,  forKey: Keys.dailyProtein)
         defaults.set(dailyCalories, forKey: Keys.dailyCalories)
         defaults.set(dailyFat,      forKey: Keys.dailyFat)
+        /// 🔹 NEU: Resting Energy speichern
+        defaults.set(restingEnergy, forKey: Keys.restingEnergy)
         
         // Nach erfolgreichem Speichern: keine unsaved changes mehr
         clearUnsavedChanges()

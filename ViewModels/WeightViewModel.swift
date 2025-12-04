@@ -2,6 +2,8 @@
 //  WeightViewModel.swift
 //  GluVibProbe
 //
+//  Body-Domain: Verantwortlich für alle Weight-Daten & KPIs (MVVM)
+//
 
 import Foundation
 import Combine
@@ -14,13 +16,13 @@ final class WeightViewModel: ObservableObject {
     /// Letztes bekanntes Gewicht (kg, Basis in kg)
     @Published var todayWeightKg: Int = 0
 
-    /// Rohdaten: Gewicht der letzten 90 Tage (direkt aus HealthStore)
+    /// Rohdaten: Gewicht der letzten 90 Tage (direkt aus HealthStore, Basis kg)
     @Published var last90DaysWeightRaw: [DailyStepsEntry] = []
 
-    /// Monatliche Gewichtswerte (z. B. Ø Gewicht / Monat)
+    /// Monatliche Gewichtswerte (z. B. Ø Gewicht / Monat) – Basis kg
     @Published var monthlyWeightData: [MonthlyMetricEntry] = []
 
-    /// Tägliches Gewicht der letzten 365 Tage (Rohdaten)
+    /// Tägliches Gewicht der letzten 365 Tage (Rohdaten, Basis kg)
     /// steps-Feld = Gewicht in kg
     @Published var dailyWeight365Raw: [DailyStepsEntry] = []
 
@@ -106,15 +108,15 @@ final class WeightViewModel: ObservableObject {
         return result
     }
 
-    // MARK: - Gefüllte Reihen
+    // MARK: - Gefüllte Reihen (Basis kg)
 
     /// 365-Tage-Reihe mit forward-fill (Basis für Durchschnitte)
     var dailyWeight365Filled: [DailyStepsEntry] {
         forwardFilled(dailyWeight365Raw)
     }
 
-    /// 90-Tage-Reihe für den Chart (ebenfalls forward-filled)
-    var last90DaysDataForChart: [DailyStepsEntry] {
+    /// 90-Tage-Reihe für den Chart (ebenfalls forward-filled, Basis kg → dann Einheit)
+    private var last90DaysFilledBase: [DailyStepsEntry] {
         let filled = dailyWeight365Filled
         guard !filled.isEmpty else { return [] }
 
@@ -125,7 +127,7 @@ final class WeightViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Durchschnittswerte (auf Basis der gefüllten Reihe)
+    // MARK: - Durchschnittswerte (auf Basis der gefüllten Reihe, kg)
 
     private func averageKg(last days: Int) -> Int {
         let filled = dailyWeight365Filled
@@ -145,7 +147,7 @@ final class WeightViewModel: ObservableObject {
     var avgWeightLast180Days: Int { averageKg(last: 180) }
     var avgWeightLast365Days: Int { averageKg(last: 365) }
 
-    // MARK: - Perioden-Durchschnitte für AveragePeriodsBarChart
+    // MARK: - Perioden-Durchschnitte (Basis kg)
 
     var periodAverages: [PeriodAverageEntry] {
         [
@@ -158,7 +160,73 @@ final class WeightViewModel: ObservableObject {
         ]
     }
 
-    // MARK: - Formatting für die View
+    // MARK: - Chart-Daten in der gewählten Einheit (kg / lbs)
+
+    /// 90-Tage-Daten (forward-filled) in der aktuell gewählten Einheit
+    var last90DaysDataForChart: [DailyStepsEntry] {
+        let unit = settings.weightUnit
+        let base = last90DaysFilledBase
+
+        guard unit != .kg else {
+            return base
+        }
+
+        return base.map { entry in
+            let converted = unit.convertedValue(fromKg: entry.steps)
+            return DailyStepsEntry(date: entry.date, steps: converted)
+        }
+    }
+
+    /// Perioden-Durchschnitte in der aktuell gewählten Einheit
+    var periodAveragesForChart: [PeriodAverageEntry] {
+        let unit = settings.weightUnit
+        guard unit != .kg else { return periodAverages }
+
+        return periodAverages.map { entry in
+            let converted = unit.convertedValue(fromKg: entry.value)
+            return PeriodAverageEntry(
+                label: entry.label,
+                days: entry.days,
+                value: converted
+            )
+        }
+    }
+
+    /// Monatsdaten in der aktuell gewählten Einheit
+    var monthlyData: [MonthlyMetricEntry] {
+        let unit = settings.weightUnit
+        guard unit != .kg else { return monthlyWeightData }
+
+        return monthlyWeightData.map { entry in
+            let converted = unit.convertedValue(fromKg: entry.value)
+            return MonthlyMetricEntry(
+                monthShort: entry.monthShort,
+                value: converted
+            )
+        }
+    }
+
+    // MARK: - Standardisierte Scaling-Outputs für SectionCardScaled
+
+    /// Skala für Tages-Chart (Weight)
+    var dailyScale: MetricScaleResult {
+        let values = last90DaysDataForChart.map { Double($0.steps) }
+        return MetricScaleHelper.scale(values, for: .weightKg)
+    }
+
+    /// Skala für Perioden-Chart (Durchschnittswerte)
+    var periodScale: MetricScaleResult {
+        let values = periodAveragesForChart.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .weightKg)
+    }
+
+    /// Skala für Monats-Chart (falls genutzt)
+    var monthlyScale: MetricScaleResult {
+        let values = monthlyData.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .weightKg)
+    }
+
+    // MARK: - Formatting für die View (KPI-Strings)
 
     /// Formatierter Wert für die KPI "Weight Today" inkl. Einheit
     /// nutzt SettingsModel.weightUnit + WeightUnit-Extension

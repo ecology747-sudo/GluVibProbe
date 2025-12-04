@@ -42,7 +42,9 @@ struct CarbsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    NutritionSectionCard(
+                    // ✅ Neue, helper-basierte SectionCard wiederverwendet:
+                    //    NutritionEnergySectionCardScaled ist eigentlich generisch.
+                    NutritionSectionCardScaled(
                         sectionTitle: "Nutrition",
                         title: "Carbs",
                         kpiTitle: "Carbs Today",
@@ -51,18 +53,14 @@ struct CarbsView: View {
                         kpiDeltaText: viewModel.formattedDeltaCarbs,
                         hasTarget: true,
                         last90DaysData: viewModel.last90DaysDataForChart,
-                        monthlyData: viewModel.monthlyCarbsData,
-                        dailyGoalForChart: Int(viewModel.goalValueForChart),
-                        onMetricSelected: onMetricSelected,
-                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"],
-                        monthlyMetricLabel: "Carbs / Month",
                         periodAverages: viewModel.periodAverages,
-                        showMonthlyChart: true,
-                        dailyScaleType: .smallInteger,
-                        monthlyScaleType: .smallInteger,
-                        // 🔹 NEU: Skalen aus dem ViewModel einspeisen
-                        dailyScaleResult: viewModel.dailyScale,
-                        monthlyScaleResult: viewModel.monthlyScale
+                        monthlyData: viewModel.monthlyCarbsData,
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
+                        goalValue: Int(viewModel.goalValueForChart),
+                        onMetricSelected: onMetricSelected,
+                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"]
                     )
                     .padding(.horizontal)
                 }

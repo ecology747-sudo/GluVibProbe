@@ -12,6 +12,11 @@ final class FatViewModel: ObservableObject {
 
     // MARK: - Published Output für die View
 
+    /// 🔹 Skalen für die 3 Charts (neu, Helper-basiert)
+    @Published var dailyScale: MetricScaleResult   = MetricScaleHelper.scale([], for: .grams)
+    @Published var periodScale: MetricScaleResult  = MetricScaleHelper.scale([], for: .grams)
+    @Published var monthlyScale: MetricScaleResult = MetricScaleHelper.scale([], for: .grams)
+
     /// Fett heute in Gramm
     @Published var todayFatGrams: Int = 0
 
@@ -57,7 +62,7 @@ final class FatViewModel: ObservableObject {
     // MARK: - Refresh Logic
 
     func refresh() {
-        // 1) Heute (optional; nutzt Helper wie bei Protein)
+        // 1) Heute
         healthStore.fetchFatToday { [weak self] grams in
             DispatchQueue.main.async {
                 self?.todayFatGrams = grams
@@ -67,9 +72,12 @@ final class FatViewModel: ObservableObject {
         // 2) 365-Tage-Reihe (inkl. Basis für 90d & Durchschnitte)
         healthStore.fetchFatDaily(last: 365) { [weak self] entries in
             guard let self else { return }
+            let sorted = entries.sorted { $0.date < $1.date }
+
             DispatchQueue.main.async {
-                self.dailyFat365 = entries
-                self.last90DaysFat = Array(entries.suffix(90))
+                self.dailyFat365 = sorted
+                self.last90DaysFat = Array(sorted.suffix(90))
+                self.recomputeScales()
             }
         }
 
@@ -77,13 +85,14 @@ final class FatViewModel: ObservableObject {
         healthStore.fetchFatMonthly { [weak self] monthly in
             DispatchQueue.main.async {
                 self?.monthlyFatData = monthly
+                self?.recomputeScales()
             }
         }
     }
 
     // MARK: - Daten für Charts
 
-    /// Mapping Fat → generisches DailyStepsEntry für Last90DaysBarChart
+    /// Mapping Fat → generisches DailyStepsEntry für Last90DaysScaledBarChart
     var last90DaysDataForChart: [DailyStepsEntry] {
         last90DaysFat.map { entry in
             DailyStepsEntry(date: entry.date, steps: entry.grams)
@@ -91,21 +100,31 @@ final class FatViewModel: ObservableObject {
     }
 
     // MARK: - Durchschnittswerte (Gramm) – basierend auf dailyFat365
-
+    /// Neue Logik:
+    /// - Zeitraum: letzte `days` Kalendertage vor heute (z.B. 7, 14, 30 …)
+    /// - es zählen nur Einträge mit grams > 0
+    /// - geteilt wird durch die Anzahl der Tage mit Eintrag (nicht durch `days`)
     private func averageGrams(last days: Int) -> Int {
-        guard dailyFat365.count > 1 else { return 0 }
+        guard !dailyFat365.isEmpty else { return 0 }
 
-        let sorted = dailyFat365.sorted { $0.date < $1.date }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
 
-        // heutigen Tag entfernen (wie bei Sleep/Protein)
-        let withoutToday = Array(sorted.dropLast())
-        guard !withoutToday.isEmpty else { return 0 }
+        // endDate = gestern, startDate = heute - days
+        guard let endDate = calendar.date(byAdding: .day, value: -1, to: today),
+              let startDate = calendar.date(byAdding: .day, value: -days, to: today) else {
+            return 0
+        }
 
-        let slice = withoutToday.suffix(days)
-        guard !slice.isEmpty else { return 0 }
+        let filtered = dailyFat365.filter { entry in
+            let d = calendar.startOfDay(for: entry.date)
+            return d >= startDate && d <= endDate && entry.grams > 0
+        }
 
-        let sum = slice.reduce(0) { $0 + $1.grams }
-        return sum / slice.count
+        guard !filtered.isEmpty else { return 0 }
+
+        let sum = filtered.reduce(0) { $0 + $1.grams }
+        return sum / filtered.count
     }
 
     var avgFatLast7Days: Int   { averageGrams(last: 7) }
@@ -156,5 +175,17 @@ final class FatViewModel: ObservableObject {
     /// Zielwert für horizontale Chart-Linie
     var goalValueForChart: Int? {
         targetFatGrams > 0 ? targetFatGrams : nil
+    }
+
+    // MARK: - Skalen (Helper-System, GRAMM)
+
+    private func recomputeScales() {
+        let dailyValues   = last90DaysDataForChart.map { Double($0.steps) }
+        let periodValues  = periodAverages.map { Double($0.value) }
+        let monthlyValues = monthlyFatData.map { Double($0.value) }
+
+        dailyScale   = MetricScaleHelper.scale(dailyValues,   for: .grams)
+        periodScale  = MetricScaleHelper.scale(periodValues,  for: .grams)
+        monthlyScale = MetricScaleHelper.scale(monthlyValues, for: .grams)
     }
 }

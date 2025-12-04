@@ -15,10 +15,10 @@ struct MonthlyScaledBarChart: View {
 
     // MARK: - Eingaben
 
-    /// Monatsdaten, z. B. "Jan", "Feb", ... mit einem Wert (z. B. kcal pro Monat)
+    /// Monatsdaten, z. B. "Jan", "Feb", ... mit einem Wert (z. B. g / Monat)
     let data: [MonthlyMetricEntry]
 
-    /// Name der Metrik (z. B. "Energy / Month")
+    /// Name der Metrik (z. B. "Carbs / Month")
     let metricLabel: String
 
     /// Domain-Farbe
@@ -33,17 +33,18 @@ struct MonthlyScaledBarChart: View {
     /// Formatter-Funktion für Y-Achsenlabels
     let valueLabel: (Double) -> String
 
-    /// Optional: Monats-Ziellinie (aktuell nicht genutzt, aber vorbereitet)
+    /// Optional: Monats-Ziellinie
     let goalValue: Double?
 
-    // MARK: - Abgeleitete Werte
+    /// Kleine Luft nach oben, damit Labels nicht abgeschnitten werden
+    private var yMaxWithHeadroom: Double {
+        yMax * 1.08
+    }
 
-    /// Reduzierte Tick-Liste für die Anzeige:
-    /// Wir nehmen nur jede n-te Marke, damit die Labels nicht mehr übereinander kleben.
+    /// Reduzierte Tick-Liste für die Anzeige
     private var displayedTicks: [Double] {
         guard yAxisTicks.count > 7 else { return yAxisTicks }
 
-        // maximal ca. 6–7 Labels
         let maxLabels = 6
         let step = max(1, yAxisTicks.count / maxLabels)
 
@@ -77,11 +78,13 @@ struct MonthlyScaledBarChart: View {
     var body: some View {
         Chart {
 
-            // 🔸 Monats-Balken (Liquid-Glas-Optik)
+            // 🔸 Monats-Balken (Liquid-Glas-Optik) + Wert oben drüber
             ForEach(data) { entry in
+                let value = Double(entry.value)
+
                 BarMark(
                     x: .value("Month", entry.monthShort),
-                    y: .value(metricLabel, Double(entry.value))
+                    y: .value(metricLabel, value)
                 )
                 .foregroundStyle(
                     .linearGradient(
@@ -100,6 +103,13 @@ struct MonthlyScaledBarChart: View {
                     x: 0,
                     y: 1.5
                 )
+                // 🔹 Wert direkt über dem Balken – nur Zahl, keine Einheit
+                .annotation(position: .top, alignment: .center) {
+                    Text("\(Int(value.rounded()))")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                        .padding(.bottom, 2)
+                }
             }
 
             // 🔹 Optional: Monats-Ziellinie
@@ -122,8 +132,8 @@ struct MonthlyScaledBarChart: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         }
 
-        // Y-Achse – Skala vollständig von außen geliefert
-        .chartYScale(domain: 0...yMax)
+        // Y-Achse – Skala mit Headroom
+        .chartYScale(domain: 0...yMaxWithHeadroom)
         .chartYAxis {
             AxisMarks(position: .trailing, values: displayedTicks) { value in
 
@@ -140,7 +150,7 @@ struct MonthlyScaledBarChart: View {
             }
         }
 
-        // X-Achse – Monatskürzel (Aug, Sep, Oct, …)
+        // X-Achse – Monatskürzel (Aug, Sep, …)
         .chartXAxis {
             AxisMarks { value in
 
@@ -164,19 +174,19 @@ struct MonthlyScaledBarChart: View {
 
 #Preview("MonthlyScaledBarChart – Demo") {
     let demoData: [MonthlyMetricEntry] = [
-        .init(monthShort: "Aug", value: 62_000),
-        .init(monthShort: "Sep", value: 58_500),
-        .init(monthShort: "Oct", value: 64_200),
-        .init(monthShort: "Nov", value: 61_300),
-        .init(monthShort: "Dec", value: 63_900)
+        .init(monthShort: "Aug", value: 6000),
+        .init(monthShort: "Sep", value: 6100),
+        .init(monthShort: "Oct", value: 3035),
+        .init(monthShort: "Nov", value: 4944),
+        .init(monthShort: "Dec", value: 458)
     ]
 
     let values = demoData.map { Double($0.value) }
-    let scale = MetricScaleHelper.energyKcalScale(for: values)
+    let scale = MetricScaleHelper.scale(values, for: .grams)
 
     MonthlyScaledBarChart(
         data: demoData,
-        metricLabel: "Energy / Month",
+        metricLabel: "Carbs / Month",
         barColor: Color.Glu.nutritionAccent,
         yAxisTicks: scale.yAxisTicks,
         yMax: scale.yMax,

@@ -2,201 +2,309 @@
 //  MetricScaleHelper.swift
 //  GluVibProbe
 //
-//  Zentrale Hilfsklasse für Y-Achsen-Skalierung.
-//  - Nimmt Rohwerte ([Double]) + MetricScaleType entgegen
-//  - Liefert MetricScaleResult zurück:
-//      • yAxisTicks  – Werte für die Achsenmarken
-//      • yMax        – oberer Wert der Skala
-//      • valueLabel  – Formatter für Achsenlabels
+//  Zentrale, generische Skalierungslogik für die neuen *scaled* Charts.
+//
+//  Verwendet von:
+//  - Nutrition (Carbs, Protein, Fat, Nutrition Energy)
+//  - Activity (Steps, Activity Energy)
+//  - Body (Weight, Sleep)
 //
 
 import Foundation
 
-/// Ergebnis der Skalenberechnung für einen Chart.
-struct MetricScaleResult {
-    let yAxisTicks: [Double]
-    let yMax: Double
-    let valueLabel: (Double) -> String
-}
+struct MetricScaleHelper {
 
-/// Zentraler Helper für alle Domains (Nutrition, Body, Metabolic).
-enum MetricScaleHelper {
+    // MARK: - Öffentlicher Ergebnistyp
 
-    // MARK: - Öffentliche API (generischer Einstieg)
-
-    /// Generische Skalenberechnung für beliebige Metriken.
-    ///
-    /// - Parameter values: Rohwerte in **Anzeigeeinheit**
-    ///   (z. B. kcal, kJ, g, Schritte, Stunden).
-    /// - Parameter type:   Skalentyp (z. B. .nutritionEnergyDaily, .steps, .percent, ...)
-    static func scale(for values: [Double], type: MetricScaleType) -> MetricScaleResult {
-
-        let cleaned = values
-            .filter { $0.isFinite && $0 >= 0 }
-
-        let maxValue = cleaned.max() ?? 0
-
-        switch type {
-
-        // MARK: Nutrition – Energy (kcal / kJ)
-
-        case .nutritionEnergyDaily:
-            // Tageswerte: z. B. 0–6.000 kcal/kJ – eher feinere Schritte
-            return makeScale(
-                maxValue: maxValue,
-                minimumSuggestedMax: 2_000,
-                approxTickCount: 6,
-                preferKiloSuffix: false
-            )
-
-        case .nutritionEnergyMonthly:
-            // Monatswerte: deutlich höhere Summen → "k"-Beschriftung sinnvoll
-            return makeScale(
-                maxValue: maxValue,
-                minimumSuggestedMax: 20_000,
-                approxTickCount: 6,
-                preferKiloSuffix: true
-            )
-
-        // MARK: Steps – große Werte mit Tsd.-Bereichen
-
-        case .steps:
-            return makeScale(
-                maxValue: maxValue,
-                minimumSuggestedMax: 10_000,
-                approxTickCount: 6,
-                preferKiloSuffix: true
-            )
-
-        // MARK: Kleine Ganzzahlen (z. B. Gewicht, Einheiten, kleinere g/kcal)
-
-        case .smallInteger:
-            return makeScale(
-                maxValue: maxValue,
-                minimumSuggestedMax: 10,
-                approxTickCount: 5,
-                preferKiloSuffix: false
-            )
-
-        // MARK: Prozent (0–100 %)
-
-        case .percent:
-            let ticks: [Double] = [0, 20, 40, 60, 80, 100]
-            let label: (Double) -> String = { value in
-                "\(Int(value))%"
-            }
-            return MetricScaleResult(
-                yAxisTicks: ticks,
-                yMax: 100,
-                valueLabel: label
-            )
-
-        // MARK: Stunden (z. B. Schlafdauer)
-
-        case .hours:
-            // Werte in Stunden oder ähnlicher Größenordnung
-            return makeScale(
-                maxValue: maxValue,
-                minimumSuggestedMax: 8,
-                approxTickCount: 6,
-                preferKiloSuffix: false
-            )
-        }
+    struct MetricScaleResult {
+        let yAxisTicks: [Double]              // Werte für die Y-Achsen-Beschriftung
+        let yMax: Double                      // Oberkante des Diagramms
+        let valueLabel: (Double) -> String    // Formatter für Labels
     }
 
-    /// Komfort-Funktion für bestehende Aufrufe:
-    /// Nutrition Energy (Daily) – verwendet intern den generischen Einstieg.
-    static func energyKcalScale(for values: [Double]) -> MetricScaleResult {
-        scale(for: values, type: .nutritionEnergyDaily)
+    // MARK: - Skalen-Typen für alle Domains
+
+    enum MetricScaleType {
+        case energyDaily        // Nutrition / Activity Energy – Tageswerte (kcal / kJ)
+        case energyMonthly      // Nutrition / Activity Energy – Monatswerte
+        case grams              // Carbs / Protein / Fat – Gramm
+        case steps              // Steps
+        case weightKg           // Weight (kg oder lbs, aber gleiche Skala)
+        case sleepMinutes       // Sleep in Minuten (Achse zeigt Stunden)
     }
 
-    // MARK: - Interne Helfer
+    // MARK: - Zentrale Factory
 
-    /// Berechnet eine "schöne" Skala anhand eines Maximalwerts.
-    ///
-    /// - minimumSuggestedMax: untere Grenze, damit leere Daten trotzdem eine sinnvolle Skala bekommen.
-    /// - approxTickCount:     grobe Anzahl gewünschter Ticks (z. B. 5–7).
-    /// - preferKiloSuffix:    ab größeren Werten "k"-Darstellung (z. B. 20k) verwenden.
-    private static func makeScale(
-        maxValue rawMaxValue: Double,
-        minimumSuggestedMax: Double,
-        approxTickCount: Int,
-        preferKiloSuffix: Bool
+    static func scale(
+        _ values: [Double],
+        for type: MetricScaleType
     ) -> MetricScaleResult {
 
-        let effectiveMax = max(rawMaxValue, minimumSuggestedMax, 0)
+        // Null / leere Daten abfangen → generische Defaults pro Typ
+        let cleaned = values.filter { $0 > 0 }
 
-        // "Schöne" Schrittweite finden (1, 2, 5, 10, 20, 50, 100, ...)
-        let tickStep = niceStep(forMaxValue: effectiveMax, approxTickCount: approxTickCount)
+        switch type {
+        case .energyDaily:
+            return energyDailyScale(values: cleaned)
 
-        let upper = (tickStep > 0)
-            ? (ceil(effectiveMax / tickStep) * tickStep)
-            : effectiveMax
+        case .energyMonthly:
+            return energyMonthlyScale(values: cleaned)
 
-        let ticks: [Double]
-        if tickStep > 0 {
-            ticks = stride(from: 0.0, through: upper, by: tickStep).map { $0 }
-        } else {
-            ticks = [0, upper]
+        case .grams:
+            return gramsScale(values: cleaned)
+
+        case .steps:
+            return stepsScale(values: cleaned)
+
+        case .weightKg:
+            return weightScale(values: cleaned)
+
+        case .sleepMinutes:
+            return sleepScale(values: cleaned)
+        }
+    }
+
+    // MARK: - Profile
+
+    // Nutrition / Activity Energy – Tageswerte (kcal / kJ)
+    private static func energyDailyScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            // Fallback – typischer Tagesbereich in kcal
+            let ticks: [Double] = [0, 500, 1000, 1500, 2000]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 2000,
+                valueLabel: { v in "\(Int(v.rounded()))" }
+            )
         }
 
-        // NumberFormatter für Integer-Werte
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 0
-
-        let label: (Double) -> String = { value in
-            guard value > 0 else { return "0" }
-
-            if preferKiloSuffix, upper >= 10_000 {
-                let kilo = value / 1_000.0
-                let text = formatter.string(from: NSNumber(value: kilo)) ?? "\(Int(kilo))"
-                return "\(text)k"
-            } else {
-                return formatter.string(from: NSNumber(value: value)) ?? "\(Int(value))"
-            }
+        let step: Double
+        switch maxValue {
+        case 0...4000:
+            // normale kcal-Bereiche → feinere Skala
+            step = 250
+        case 4001...8000:
+            // Übergangsbereich
+            step = 500
+        case 8001...20000:
+            // typische kJ-Bereiche
+            step = 1000
+        default:
+            step = 2000
         }
+
+        let upper = ceil(maxValue / step) * step
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
 
         return MetricScaleResult(
             yAxisTicks: ticks,
             yMax: upper,
-            valueLabel: label
+            valueLabel: { v in "\(Int(v.rounded()))" }
         )
     }
 
-    /// Ermittelt eine "runde" Schrittweite anhand des Maximalwerts und der gewünschten Tickanzahl.
-    ///
-    /// Beispiel:
-    ///  - maxValue = 2.300, approxTickCount = 6 → ~400 → Schrittweite 500
-    ///  - maxValue = 25.000, approxTickCount = 6 → ~4.166 → Schrittweite 5.000
-    private static func niceStep(
-        forMaxValue maxValue: Double,
-        approxTickCount: Int
-    ) -> Double {
-
-        guard maxValue > 0, approxTickCount > 0 else {
-            return 1
+    // Nutrition / Activity Energy – Monatswerte (Summen)
+    private static func energyMonthlyScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            // Fallback – eher große Monatswerte
+            let ticks: [Double] = [0, 5000, 10000, 15000]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 15000,
+                valueLabel: { v in "\(Int(v.rounded()))" }
+            )
         }
 
-        let roughStep = maxValue / Double(approxTickCount)
-
-        let exponent = floor(log10(roughStep))
-        let base = pow(10.0, exponent)
-
-        let fraction = roughStep / base
-
-        let niceFraction: Double
-        switch fraction {
-        case ..<1.5:
-            niceFraction = 1
-        case ..<3:
-            niceFraction = 2
-        case ..<7:
-            niceFraction = 5
+        let step: Double
+        switch maxValue {
+        case 0...5000:
+            step = 500
+        case 5001...20000:
+            step = 1000
         default:
-            niceFraction = 10
+            step = 2500
         }
 
-        return niceFraction * base
+        let upper = ceil(maxValue / step) * step
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in "\(Int(v.rounded()))" }
+        )
+    }
+
+    // Gramm-Profil – für Carbs / Protein / Fat
+    private static func gramsScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            // Fallback – kleiner Bereich
+            let ticks: [Double] = [0, 50, 100]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 100,
+                valueLabel: { v in "\(Int(v.rounded())) g" }
+            )
+        }
+
+        let maxAbs = maxValue
+        let upper: Double
+        let step: Double
+
+        switch maxAbs {
+        case 0..<100:
+            upper = 100
+            step  = 25      // 0, 25, 50, 75, 100
+        case 100..<200:
+            upper = 200
+            step  = 50      // 0, 50, 100, 150, 200
+        case 200..<300:
+            upper = 300
+            step  = 50
+        case 300..<500:
+            upper = 500
+            step  = 100
+        case 500..<800:
+            upper = 800
+            step  = 100
+        case 800..<1200:
+            upper = 1200
+            step  = 200
+        default:
+            step  = 250
+            upper = ceil(maxAbs / step) * step
+        }
+
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in "\(Int(v.rounded())) g" }
+        )
+    }
+
+    // Steps – für Activity Steps
+    private static func stepsScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            let ticks: [Double] = [0, 2000, 4000, 6000, 8000, 10000]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 10000,
+                valueLabel: { v in
+                    if v >= 1000 {
+                        return "\(Int(v / 1000))T"
+                    } else {
+                        return "\(Int(v.rounded()))"
+                    }
+                }
+            )
+        }
+
+        let step: Double
+        switch maxValue {
+        case 0..<4000:
+            step = 500
+        case 4000..<10000:
+            step = 1000
+        case 10000..<20000:
+            step = 2000
+        default:
+            step = 5000
+        }
+
+        let upper = ceil(maxValue / step) * step
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in
+                if v >= 1000 {
+                    return "\(Int(v / 1000))T"
+                } else {
+                    return "\(Int(v.rounded()))"
+                }
+            }
+        )
+    }
+
+    // Weight – für Body Weight (kg / lbs)
+    private static func weightScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            let ticks: [Double] = [40, 60, 80, 100]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 100,
+                valueLabel: { v in "\(Int(v.rounded()))" }
+            )
+        }
+
+        let step: Double
+        switch maxValue {
+        case 0..<80:
+            step = 10
+        case 80..<160:
+            step = 20
+        case 160..<240:
+            step = 20
+        default:
+            step = 50
+        }
+
+        let upper = ceil(maxValue / step) * step
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in "\(Int(v.rounded()))" }
+        )
+    }
+
+    // Sleep – Werte in Minuten, Achse + Labels in Stunden
+    private static func sleepScale(values: [Double]) -> MetricScaleResult {
+        guard let maxMinutes = values.max(), maxMinutes > 0 else {
+            let ticks: [Double] = [0, 240, 360, 480]   // 0, 4, 6, 8 h
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 480,
+                valueLabel: { v in
+                    let hours = v / 60.0
+                    return String(format: "%.1f h", hours)
+                }
+            )
+        }
+
+        let maxHours = maxMinutes / 60.0
+
+        let stepHours: Double
+        switch maxHours {
+        case 0..<5:
+            stepHours = 1
+        case 5..<10:
+            stepHours = 2
+        default:
+            stepHours = 3
+        }
+
+        let upperHours = ceil(maxHours / stepHours) * stepHours
+        let upperMinutes = upperHours * 60.0
+        let stepMinutes = stepHours * 60.0
+
+        let ticks = stride(from: 0.0, through: upperMinutes, by: stepMinutes).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upperMinutes,
+            valueLabel: { v in
+                let hours = v / 60.0
+                return String(format: "%.1f h", hours)
+            }
+        )
     }
 }
+
+// MARK: - Globaler Alias (für ältere Stellen)
+
+typealias MetricScaleResult = MetricScaleHelper.MetricScaleResult

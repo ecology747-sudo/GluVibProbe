@@ -39,8 +39,8 @@ struct StepsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    // Haupt-Section mit KPI + Charts (Steps)
-                    ActivitySectionCard(
+                    // Haupt-Section mit KPI + Charts (Steps) – SCALED
+                    ActivitySectionCardScaled(
                         sectionTitle: "Activity",
                         title: "Steps",
                         kpiTitle: "Steps Today",
@@ -48,14 +48,15 @@ struct StepsView: View {
                         kpiCurrentText: viewModel.formattedTodaySteps,
                         kpiDeltaText: viewModel.kpiDeltaText,
                         hasTarget: true,
-                        last90DaysData: viewModel.last90DaysData,
-                        monthlyData: viewModel.monthlyStepsData,
-                        dailyGoalForChart: viewModel.dailyStepsGoalInt,
-                        onMetricSelected: onMetricSelected,
-                        metrics: ["Steps", "Activity Energy"],
-                        monthlyMetricLabel: "Steps / Month",
+                        last90DaysData: viewModel.last90DaysDataForChart,
                         periodAverages: viewModel.periodAverages,
-                        scaleType: .steps
+                        monthlyData: viewModel.monthlyData,
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
+                        goalValue: viewModel.dailyStepsGoalInt,
+                        onMetricSelected: onMetricSelected,
+                        metrics: ["Steps", "Activity Energy"]
                     )
                     .padding(.horizontal)
                 }
@@ -81,6 +82,4 @@ struct StepsView: View {
 
     return StepsView(viewModel: previewVM)
         .environmentObject(previewStore) // falls andere Views den Store als EnvironmentObject brauchen
-    
-    
 }

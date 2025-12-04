@@ -1,54 +1,56 @@
+//
 //  ContentView.swift
 //  GluVibProbe
+//
 
 import SwiftUI
 
 struct ContentView: View {
-    
+
+    @EnvironmentObject var appState: AppState
     @State private var selectedTab: GluTab
+
     private let settings = SettingsModel.shared
     @State private var showUnsavedAlert: Bool = false
-    
-    /// Standard-Init für die App: startet auf .home
+
+    // Standard-Init
     init(startTab: GluTab = .home) {
         _selectedTab = State(initialValue: startTab)
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
-            
-            // Hauptbereich: je nach Tab andere View
+
+            // Oberer Inhaltsbereich
             ZStack {
                 switch selectedTab {
+
                 case .activity:
-                    ActivityDashboardView()
+                    activityRootView          // 👈 Activity: Overview ODER Dashboard
 
                 case .body:
-                    BodyDashboardView()
+                    bodyRootView              // 👈 Body: Overview ODER Dashboard
 
                 case .nutrition:
-                    NutritionDashboardView()    // 👈 neues Nutrition-Dashboard
+                    nutritionRootView         // 👈 Nutrition: Overview ODER Dashboard
 
                 case .home:
-                    HomeView()     //ist Metabolic
+                    HomeView()
 
                 case .history:
-                    HistoryView()           // 👈 jetzt echte View
+                    HistoryView()
 
                 case .settings:
                     SettingsView()
                 }
-
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Untere Tab-Bar (immer sichtbar)
+
+            // Untere Tab-Bar
             GluBottomTabBar(
                 selectedTab: Binding(
                     get: { selectedTab },
-                    set: { newValue in
-                        handleTabSelection(newValue)
-                    }
+                    set: { newValue in handleTabSelection(newValue) }
                 )
             )
         }
@@ -63,13 +65,69 @@ struct ContentView: View {
             Please tap “Save Settings” before leaving this screen.
             """)
         }
-        .tint(Color.Glu.primaryBlue)    }
-    
+        .tint(Color.Glu.primaryBlue)
+    }
+
+    // MARK: - Activity Root Handling
+
+    /// Steuert, ob im Activity-Tab die Overview oder das Dashboard angezeigt wird
+    @ViewBuilder
+    private var activityRootView: some View {
+        switch appState.currentStatsScreen {
+
+        case .steps, .activityEnergy:
+            // 👉 Detail-Screen (Steps/Activity Energy)
+            ActivityDashboardView()
+
+        default:
+            // 👉 Einstieg: Activity Overview
+            ActivityOverviewView()
+        }
+    }
+
+    // MARK: - Body Root Handling
+
+    /// Steuert, ob im Body-Tab die Overview oder das Dashboard angezeigt wird
+    @ViewBuilder
+    private var bodyRootView: some View {
+        switch appState.currentStatsScreen {
+
+        case .sleep, .weight:
+            // 👉 Detail-Screens (Sleep / Weight)
+            BodyDashboardView()
+
+        default:
+            // 👉 Einstieg: Body Overview
+            BodyOverviewView()
+        }
+    }
+
+    // MARK: - Nutrition Root Handling
+
+    /// Steuert, ob im Nutrition-Tab die Overview oder das Nutrition-Dashboard angezeigt wird
+    @ViewBuilder
+    private var nutritionRootView: some View {
+        switch appState.currentStatsScreen {
+
+        case .nutritionOverview, .none:
+            // 👉 Overview
+            NutritionOverviewView()
+
+        case .carbs, .protein, .fat, .calories:
+            // 👉 Detail-Dashboard mit SectionCardScaled etc.
+            NutritionDashboardView()
+
+        default:
+            // Fallback – sicherheitshalber Overview
+            NutritionOverviewView()
+        }
+    }
+
     // MARK: - Tab Handling
 
     private func handleTabSelection(_ newTab: GluTab) {
-        // Wenn wir die Settings-View verlassen wollen und dort noch ungespeicherte
-        // Änderungen vorhanden sind, Navigation blockieren und Hinweis zeigen.
+
+        // Block: Settings mit unsaved changes verlassen?
         if selectedTab == .settings,
            newTab != .settings,
            settings.hasUnsavedChanges {
@@ -77,14 +135,35 @@ struct ContentView: View {
             return
         }
 
-        // Ansonsten Tab ganz normal wechseln
+        // Tab wechseln
         selectedTab = newTab
+
+        // Domain-spezifische "Start-Screens" setzen
+        switch newTab {
+
+        case .nutrition:
+            // 👉 Immer mit Overview starten
+            appState.currentStatsScreen = .nutritionOverview
+
+        case .activity:
+            // 👉 Sinnvoll: Steps als Default-Metrik
+            appState.currentStatsScreen = .steps
+
+        case .body:
+            // 👉 Immer mit Overview starten (jede andere Case ⇒ Overview)
+            appState.currentStatsScreen = .none
+
+        default:
+            break
+        }
     }
 }
 
+// MARK: - Preview
+
 #Preview("ContentView – Home Tab") {
     let previewStore = HealthStore.preview()
-    let previewState = AppState()                  // 🔹 NEU
+    let previewState = AppState()
 
     ContentView(startTab: .home)
         .environmentObject(previewStore)

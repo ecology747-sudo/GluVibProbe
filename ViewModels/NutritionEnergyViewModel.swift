@@ -8,16 +8,6 @@
 import Foundation
 import Combine
 
-// MARK: - MetricScaleResult Helper
-
-extension MetricScaleResult {
-    static let empty = MetricScaleResult(
-        yAxisTicks: [],
-        yMax: 0,
-        valueLabel: { _ in "" }
-    )
-}
-
 final class NutritionEnergyViewModel: ObservableObject {
 
     // MARK: - Published Output für die View
@@ -34,11 +24,6 @@ final class NutritionEnergyViewModel: ObservableObject {
     /// 365-Tage-Reihe für Durchschnittswerte (Basis: kcal)
     @Published var dailyEnergy365: [DailyNutritionEnergyEntry] = []
 
-    // 🔹 Neue Scale-Ergebnisse für die 3 Charts
-    @Published var energyScaleDaily: MetricScaleResult   = .empty   // Top-Chart (90 Tage)
-    @Published var energyScalePeriod: MetricScaleResult  = .empty   // Average-Periods
-    @Published var energyScaleMonthly: MetricScaleResult = .empty   // Monthly
-
     // MARK: - Dependencies
 
     private let healthStore: HealthStore
@@ -54,14 +39,6 @@ final class NutritionEnergyViewModel: ObservableObject {
     ) {
         self.healthStore = healthStore
         self.settings = settings
-
-        // ⚙️ Wenn sich die Energy-Unit ändert (kcal ↔︎ kJ) → Skalen neu berechnen
-        settings.$energyUnit
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.updateScales()
-            }
-            .store(in: &cancellables)
     }
 
     // MARK: - Lifecycle
@@ -73,29 +50,21 @@ final class NutritionEnergyViewModel: ObservableObject {
     /// HealthKit neu abfragen + lokale Published-Werte auffrischen
     func refresh() {
         // 1) HealthKit-Fetches anstoßen (liegen in HealthStore+NutritionEnergy.swift)
-
         healthStore.fetchNutritionEnergyToday { [weak self] kcal in
             self?.todayEnergyKcal = kcal
-            // Skalen müssen hier nicht neu, da Today nur KPI betrifft
         }
 
         healthStore.fetchNutritionEnergyDaily(last: 90) { [weak self] entries in
-            guard let self = self else { return }
-            self.last90DaysEnergy = entries
-            self.updateScales()
+            self?.last90DaysEnergy = entries
         }
 
         healthStore.fetchNutritionEnergyMonthly { [weak self] monthly in
-            guard let self = self else { return }
-            self.monthlyEnergy = monthly
-            self.updateScales()
+            self?.monthlyEnergy = monthly
         }
 
         // 365-Tage-Reihe für Durchschnittswerte
         healthStore.fetchNutritionEnergyDaily(last: 365) { [weak self] entries in
-            guard let self = self else { return }
-            self.dailyEnergy365 = entries
-            self.updateScales()
+            self?.dailyEnergy365 = entries
         }
     }
 
@@ -177,7 +146,7 @@ final class NutritionEnergyViewModel: ObservableObject {
         return "\(sign)\(formatted) \(unitLabel)"
     }
 
-    // MARK: - Chart-Daten für SectionCard
+    // MARK: - Chart-Daten für Nutrition-SectionCard
 
     /// Wert für die horizontale Ziel-Linie im 90d-Chart
     var chartGoalValue: Int? {
@@ -208,7 +177,7 @@ final class NutritionEnergyViewModel: ObservableObject {
         ]
     }
 
-    /// Monatsdaten (konvertiert in aktuelle Einheit)
+    /// Monatsdaten direkt aus HealthStore (werden in NutritionEnergyView weitergereicht)
     var monthlyEnergyForChart: [MonthlyMetricEntry] {
         monthlyEnergy.map { entry in
             let converted = convertKcalToCurrentUnit(entry.value)
@@ -219,40 +188,53 @@ final class NutritionEnergyViewModel: ObservableObject {
     // MARK: - Durchschnittswerte
 
     /// Durchschnitt der letzten `days` Tage (ohne heutigen Tag) in aktueller Einheit
+    /// Neue Logik:
+    /// - Zeitraum = letzte `days` Kalendertage vor heute (z.B. 7, 14, 30 …)
+    /// - es zählen nur Einträge mit energyKcal > 0
+    /// - dividiert wird durch die Anzahl der Eintrags-Tage, nicht durch `days`
     private func averageEnergy(last days: Int) -> Int {
-        guard dailyEnergy365.count > 1 else { return 0 }
+        guard !dailyEnergy365.isEmpty else { return 0 }
 
-        let sorted = dailyEnergy365.sorted { $0.date < $1.date }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
 
-        // heutigen Tag entfernen
-        let withoutToday = Array(sorted.dropLast())
-        guard !withoutToday.isEmpty else { return 0 }
+        // endDate = gestern, startDate = heute - days
+        guard let endDate = calendar.date(byAdding: .day, value: -1, to: today),
+              let startDate = calendar.date(byAdding: .day, value: -days, to: today) else {
+            return 0
+        }
 
-        let slice = withoutToday.suffix(days)
-        if slice.isEmpty { return 0 }
+        let filtered = dailyEnergy365.filter { entry in
+            let d = calendar.startOfDay(for: entry.date)
+            return d >= startDate && d <= endDate && entry.energyKcal > 0
+        }
 
-        let sumKcal = slice.reduce(0) { $0 + $1.energyKcal }
-        let avgKcal = sumKcal / slice.count
+        guard !filtered.isEmpty else { return 0 }
+
+        let sumKcal = filtered.reduce(0) { $0 + $1.energyKcal }
+        let avgKcal = sumKcal / filtered.count
 
         return convertKcalToCurrentUnit(avgKcal)
     }
 
-    // MARK: - Scale-Berechnung (Helper-Anbindung)
+    // MARK: - Skalen (Helper-basiert, berechnet wie bei Carbs)
 
-    /// zentrale Funktion: berechnet alle 3 Scales aus den aktuellen Chart-Daten
-    private func updateScales() {
-        // 90-Tage-Werte (Top-Chart)
-        let dailyValues: [Double] = last90DaysForChart.map { Double($0.steps) }
+    /// Skala für den 90-Tage-Chart (Last90DaysScaledBarChart)
+    var dailyScale: MetricScaleResult {
+        let values = last90DaysForChart.map { Double($0.steps) }
+        return MetricScaleHelper.scale(values, for: .energyDaily)
+    }
 
-        // Perioden-Werte (Average-Periods)
-        let periodValues: [Double] = periodAverages.map { Double($0.value) }
+    /// Skala für AveragePeriodsScaledBarChart
+    var periodScale: MetricScaleResult {
+        let values = periodAverages.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .energyDaily)
+    }
 
-        // Monats-Werte (Monthly)
-        let monthlyValues: [Double] = monthlyEnergyForChart.map { Double($0.value) }
-
-        energyScaleDaily   = MetricScaleHelper.energyKcalScale(for: dailyValues)
-        energyScalePeriod  = MetricScaleHelper.energyKcalScale(for: periodValues)
-        energyScaleMonthly = MetricScaleHelper.energyKcalScale(for: monthlyValues)
+    /// Skala für MonthlyScaledBarChart
+    var monthlyScale: MetricScaleResult {
+        let values = monthlyEnergyForChart.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .energyMonthly)
     }
 
     // MARK: - Formatter

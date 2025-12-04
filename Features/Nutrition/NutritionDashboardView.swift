@@ -6,20 +6,30 @@
 import SwiftUI
 
 /// Dashboard für die Nutrition-Domain:
-/// - Carbs
-/// - Protein
-/// - Fat
-/// - Nutrition Energy
-///
-/// Steuert, welche Detail-View angezeigt wird, basierend auf appState.currentStatsScreen
+/// Steuert, welche Detail-View angezeigt wird.
+/// Wird NUR angezeigt, wenn ein Nutrition-Detail aktiv ist.
+/// Die Overview wird NICHT hier angezeigt, sondern in ContentView.
 struct NutritionDashboardView: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
 
     var body: some View {
+
         switch appState.currentStatsScreen {
 
+        // -----------------------------------------------------
+        // NEUE FÄLLE → werden NICHT hier behandelt
+        // -----------------------------------------------------
+        case .none,
+             .nutritionOverview:
+            // Sollte nie passieren, aber wir geben
+            // einen Fallback zurück, damit der Switch vollständig ist.
+            EmptyView()
+
+        // -----------------------------------------------------
+        // Nutrition-Metriken
+        // -----------------------------------------------------
         case .carbs:
             CarbsView(onMetricSelected: handleMetricSelection)
 
@@ -30,18 +40,18 @@ struct NutritionDashboardView: View {
             FatView(onMetricSelected: handleMetricSelection)
 
         case .calories:
-            // 👉 „Calories“-Case bleibt intern für die Navigation,
-            //    aber die Metrik heißt überall „Nutrition Energy“
             NutritionEnergyView(onMetricSelected: handleMetricSelection)
 
-        // alle anderen Fälle (gemeinsamer Enum mit Body/Activity)
+        // -----------------------------------------------------
+        // Andere Domains – Fallback
+        // (sollten eigentlich nicht über dieses Dashboard kommen)
+        // -----------------------------------------------------
         case .steps, .activityEnergy, .weight, .sleep:
-            // Fallback: Carbs anzeigen, damit der Switch exhaustiv bleibt
             CarbsView(onMetricSelected: handleMetricSelection)
         }
     }
 
-    // MARK: - Navigation durch Nutrition-Metric-Chips
+    // MARK: - Nutrition Chip Navigation
 
     private func handleMetricSelection(_ metric: String) {
         switch metric {
@@ -55,7 +65,7 @@ struct NutritionDashboardView: View {
             appState.currentStatsScreen = .fat
 
         case "Nutrition Energy":
-            appState.currentStatsScreen = .calories   // 🔁 interner Case bleibt
+            appState.currentStatsScreen = .calories
 
         default:
             break

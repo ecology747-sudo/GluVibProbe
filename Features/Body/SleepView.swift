@@ -27,7 +27,7 @@ struct SleepView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    BodySectionCard(
+                    BodySectionCardScaled(
                         sectionTitle: "Body",
                         title: "Sleep",
                         kpiTitle: "Sleep Today",
@@ -35,15 +35,17 @@ struct SleepView: View {
                         kpiCurrentText: viewModel.formattedTodaySleep,
                         kpiDeltaText: viewModel.formattedDeltaSleep,
                         hasTarget: true,
-                        // 👉 Sleep-Daten in generische Entries gemapped
                         last90DaysData: viewModel.last90DaysDataForChart,
-                        monthlyData: viewModel.monthlySleepData,
-                        dailyGoalForChart: Int(viewModel.goalValueForChart),
+                        periodAverages: viewModel.periodAveragesForChart,
+                        monthlyData: viewModel.monthlyData,
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
+                        goalValue: Int(viewModel.goalValueForChart),
                         onMetricSelected: onMetricSelected,
                         metrics: ["Sleep", "Weight"],
-                        monthlyMetricLabel: "Sleep / Month",
-                        periodAverages: viewModel.periodAverages,
-                        scaleType: .hours
+                        showMonthlyChart: true,
+                        scaleType: .sleepMinutes
                     )
                     .padding(.horizontal)
                 }
@@ -62,9 +64,9 @@ struct SleepView: View {
 // MARK: - Preview
 
 #Preview("SleepView – Body Domain") {
-    let appState   = AppState()
+    let appState    = AppState()
     let healthStore = HealthStore.preview()
-    let viewModel  = SleepViewModel(healthStore: healthStore)
+    let viewModel   = SleepViewModel(healthStore: healthStore)
 
     return SleepView(
         viewModel: viewModel,

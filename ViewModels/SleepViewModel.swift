@@ -21,7 +21,7 @@ final class SleepViewModel: ObservableObject {
     /// Schlaf der letzten 90 Tage (Basis für 90d-Chart)
     @Published var last90DaysSleep: [DailySleepEntry] = []
 
-    /// Monatliche Schlafsummen (für Monats-Chart)
+    /// Monatliche Schlafsummen (für Monats-Chart, Minuten)
     @Published var monthlySleepData: [MonthlyMetricEntry] = []
 
     /// Täglicher Schlaf der letzten 365 Tage (für Durchschnittswerte)
@@ -88,19 +88,34 @@ final class SleepViewModel: ObservableObject {
 
     // MARK: - Durchschnittswerte (Minuten) – basierend auf dailySleep365
 
-    /// Durchschnittlicher Schlaf der letzten `days` Tage (ohne heutigen Tag)
+    /// 🟢 NEU:
+    /// Durchschnittlicher Schlaf der letzten `days` **Kalendertage vor heute**
+    /// (z.B. 7 Tage), aber:
+    ///   - heute wird ausgeschlossen
+    ///   - Tage ohne Eintrag (minutes <= 0) werden NICHT mitgerechnet
+    ///   - geteilt wird durch die Anzahl der Tage mit Eintrag
     private func averageMinutes(last days: Int) -> Int {
-        guard dailySleep365.count > 1 else { return 0 }
+        guard !dailySleep365.isEmpty else { return 0 }
 
-        let sorted = dailySleep365.sorted { $0.date < $1.date }
-        let withoutToday = Array(sorted.dropLast())
-        guard !withoutToday.isEmpty else { return 0 }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
 
-        let slice = withoutToday.suffix(days)
-        guard !slice.isEmpty else { return 0 }
+        // Zeitraum: [startDate ... endDate] = [heute - days ... gestern]
+        guard let endDate = calendar.date(byAdding: .day, value: -1, to: today),
+              let startDate = calendar.date(byAdding: .day, value: -days, to: today) else {
+            return 0
+        }
 
-        let sum = slice.reduce(0) { $0 + $1.minutes }
-        return sum / slice.count
+        // Nur Einträge im Kalenderraster mit minutes > 0
+        let filtered = dailySleep365.filter { entry in
+            let d = calendar.startOfDay(for: entry.date)
+            return d >= startDate && d <= endDate && entry.minutes > 0
+        }
+
+        guard !filtered.isEmpty else { return 0 }
+
+        let sum = filtered.reduce(0) { $0 + $1.minutes }
+        return sum / filtered.count
     }
 
     var avgSleepLast7Days: Int   { averageMinutes(last: 7) }
@@ -123,13 +138,43 @@ final class SleepViewModel: ObservableObject {
         ]
     }
 
-    // MARK: - Daten für Charts
+    // MARK: - Daten für Charts (Minutes → generic Entries)
 
-    /// Mapping Sleep → generisches DailyStepsEntry für Last90DaysBarChart
+    /// Mapping Sleep → generisches DailyStepsEntry für Last90DaysScaledBarChart
     var last90DaysDataForChart: [DailyStepsEntry] {
         last90DaysSleep.map { entry in
             DailyStepsEntry(date: entry.date, steps: entry.minutes)
         }
+    }
+
+    /// Monatsdaten (bereits Minuten)
+    var monthlyData: [MonthlyMetricEntry] {
+        monthlySleepData
+    }
+
+    /// Perioden-Durchschnitte direkt in Minuten
+    var periodAveragesForChart: [PeriodAverageEntry] {
+        periodAverages
+    }
+
+    // MARK: - Scaling-Outputs für SectionCardScaled
+
+    /// Skala für Tages-Chart (Sleep in Minuten, Achse in Stunden)
+    var dailyScale: MetricScaleResult {
+        let values = last90DaysDataForChart.map { Double($0.steps) }
+        return MetricScaleHelper.scale(values, for: .sleepMinutes)
+    }
+
+    /// Skala für Perioden-Chart (Durchschnittswerte, Minuten → Stunden)
+    var periodScale: MetricScaleResult {
+        let values = periodAveragesForChart.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .sleepMinutes)
+    }
+
+    /// Skala für Monats-Chart (Monatssummen, Minuten → Stunden)
+    var monthlyScale: MetricScaleResult {
+        let values = monthlyData.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .sleepMinutes)
     }
 
     // MARK: - KPI: Target + Delta
@@ -151,8 +196,7 @@ final class SleepViewModel: ObservableObject {
         Self.formatDeltaMinutes(deltaSleepMinutes)
     }
 
-    /// Farblogik für Delta wie bei Steps:
-    /// + → grün, – → rot, 0 → blau
+    /// Farblogik (falls direkt in der View genutzt werden soll)
     var deltaColor: Color {
         if deltaSleepMinutes > 0 {
             return .green
@@ -165,7 +209,7 @@ final class SleepViewModel: ObservableObject {
 
     // MARK: - Chart Goal (für gestrichelte Linie)
 
-    /// Zielwert für das Chart; je nach Chart in Minuten oder Stunden genutzt
+    /// Zielwert für das Chart; in Minuten
     var goalValueForChart: Double {
         Double(targetSleepMinutes)
     }
@@ -180,13 +224,10 @@ final class SleepViewModel: ObservableObject {
 
         switch (hours, mins) {
         case (0, let m):
-            // nur Minuten, z. B. "45m"
             return "\(m)m"
         case (let h, 0):
-            // nur Stunden, z. B. "8h"
             return "\(h)h"
         default:
-            // kompakt, z. B. "7h 40m"
             return "\(hours)h \(mins)m"
         }
     }
@@ -196,8 +237,7 @@ final class SleepViewModel: ObservableObject {
             return "0m"
         }
 
-        // WICHTIG: normales Minus "-" verwenden,
-        // damit BodySectionCard.deltaColor es erkennt
+        // normales Minus "-" verwenden
         let sign = delta > 0 ? "+" : "-"
 
         let absMinutes = abs(delta)
@@ -206,13 +246,10 @@ final class SleepViewModel: ObservableObject {
 
         switch (hours, mins) {
         case (0, let m):
-            // z. B. "+15m" oder "-15m"
             return "\(sign)\(m)m"
         case (let h, 0):
-            // z. B. "-1h"
             return "\(sign)\(h)h"
         default:
-            // z. B. "-1h 5m"
             return "\(sign)\(hours)h \(mins)m"
         }
     }

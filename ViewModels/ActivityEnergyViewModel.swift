@@ -15,7 +15,7 @@ final class ActivityEnergyViewModel: ObservableObject {
     /// Aktivitätsenergie heute (Basis: kcal)
     @Published var todayActiveEnergy: Int = 0
 
-    /// 90-Tage-Daten (Basis: kcal, intern) – für Chart gemappt
+    /// 90-Tage-Daten (Basis: kcal, intern)
     @Published var last90DaysData: [DailyStepsEntry] = []
 
     /// Monatliche Aktivitätsenergie (Basis: kcal)
@@ -84,32 +84,32 @@ final class ActivityEnergyViewModel: ObservableObject {
 
     // MARK: - Durchschnittswerte (Activity Energy, Basis kcal)
 
-    /// Durchschnittliche Aktivitätsenergie der letzten 7 Tage
+    /// Durchschnittliche Aktivitätsenergie der letzten 7 Kalendertage **vor heute**
     var avgActiveEnergyLast7Days: Int {
         averageActiveEnergy(last: 7)
     }
 
-    /// Durchschnittliche Aktivitätsenergie der letzten 14 Tage
+    /// Durchschnittliche Aktivitätsenergie der letzten 14 Kalendertage **vor heute**
     var avgActiveEnergyLast14Days: Int {
         averageActiveEnergy(last: 14)
     }
 
-    /// Durchschnittliche Aktivitätsenergie der letzten 30 Tage
+    /// Durchschnittliche Aktivitätsenergie der letzten 30 Kalendertage **vor heute**
     var avgActiveEnergyLast30Days: Int {
         averageActiveEnergy(last: 30)
     }
 
-    /// Durchschnittliche Aktivitätsenergie der letzten 90 Tage
+    /// Durchschnittliche Aktivitätsenergie der letzten 90 Kalendertage **vor heute**
     var avgActiveEnergyLast90Days: Int {
         averageActiveEnergy(last: 90)
     }
 
-    /// Durchschnittliche Aktivitätsenergie der letzten 180 Tage
+    /// Durchschnittliche Aktivitätsenergie der letzten 180 Kalendertage **vor heute**
     var avgActiveEnergyLast180Days: Int {
         averageActiveEnergy(last: 180)
     }
 
-    /// Durchschnittliche Aktivitätsenergie der letzten 365 Tage
+    /// Durchschnittliche Aktivitätsenergie der letzten 365 Kalendertage **vor heute**
     var avgActiveEnergyLast365Days: Int {
         averageActiveEnergy(last: 365)
     }
@@ -126,20 +126,34 @@ final class ActivityEnergyViewModel: ObservableObject {
         ]
     }
 
-    /// Durchschnitt der letzten `days` Tage – ohne heutigen Tag (Basis kcal)
+    /// 🟢 NEU:
+    /// Durchschnitt der letzten `days` **Kalendertage vor heute** (Basis kcal),
+    /// mit diesen Regeln:
+    ///   - heutiger Tag wird ausgeschlossen
+    ///   - Tage ohne Eintrag (activeEnergy <= 0) werden NICHT gewertet
+    ///   - geteilt wird durch die Anzahl der Tage mit Eintrag, nicht durch `days`
     private func averageActiveEnergy(last days: Int) -> Int {
-        guard dailyActiveEnergy365.count > 1 else { return 0 }
+        guard !dailyActiveEnergy365.isEmpty else { return 0 }
 
-        let sorted = dailyActiveEnergy365.sorted { $0.date < $1.date }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
 
-        // heutigen Tag entfernen
-        let withoutToday = Array(sorted.dropLast())
-        guard !withoutToday.isEmpty else { return 0 }
+        // Zeitraum [startDate ... endDate] = [heute - days ... gestern]
+        guard let endDate = calendar.date(byAdding: .day, value: -1, to: today),
+              let startDate = calendar.date(byAdding: .day, value: -days, to: today) else {
+            return 0
+        }
 
-        let slice = withoutToday.suffix(days)
-        let sum = slice.reduce(0) { $0 + $1.activeEnergy }
+        // Nur Einträge im Kalenderraster mit > 0 kcal
+        let filtered = dailyActiveEnergy365.filter { entry in
+            let d = calendar.startOfDay(for: entry.date)
+            return d >= startDate && d <= endDate && entry.activeEnergy > 0
+        }
 
-        return sum / slice.count
+        guard !filtered.isEmpty else { return 0 }
+
+        let sum = filtered.reduce(0) { $0 + $1.activeEnergy }
+        return sum / filtered.count
     }
 
     // MARK: - Unit Conversion & Formatting (kcal <-> kJ)
@@ -174,6 +188,8 @@ final class ActivityEnergyViewModel: ObservableObject {
         let unit = settings.energyUnit
         return formatEnergy(todayActiveEnergy, unit: unit)
     }
+
+    // MARK: - Chart-Daten in der gewählten Einheit (kcal / kJ)
 
     /// 90-Tage-Daten in der aktuell gewählten Einheit für das Chart
     var last90DaysDataForChart: [DailyStepsEntry] {
@@ -213,6 +229,31 @@ final class ActivityEnergyViewModel: ObservableObject {
                 value: converted
             )
         }
+    }
+
+    // MARK: - Standardisierte Scaling-Outputs für SectionCardScaled
+
+    /// Alias für Monatsdaten – standardisiert für alle Domains
+    var monthlyData: [MonthlyMetricEntry] {
+        monthlyActiveEnergyDataForChart
+    }
+
+    /// Skala für Tages-Chart (Energy, Tageswerte)
+    var dailyScale: MetricScaleResult {
+        let values = last90DaysDataForChart.map { Double($0.steps) }
+        return MetricScaleHelper.scale(values, for: .energyDaily)
+    }
+
+    /// Skala für Perioden-Chart (Durchschnittswerte, pro Tag)
+    var periodScale: MetricScaleResult {
+        let values = periodAveragesForChart.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .energyDaily)
+    }
+
+    /// Skala für Monats-Chart (Energy-Monatssummen)
+    var monthlyScale: MetricScaleResult {
+        let values = monthlyData.map { Double($0.value) }
+        return MetricScaleHelper.scale(values, for: .energyMonthly)
     }
 
     // MARK: - Number Formatter

@@ -34,7 +34,8 @@ struct ProteinView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    NutritionSectionCard(
+                    // ✅ Neue, helper-basierte Nutrition-Section-Card
+                    NutritionSectionCardScaled(
                         sectionTitle: "Nutrition",
                         title: "Protein",
                         kpiTitle: "Protein Today",
@@ -43,16 +44,14 @@ struct ProteinView: View {
                         kpiDeltaText: viewModel.formattedDeltaProtein,
                         hasTarget: true,
                         last90DaysData: viewModel.last90DaysDataForChart,
-                        monthlyData: viewModel.monthlyProteinData,
-                        // ⬇️ hier KEIN Int(...) – wir übergeben das Int? direkt
-                        dailyGoalForChart: viewModel.goalValueForChart,
-                        onMetricSelected: onMetricSelected,
-                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"],
-                        monthlyMetricLabel: "Protein / Month",
                         periodAverages: viewModel.periodAverages,
-                        showMonthlyChart: true,
-                        dailyScaleType: .smallInteger,
-                        monthlyScaleType: .smallInteger
+                        monthlyData: viewModel.monthlyProteinData,
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
+                        goalValue: viewModel.goalValueForChart,
+                        onMetricSelected: onMetricSelected,
+                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"]
                     )
                     .padding(.horizontal)
                 }
