@@ -289,36 +289,4 @@ extension HealthStore {
     }
 }
 
-// ============================================================
-// MARK: - NEW NUTRITION EXTENSION FOR OPTION A
-// ============================================================
 
-extension HealthStore {
-
-    // MARK: - Today values (async)
-
-    func fetchTodayCarbs() async throws -> Int {
-        return todayCarbsGrams  // später: echte HealthKit-Query
-    }
-
-    func fetchTodayProtein() async throws -> Int {
-        return todayProteinGrams
-    }
-
-    func fetchTodayFat() async throws -> Int {
-        return todayFatGrams
-    }
-
-    func fetchTodayEnergy() async throws -> Int {
-        return todayNutritionEnergyKcal
-    }
-
-    // MARK: - 14-Day Trend
-
-    func fetchLast14DaysEnergy() async throws -> [(day: Int, energy: Int)] {
-        let entries = last90DaysNutritionEnergy.suffix(14)
-        return entries.enumerated().map { idx, e in
-            (day: idx + 1, energy: e.energyKcal)
-        }
-    }
-}

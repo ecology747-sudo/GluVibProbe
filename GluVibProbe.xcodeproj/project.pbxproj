@@ -445,11 +445,11 @@
 				D0D15DFB2EDAC0CA00DD41E7 /* HealthStore+Weight.swift */,
 				D0D15DFD2EDAC16300DD41E7 /* HealthStore+ActivityEnergy.swift */,
 				D0D15DFF2EDAC1C400DD41E7 /* HealthStore+Steps.swift */,
-				D05873962ED4628D0010C475 /* HealthStore_archive.swift */,
 				D0E88E872EDEE84600A5E470 /* HealthStore+Carbs.swift */,
 				D0E88E912EDEF72A00A5E470 /* HealthStore+Protein.swift */,
 				D0E88E992EDF066700A5E470 /* HealthStore+Fat.swift */,
 				D0E88E9F2EDF0AD100A5E470 /* HealthStore+NutritionEnergy.swift */,
+				D05873962ED4628D0010C475 /* HealthStore_archive.swift */,
 			);
 			path = HealthKit;
 			sourceTree = "<group>";
