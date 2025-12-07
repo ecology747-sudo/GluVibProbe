@@ -1,8 +1,8 @@
 //
-//  HealthStore+Weight.swift
+//  HealthStore+RestingHeartRate.swift                  // !!! NEW
 //  GluVibProbe
 //
-//  Weight-Logik ausgelagert aus HealthStore.swift
+//  Resting-Heart-Rate-Logik (Body Domain)
 //
 
 import Foundation
@@ -11,33 +11,34 @@ import HealthKit
 extension HealthStore {
 
     // ============================================================
-    // MARK: - WEIGHT (kg) – Body Domain
+    // MARK: - RESTING HEART RATE (bpm) – Body Domain
     // ============================================================
 
-    /// Letztes bekanntes Gewicht in kg (unabhängig vom Tag)
-    func fetchWeightToday() {
+    /// Letzter bekannter Resting Heart Rate in bpm
+    func fetchRestingHeartRateToday() {
         if isPreview {
-            // Im Preview setzen wir den Wert direkt im preview()-Factory
+            todayRestingHeartRate =
+                previewDailyRestingHeartRate.last?.restingHeartRate ?? 0   // !!! FIX
             return
         }
 
-        guard let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return }
+        guard let type = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) else {
+            return
+        }
 
-        // ❗ Kein Start-of-day → wir wollen "letztes Gewicht insgesamt"
         let predicate = HKQuery.predicateForSamples(
             withStart: nil,
             end: Date(),
             options: []
         )
 
-        // letzter Eintrag (neueste Messung)
         let sort = NSSortDescriptor(
             key: HKSampleSortIdentifierEndDate,
             ascending: false
         )
 
         let query = HKSampleQuery(
-            sampleType: weightType,
+            sampleType: type,
             predicate: predicate,
             limit: 1,
             sortDescriptors: [sort]
@@ -47,33 +48,29 @@ extension HealthStore {
                 let sample = samples?.first as? HKQuantitySample
             else { return }
 
-            // 🔥 ECHTER HealthKit-Wert als Double
-            let kgDouble = sample.quantity.doubleValue(for: .gramUnit(with: .kilo))
+            let unit = HKUnit.count().unitDivided(by: .minute())
+            let bpm = sample.quantity.doubleValue(for: unit)
 
             DispatchQueue.main.async {
-                // ungefilterter Wert für KPI
-                self.todayWeightKgRaw = kgDouble
-                // gerundeter Int-Wert für Charts etc.
-                self.todayWeightKg    = Int(round(kgDouble))
+                self.todayRestingHeartRate = Int(round(bpm))
             }
         }
 
         healthStore.execute(query)
     }
 
-    /// Tägliches Gewicht der letzten `days` Tage
-    /// 👉 generisch als [DailyStepsEntry], `steps` = weightKg (Int)
-    func fetchWeightDaily(
+    /// Täglicher Ø-Resting-Heart-Rate der letzten `days` Tage
+    func fetchRestingHeartRateDaily(
         last days: Int,
-        completion: @escaping ([DailyStepsEntry]) -> Void
+        completion: @escaping ([RestingHeartRateEntry]) -> Void
     ) {
         if isPreview {
-            let slice = Array(previewDailyWeight.suffix(days))
+            let slice = Array(previewDailyRestingHeartRate.suffix(days))
             DispatchQueue.main.async { completion(slice) }
             return
         }
 
-        guard let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) else {
             return
         }
 
@@ -94,22 +91,24 @@ extension HealthStore {
         let interval = DateComponents(day: 1)
 
         let query = HKStatisticsCollectionQuery(
-            quantityType: weightType,
+            quantityType: type,
             quantitySamplePredicate: predicate,
-            options: .discreteAverage,   // Ø Gewicht pro Tag
+            options: .discreteAverage,
             anchorDate: startDate,
             intervalComponents: interval
         )
 
         query.initialResultsHandler = { _, results, _ in
-            var daily: [DailyStepsEntry] = []
+            var daily: [RestingHeartRateEntry] = []
 
             results?.enumerateStatistics(from: startDate, to: now) { stats, _ in
-                let valueKg = stats.averageQuantity()?.doubleValue(for: .gramUnit(with: .kilo)) ?? 0
+                let unit = HKUnit.count().unitDivided(by: .minute())
+                let bpm = stats.averageQuantity()?.doubleValue(for: unit) ?? 0
+
                 daily.append(
-                    DailyStepsEntry(
+                    RestingHeartRateEntry(
                         date: stats.startDate,
-                        steps: Int(round(valueKg))    // steps = weightKg (Int für Charts)
+                        restingHeartRate: Int(round(bpm))
                     )
                 )
             }
@@ -122,16 +121,14 @@ extension HealthStore {
         healthStore.execute(query)
     }
 
-    /// Gewicht der letzten 90 Tage → für 90d-Chart
-    func fetchLast90DaysWeight() {
-        fetchWeightDaily(last: 90) { [weak self] entries in
-            self?.last90DaysWeight = entries
+    func fetchLast90DaysRestingHeartRate() {
+        fetchRestingHeartRateDaily(last: 90) { [weak self] entries in
+            self?.last90DaysRestingHeartRate = entries
         }
     }
 
-    /// Monatliche Gewichtswerte (Ø Gewicht / Monat)
-    func fetchMonthlyWeight() {
-        fetchWeightDaily(last: 180) { [weak self] entries in
+    func fetchMonthlyRestingHeartRate() {
+        fetchRestingHeartRateDaily(last: 180) { [weak self] entries in
             guard let self else { return }
 
             let calendar = Calendar.current
@@ -140,7 +137,7 @@ extension HealthStore {
             for e in entries {
                 let comps = calendar.dateComponents([.year, .month], from: e.date)
                 var bucket = perMonth[comps] ?? (0, 0)
-                bucket.sum   += e.steps
+                bucket.sum   += e.restingHeartRate
                 bucket.count += 1
                 perMonth[comps] = bucket
             }
@@ -160,7 +157,7 @@ extension HealthStore {
             }
 
             DispatchQueue.main.async {
-                self.monthlyWeight = result
+                self.monthlyRestingHeartRate = result
             }
         }
     }

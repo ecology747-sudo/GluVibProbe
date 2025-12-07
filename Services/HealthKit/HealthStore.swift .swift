@@ -49,8 +49,36 @@ final class HealthStore: ObservableObject {
     // 🟠 WEIGHT (kg)
     // -------------------------
     @Published var todayWeightKg: Int = 0
+    @Published var todayWeightKgRaw: Double = 0    // 🔥 NEU: ungefilterter HealthKit-Wert
     @Published var last90DaysWeight: [DailyStepsEntry] = []
     @Published var monthlyWeight: [MonthlyMetricEntry] = []
+
+    // -------------------------
+    // ❤️ RESTING HEART RATE (bpm)
+    // -------------------------
+    @Published var todayRestingHeartRate: Int = 0          // !!! NEW
+    @Published var last90DaysRestingHeartRate:             // !!! NEW
+        [RestingHeartRateEntry] = []                       // !!! NEW
+    @Published var monthlyRestingHeartRate:                // !!! NEW
+        [MonthlyMetricEntry] = []                          // !!! NEW
+
+    // -------------------------
+    // 🧍‍♂️ BODY FAT (%)
+    // -------------------------
+    @Published var todayBodyFatPercent: Double = 0         // !!! NEW
+    @Published var last90DaysBodyFat:                      // !!! NEW
+        [BodyFatEntry] = []                                // !!! NEW
+    @Published var monthlyBodyFat:                         // !!! NEW
+        [MonthlyMetricEntry] = []                          // !!! NEW
+
+    // -------------------------
+    // 📊 BMI
+    // -------------------------
+    @Published var todayBMI: Double = 0                    // !!! NEW
+    @Published var last90DaysBMI:                          // !!! NEW
+        [BMIEntry] = []                                    // !!! NEW
+    @Published var monthlyBMI:                             // !!! NEW
+        [MonthlyMetricEntry] = []                          // !!! NEW
 
     // -------------------------
     // 🟢 CARBS (g)
@@ -94,6 +122,10 @@ final class HealthStore: ObservableObject {
     var previewDailyFat: [DailyFatEntry] = []
     var previewDailyNutritionEnergy: [DailyNutritionEnergyEntry] = []
 
+    var previewDailyRestingHeartRate: [RestingHeartRateEntry] = []  // !!! NEW
+    var previewDailyBodyFat: [BodyFatEntry] = []                    // !!! NEW
+    var previewDailyBMI: [BMIEntry] = []                            // !!! NEW
+
     // ============================================================
     // MARK: - Authorization
     // ============================================================
@@ -106,6 +138,12 @@ final class HealthStore: ObservableObject {
             let activeEnergyType  = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned),
             let sleepType         = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
             let weightType        = HKQuantityType.quantityType(forIdentifier: .bodyMass),
+            let restingHeartRateType =
+                HKQuantityType.quantityType(forIdentifier: .restingHeartRate),     // !!! NEW
+            let bodyFatType =
+                HKQuantityType.quantityType(forIdentifier: .bodyFatPercentage),    // !!! NEW
+            let bmiType =
+                HKQuantityType.quantityType(forIdentifier: .bodyMassIndex),        // !!! NEW
             let carbsType         = HKQuantityType.quantityType(forIdentifier: .dietaryCarbohydrates),
             let proteinType       = HKQuantityType.quantityType(forIdentifier: .dietaryProtein),
             let fatType           = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal),
@@ -121,6 +159,9 @@ final class HealthStore: ObservableObject {
                 activeEnergyType,
                 sleepType,
                 weightType,
+                restingHeartRateType,                                         // !!! NEW
+                bodyFatType,                                                  // !!! NEW
+                bmiType,                                                      // !!! NEW
                 carbsType,
                 proteinType,
                 fatType,
@@ -148,6 +189,21 @@ final class HealthStore: ObservableObject {
                 self.fetchWeightToday()
                 self.fetchLast90DaysWeight()
                 self.fetchMonthlyWeight()
+
+                // RESTING HEART RATE                                       // !!! NEW
+                self.fetchRestingHeartRateToday()                           // !!! NEW
+                self.fetchLast90DaysRestingHeartRate()                      // !!! NEW
+                self.fetchMonthlyRestingHeartRate()                         // !!! NEW
+
+                // BODY FAT                                                 // !!! NEW
+                self.fetchBodyFatToday()                                    // !!! NEW
+                self.fetchLast90DaysBodyFat()                               // !!! NEW
+                self.fetchMonthlyBodyFat()                                  // !!! NEW
+
+                // BMI                                                      // !!! NEW
+                self.fetchBMIToday()                                        // !!! NEW
+                self.fetchLast90DaysBMI()                                   // !!! NEW
+                self.fetchMonthlyBMI()                                      // !!! NEW
 
                 // CARBS
                 self.fetchCarbsToday()
@@ -204,9 +260,6 @@ extension HealthStore {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        // 🔥 Deine komplette Preview-Generierung bleibt erhalten.
-        // Kürze: Ich lasse alles wie es ist und entferne nichts.
-
         // STEPS
         store.todaySteps = 8_532
         store.previewDailySteps = (0..<365).compactMap { i in
@@ -222,7 +275,6 @@ extension HealthStore {
             .init(monthShort: "Nov", value: 171_000)
         ]
 
-        // ---- (ALLE anderen Preview-Bereiche unverändert gelassen) ----
         // ACTIVITY ENERGY
         store.todayActiveEnergy = 650
         store.previewDailyActiveEnergy = (0..<365).compactMap { i in
@@ -261,8 +313,35 @@ extension HealthStore {
         }.sorted { $0.date < $1.date }
         store.last90DaysWeight = Array(store.previewDailyWeight.suffix(90))
         store.todayWeightKg = store.previewDailyWeight.last?.steps ?? 0
-        // Monatsgewichte generieren
-        // (gekürzt – Logik bleibt exakt wie bei dir)
+
+        // RESTING HEART RATE (Preview)                              // !!! FIX
+        store.previewDailyRestingHeartRate = (0..<365).compactMap { i in
+            let d = calendar.date(byAdding: .day, value: -i, to: today)!
+            let bpm = Int.random(in: 55...75)
+            return RestingHeartRateEntry(date: d, restingHeartRate: bpm)
+        }.sorted { $0.date < $1.date }
+        store.last90DaysRestingHeartRate = Array(store.previewDailyRestingHeartRate.suffix(90))
+        store.todayRestingHeartRate =
+            store.previewDailyRestingHeartRate.last?.restingHeartRate ?? 0   // !!! FIX
+
+        // BODY FAT (Preview)                                           // !!! FIX
+        store.previewDailyBodyFat = (0..<365).compactMap { i in
+            let d = calendar.date(byAdding: .day, value: -i, to: today)!
+            let percent = Double.random(in: 15.0...25.0)
+            return BodyFatEntry(date: d, bodyFatPercent: percent)
+        }.sorted { $0.date < $1.date }
+        store.last90DaysBodyFat = Array(store.previewDailyBodyFat.suffix(90))
+        store.todayBodyFatPercent =
+            store.previewDailyBodyFat.last?.bodyFatPercent ?? 0             // !!! FIX
+
+        // BMI (Preview)                                                 // !!! FIX
+        store.previewDailyBMI = (0..<365).compactMap { i in
+            let d = calendar.date(byAdding: .day, value: -i, to: today)!
+            let bmi = Double.random(in: 22.0...30.0)
+            return BMIEntry(date: d, bmi: bmi)
+        }.sorted { $0.date < $1.date }
+        store.last90DaysBMI = Array(store.previewDailyBMI.suffix(90))
+        store.todayBMI = store.previewDailyBMI.last?.bmi ?? 0              // !!! FIX
 
         // CARBS
         store.todayCarbsGrams = 180
@@ -272,21 +351,70 @@ extension HealthStore {
             return DailyCarbsEntry(date: d, grams: g)
         }.sorted { $0.date < $1.date }
         store.last90DaysCarbs = Array(store.previewDailyCarbs.suffix(90))
-        // monthlyCarbs generieren … (gekürzt)
 
         // PROTEIN
         store.todayProteinGrams = 120
 
         // FAT
         store.todayFatGrams = 70
-        // monthlyFat generieren … (gekürzt)
 
         // NUTRITION ENERGY
         store.todayNutritionEnergyKcal = 2_200
-        // monthlyNutritionEnergy generieren … (gekürzt)
 
         return store
     }
 }
 
+// ============================================================
+// MARK: - NUTRITION ASYNC HELPERS (für Overview & Dashboards)
+// ============================================================
 
+extension HealthStore {
+
+    func fetchTodayCarbs() async throws -> Int {
+        await withCheckedContinuation { continuation in
+            self.fetchCarbsDaily(last: 1) { entries in
+                let value = entries.last?.grams ?? 0
+                continuation.resume(returning: value)
+            }
+        }
+    }
+
+    func fetchTodayProtein() async throws -> Int {
+        await withCheckedContinuation { continuation in
+            self.fetchProteinDaily(last: 1) { entries in
+                let value = entries.last?.grams ?? 0
+                continuation.resume(returning: value)
+            }
+        }
+    }
+
+    func fetchTodayFat() async throws -> Int {
+        await withCheckedContinuation { continuation in
+            self.fetchFatDaily(last: 1) { entries in
+                let value = entries.last?.grams ?? 0
+                continuation.resume(returning: value)
+            }
+        }
+    }
+
+    func fetchTodayEnergy() async throws -> Int {
+        await withCheckedContinuation { continuation in
+            self.fetchNutritionEnergyDaily(last: 1) { entries in
+                let value = entries.last?.energyKcal ?? 0
+                continuation.resume(returning: value)
+            }
+        }
+    }
+
+    func fetchLast14DaysEnergy() async throws -> [(day: Int, energy: Int)] {
+        await withCheckedContinuation { continuation in
+            self.fetchNutritionEnergyDaily(last: 14) { entries in
+                let mapped: [(day: Int, energy: Int)] = entries.enumerated().map { idx, entry in
+                    (day: idx + 1, energy: entry.energyKcal)
+                }
+                continuation.resume(returning: mapped)
+            }
+        }
+    }
+}

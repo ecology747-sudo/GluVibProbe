@@ -17,43 +17,14 @@ extension HealthStore {
 
     /// Summiert Nutrition Energy (kcal) für HEUTE.
     /// Kann später für das KPI "Nutrition Energy Today" genutzt werden.
+    // MARK: - NUTRITION ENERGY – Today (über Daily-Logik)
+
+    /// Heutige Nutrition-Energy (kcal) über dieselbe Daily-Logik wie die Dashboards.
     func fetchNutritionEnergyToday(assign: @escaping (Int) -> Void) {
-        if isPreview {
-            // z. B. 2 200 kcal als Demo
-            DispatchQueue.main.async {
-                assign(2_200)
-            }
-            return
+        fetchNutritionEnergyDailyInternal(last: 1) { entries in
+            let value = entries.last?.energyKcal ?? 0
+            assign(value)
         }
-
-        guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed) else {
-            return
-        }
-
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-
-        let predicate = HKQuery.predicateForSamples(
-            withStart: startOfDay,
-            end: Date(),
-            options: .strictStartDate
-        )
-
-        let query = HKStatisticsQuery(
-            quantityType: type,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum
-        ) { _, result, _ in
-            let value = result?
-                .sumQuantity()?
-                .doubleValue(for: .kilocalorie()) ?? 0
-
-            DispatchQueue.main.async {
-                assign(Int(value))
-            }
-        }
-
-        healthStore.execute(query)
     }
 
     // MARK: - NUTRITION ENERGY – Daily helper (N Tage)

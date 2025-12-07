@@ -14,37 +14,16 @@ extension HealthStore {
 
     /// Summiert Protein (g) für HEUTE.
     /// Kann später fürs KPI-„Today Protein“ genutzt werden.
+    // MARK: - PROTEIN – Today (über Daily-Logik)
+
+    /// Summiert Protein (g) für HEUTE.
+    /// Nutzt intern dieselbe Daily-Logik wie alle anderen Stellen.
+    /// → Single Source of Truth: `fetchProteinDailyInternal(last:assign:)`
     func fetchProteinToday(assign: @escaping (Int) -> Void) {
-        if isPreview {
-            // z.B. 120 g als Demo
-            DispatchQueue.main.async {
-                assign(120)
-            }
-            return
+        fetchProteinDailyInternal(last: 1) { entries in
+            let value = entries.last?.grams ?? 0
+            assign(value)
         }
-
-        guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryProtein) else { return }
-
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        let predicate = HKQuery.predicateForSamples(
-            withStart: startOfDay,
-            end: Date(),
-            options: .strictStartDate
-        )
-
-        let query = HKStatisticsQuery(
-            quantityType: type,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum
-        ) { _, result, _ in
-            let value = result?.sumQuantity()?.doubleValue(for: .gram()) ?? 0
-            DispatchQueue.main.async {
-                assign(Int(value))
-            }
-        }
-
-        healthStore.execute(query)
     }
 
     // MARK: - PROTEIN – Daily helper (N Tage)

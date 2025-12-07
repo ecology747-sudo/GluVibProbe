@@ -8,11 +8,12 @@
 
 import Foundation
 import Combine
+import SwiftUI    // für Color in scoreColor
 
 @MainActor
 final class NutritionOverviewViewModel: ObservableObject {
 
-    // MARK: - Published Output (heutige Rohwerte)
+    // MARK: - Published Output (tagesbezogene Rohwerte)
 
     @Published var todayCarbsGrams: Int   = 0
     @Published var todayProteinGrams: Int = 0
@@ -22,40 +23,54 @@ final class NutritionOverviewViewModel: ObservableObject {
     /// Trend-Daten für den Mini-Energy-Chart (z. B. letzte 14 Tage)
     @Published var energyTrendData: [(day: Int, energy: Int)] = []
 
-    /// Einfacher 0–100 Nutrition-Score für Today (Energy + Macro-Balance)
+    /// 0–100 Nutrition-Score für den aktuell ausgewählten Tag
     @Published var nutritionScore: Int = 0
 
-    /// Kurztext-Insight, z. B. "You are below your energy goal. Today is carb-focused."
+    /// Kurztext-Insight
     @Published var insightText: String = ""
 
     // MARK: - Energy-Balance-spezifische Werte
 
-    /// Heute verbrauchte Aktivitätsenergie (kcal) – aus HealthStore
+    /// Aktive Energie (kcal) für den aktuell ausgewählten Tag
     @Published var todayActiveEnergyKcal: Int = 0
 
-    /// Ruheenergie-Ziel (kcal) – aus SettingsModel (Resting Energy)
+    /// Ruheenergie (kcal) – dynamisch berechnet über RestingEnergyHelper
     @Published var restingEnergyKcal: Int = 0
+
+    // MARK: - Day Selection (Today / Yesterday / DayBefore)
+
+    /// 0 = Today, -1 = Yesterday, -2 = DayBefore
+    /// (Kann später für mehr Tage erweitert werden.)
+    @Published var selectedDayOffset: Int = 0
+
+    /// Das konkrete Datum, das aktuell in der Overview angezeigt wird
+    var selectedDate: Date {
+        let calendar = Calendar.current
+        let base = calendar.startOfDay(for: Date())
+        return calendar.date(byAdding: .day, value: selectedDayOffset, to: base) ?? base
+    }
 
     // MARK: - Dependencies
 
     private let healthStore: HealthStore
     private let settings: SettingsModel
     private var cancellables = Set<AnyCancellable>()
+    private let weightViewModel: WeightViewModel
+    private let insightEngine = NutritionInsightEngine()
+    private let scoreEngine = NutritionScoreEngine()
 
     // MARK: - Init
 
     init(
         healthStore: HealthStore,
-        settings: SettingsModel
+        settings: SettingsModel,
+        weightViewModel: WeightViewModel
     ) {
         self.healthStore = healthStore
-        self.settings    = settings
+        self.settings = settings
+        self.weightViewModel = weightViewModel
 
-        // Resting Energy immer mit SettingsModel verknüpfen
-        restingEnergyKcal = settings.restingEnergy
-        settings.$restingEnergy
-            .receive(on: DispatchQueue.main)
-            .assign(to: &$restingEnergyKcal)
+        updateRestingEnergy()
     }
 
     // MARK: - Helper: Number Formatting
@@ -172,30 +187,45 @@ final class NutritionOverviewViewModel: ObservableObject {
         return Int((Double(todayFatGrams) / Double(targetFatGrams) * 100).rounded())
     }
 
+    // MARK: - Score Color (für den Score-Button im Header)
+
+    var scoreColor: Color {
+        switch nutritionScore {
+        case 0...33:
+            return Color.red
+        case 34...66:
+            return Color.yellow
+        default:
+            return Color.green
+        }
+    }
+
     // MARK: - Loading (HealthKit-Abfrage)
 
     func refresh() async {
-        // 🔹 Aktivitätsenergie für heute anstoßen (nicht async, wie im ActivityEnergyViewModel)
-        healthStore.fetchActiveEnergyToday()
+        // Ziel-Datum für die Abfrage (Today / Yesterday / DayBefore)
+        let targetDate = selectedDate
 
         do {
-            // Diese Funktionen müssen in HealthStore als async/throws existieren
-            async let carbs   = try healthStore.fetchTodayCarbs()
-            async let protein = try healthStore.fetchTodayProtein()
-            async let fat     = try healthStore.fetchTodayFat()
-            async let energy  = try healthStore.fetchTodayEnergy()
+            // Datumsbasierte HealthStore-Methoden
+            async let carbs   = try healthStore.fetchDailyCarbs(for: targetDate)
+            async let protein = try healthStore.fetchDailyProtein(for: targetDate)
+            async let fat     = try healthStore.fetchDailyFat(for: targetDate)
+            async let energy  = try healthStore.fetchDailyNutritionEnergy(for: targetDate)
             async let trend   = try healthStore.fetchLast14DaysEnergy()
+            async let active  = try healthStore.fetchDailyActiveEnergy(for: targetDate)
 
-            let (c, p, f, e, t) = try await (carbs, protein, fat, energy, trend)
+            let (c, p, f, e, t, a) = try await (carbs, protein, fat, energy, trend, active)
 
             todayCarbsGrams   = c
             todayProteinGrams = p
             todayFatGrams     = f
             todayEnergyKcal   = e
             energyTrendData   = t
+            todayActiveEnergyKcal = a
 
-            // Aktivitätsenergie aus HealthStore übernehmen
-            todayActiveEnergyKcal = healthStore.todayActiveEnergy
+            // Resting Energy neu berechnen
+            updateRestingEnergy()
 
             // Abgeleitete Werte aktualisieren (Score + Insight)
             recalculateDerivedValues()
@@ -208,93 +238,91 @@ final class NutritionOverviewViewModel: ObservableObject {
     // MARK: - Derived Values (Score + Insight)
 
     private func recalculateDerivedValues() {
-        nutritionScore = calculateNutritionScore()
-        insightText    = buildInsightText()
+
+        // 1) DayContext aus selectedDayOffset ableiten
+        let dayContext: DayContext
+        switch selectedDayOffset {
+        case 0:
+            dayContext = .today
+        case -1:
+            dayContext = .yesterday
+        case -2:
+            dayContext = .dayBefore
+        default:
+            dayContext = .dayBefore
+        }
+
+        // 2) nowForContext bestimmen:
+        //    – Heute: echte aktuelle Uhrzeit
+        //    – Vergangenheit: 23:00 Uhr des jeweiligen Tages
+        let nowForContext: Date
+        let calendar = Calendar.current
+
+        switch dayContext {
+        case .today:
+            nowForContext = Date()
+        case .yesterday, .dayBefore:
+            let base = selectedDate
+            nowForContext = calendar.date(
+                bySettingHour: 23,
+                minute: 0,
+                second: 0,
+                of: base
+            ) ?? base
+        }
+
+        // 3) Score neu bestimmen (für den aktuell ausgewählten Tag)
+        nutritionScore = calculateNutritionScore(nowForContext: nowForContext)
+
+        // 4) Input für die Insight-Engine bauen
+        let input = NutritionInsightInput(
+            todayEnergyKcal: todayEnergyKcal,
+            todayActiveEnergyKcal: todayActiveEnergyKcal,
+            restingEnergyKcal: restingEnergyKcal,
+            todayCarbsGrams: todayCarbsGrams,
+            todayProteinGrams: todayProteinGrams,
+            todayFatGrams: todayFatGrams,
+            energyBalanceKcal: energyBalanceKcal,
+            carbsShare: carbsShare,
+            proteinShare: proteinShare,
+            fatShare: fatShare,
+            nutritionScore: nutritionScore,
+            dailyEnergyGoal: dailyEnergyGoal,
+            targetCarbsGrams: targetCarbsGrams,
+            targetProteinGrams: targetProteinGrams,
+            targetFatGrams: targetFatGrams,
+            now: nowForContext,
+            dayContext: dayContext
+        )
+
+        // 5) Insight-Text von der Engine holen
+        insightText = insightEngine.makeInsight(for: input)
     }
 
-    /// Sehr einfache erste Version eines 0–100 Scores:
-    /// - Energy-Komponente: wie nah bist du am Daily-Calorie-Goal?
-    /// - Macro-Komponente: wie nah bist du an einer groben Zielverteilung (45C / 25P / 30F)?
-    private func calculateNutritionScore() -> Int {
-        // 1) Energy-Score (0–100)
-        let energyScore: Double
-        if dailyEnergyGoal <= 0 || todayEnergyKcal <= 0 {
-            energyScore = 0
-        } else {
-            let ratio = Double(todayEnergyKcal) / Double(dailyEnergyGoal)
-            // 1.0 = perfekt, je weiter weg, desto schlechter
-            let diff = abs(ratio - 1.0)                      // 0 perfekt, >0 Abweichung
-            let raw  = max(0.0, 1.0 - diff) * 100.0          // diff 0 → 100, diff 1 → 0
-            energyScore = raw
-        }
+    /// Berechnet den täglichen Nutrition-Score (0–100) über die NutritionScoreEngine.
+    private func calculateNutritionScore(nowForContext: Date) -> Int {
+        let input = NutritionScoreInput(
+            todayEnergyKcal: todayEnergyKcal,
+            dailyEnergyGoal: dailyEnergyGoal,
+            todayCarbsGrams: todayCarbsGrams,
+            todayProteinGrams: todayProteinGrams,
+            todayFatGrams: todayFatGrams,
+            carbsShare: carbsShare,
+            proteinShare: proteinShare,
+            fatShare: fatShare,
+            totalMacrosToday: totalMacrosToday,
+            now: nowForContext
+        )
 
-        // 2) Macro-Balance-Score (0–100)
-        let macroScore: Double
-        if totalMacrosToday <= 0 {
-            macroScore = 0
-        } else {
-            // grobe Zielverteilung
-            let idealCarbs   = 0.45
-            let idealProtein = 0.25
-            let idealFat     = 0.30
-
-            let spread =
-                abs(carbsShare   - idealCarbs) +
-                abs(proteinShare - idealProtein) +
-                abs(fatShare     - idealFat)
-
-            // spread 0 → perfekt, ~1.5 → sehr schlecht
-            let raw = max(0.0, 1.5 - spread) / 1.5 * 100.0
-            macroScore = raw
-        }
-
-        // 3) Kombiniert: 60 % Energy, 40 % Makros
-        let combined = energyScore * 0.6 + macroScore * 0.4
-        let clamped  = max(0.0, min(combined, 100.0))
-
-        return Int(clamped.rounded())
+        return scoreEngine.makeScore(from: input)
     }
 
-    /// Baut einen kurzen Insight-Text aus Energy-Status + Macro-Schwerpunkt.
-    private func buildInsightText() -> String {
-        // Kein Data → früher Exit
-        if todayEnergyKcal <= 0 && totalMacrosToday <= 0 {
-            return "No nutrition data recorded yet today."
-        }
+    // MARK: - Resting Energy Berechnung
 
-        var parts: [String] = []
-
-        // 1) Energy-Teil (bezogen auf Daily Calories)
-        if todayEnergyKcal <= 0 {
-            parts.append("No energy intake recorded yet today.")
-        } else {
-            let ratio = Double(todayEnergyKcal) / Double(dailyEnergyGoal)
-
-            switch ratio {
-            case ..<0.8:
-                parts.append("You are currently below your daily energy goal.")
-            case 0.8...1.1:
-                parts.append("You are close to your daily energy goal.")
-            default:
-                parts.append("You are above your daily energy goal.")
-            }
-        }
-
-        // 2) Macro-Schwerpunkt
-        if totalMacrosToday > 0 {
-            let c = carbsShare
-            let p = proteinShare
-            let f = fatShare
-
-            if c >= p && c >= f {
-                parts.append("Today is more carb-focused.")
-            } else if p >= c && p >= f {
-                parts.append("Today is protein-heavy, which can support recovery.")
-            } else {
-                parts.append("Fat intake is relatively high today.")
-            }
-        }
-
-        return parts.joined(separator: " ")
+    /// Berechnet die aktuelle Resting Energy (BMR) auf Basis der Settings (Mifflin–St Jeor)
+    /// und schreibt sie in `restingEnergyKcal`. Aktuell ohne Weight-Override, nur Settings.weightKg.
+    private func updateRestingEnergy() {
+        let bmr = RestingEnergyHelper.restingEnergyFromSettings(settings)
+        restingEnergyKcal = Int(bmr.rounded())
     }
 }

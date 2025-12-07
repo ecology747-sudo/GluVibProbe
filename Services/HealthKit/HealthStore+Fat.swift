@@ -13,38 +13,14 @@ extension HealthStore {
 
     /// Summiert Fett (g) für HEUTE.
     /// Kann später fürs KPI „Fat Today“ genutzt werden.
+    // MARK: - FAT – Today (über Daily-Logik)
+
+    /// Heutiges Fett (g), basierend auf derselben Daily-Logik wie überall sonst.
     func fetchFatToday(assign: @escaping (Int) -> Void) {
-        if isPreview {
-            // z.B. 80 g als Demo
-            DispatchQueue.main.async {
-                assign(80)
-            }
-            return
+        fetchFatDailyInternal(last: 1) { entries in
+            let value = entries.last?.grams ?? 0
+            assign(value)
         }
-
-        guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else { return }
-
-        let calendar   = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-
-        let predicate = HKQuery.predicateForSamples(
-            withStart: startOfDay,
-            end: Date(),
-            options: .strictStartDate
-        )
-
-        let query = HKStatisticsQuery(
-            quantityType: type,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum
-        ) { _, result, _ in
-            let value = result?.sumQuantity()?.doubleValue(for: .gram()) ?? 0
-            DispatchQueue.main.async {
-                assign(Int(value))
-            }
-        }
-
-        healthStore.execute(query)
     }
 
     // MARK: - FAT – Daily helper (N Tage)

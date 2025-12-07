@@ -31,8 +31,9 @@ private struct SettingsSnapshot: Equatable {
     var dailyProtein: Int
     var dailyCalories: Int
     var dailyFat: Int
-    /// 🔹 NEU: Resting Energy
-    var restingEnergy: Int
+
+    // 🔹 neu (HbA1c in Snapshot, für Unsaved-Tracking)
+    var hba1cEntries: [HbA1cEntry]
 }
 
 struct SettingsView: View {
@@ -68,14 +69,15 @@ struct SettingsView: View {
     @State private var veryLowLimit: Int = 55
     @State private var veryHighLimit: Int = 250
 
+    // 🔹 neu (HbA1c-Liste als @State, wird mit SettingsModel synchronisiert)
+    @State private var hba1cEntries: [HbA1cEntry] = []
+
     // MARK: - Nutrition
 
     @State private var dailyCarbs: Int = 200
     @State private var dailyProtein: Int = 80
     @State private var dailyCalories: Int = 2500
     @State private var dailyFat: Int = 70
-    /// 🔹 NEU: Resting Energy (kcal)
-    @State private var restingEnergy: Int = 1800
 
     // MARK: - Aktive Domain
 
@@ -118,7 +120,7 @@ struct SettingsView: View {
             dailyProtein: dailyProtein,
             dailyCalories: dailyCalories,
             dailyFat: dailyFat,
-            restingEnergy: restingEnergy         // 🔹 neu
+            hba1cEntries: hba1cEntries      // 🔹 neu (HbA1c im Snapshot enthalten)
         )
     }
 
@@ -160,12 +162,14 @@ struct SettingsView: View {
         settings.veryLowLimit  = veryLowLimit
         settings.veryHighLimit = veryHighLimit
 
+        // 🔹 neu (HbA1c-Entries ins SettingsModel schreiben)
+        settings.hba1cEntries  = hba1cEntries
+
         // Nutrition
         settings.dailyCarbs    = dailyCarbs
         settings.dailyProtein  = dailyProtein
         settings.dailyCalories = dailyCalories
         settings.dailyFat      = dailyFat
-        settings.restingEnergy = restingEnergy          // 🔹 neu
 
         // In UserDefaults speichern
         settings.saveToDefaults()
@@ -200,12 +204,14 @@ struct SettingsView: View {
         veryLowLimit  = settings.veryLowLimit
         veryHighLimit = settings.veryHighLimit
 
+        // 🔹 neu (HbA1c-Entries aus SettingsModel zurückholen)
+        hba1cEntries  = settings.hba1cEntries
+
         // Nutrition
         dailyCarbs    = settings.dailyCarbs
         dailyProtein  = settings.dailyProtein
         dailyCalories = settings.dailyCalories
         dailyFat      = settings.dailyFat
-        restingEnergy = settings.restingEnergy          // 🔹 neu
 
         // UI- & Model-Flags zurücksetzen
         saveButtonState = .idle
@@ -288,12 +294,14 @@ struct SettingsView: View {
             veryLowLimit  = settings.veryLowLimit
             veryHighLimit = settings.veryHighLimit
 
+            // 🔹 neu (HbA1c-Entries initial aus SettingsModel laden)
+            hba1cEntries  = settings.hba1cEntries
+
             // Nutrition
             dailyCarbs    = settings.dailyCarbs
             dailyProtein  = settings.dailyProtein
             dailyCalories = settings.dailyCalories
             dailyFat      = settings.dailyFat
-            restingEnergy = settings.restingEnergy          // 🔹 neu
 
             DispatchQueue.main.async {
                 didInitialLoad = true
@@ -356,7 +364,8 @@ struct SettingsView: View {
                 glucoseMin:    $glucoseMin,
                 glucoseMax:    $glucoseMax,
                 veryLowLimit:  $veryLowLimit,
-                veryHighLimit: $veryHighLimit
+                veryHighLimit: $veryHighLimit,
+                hba1cEntries:  $hba1cEntries      // 🔹 neu: Binding-Liste an Section übergeben
             )
 
         case .nutrition:
@@ -364,8 +373,7 @@ struct SettingsView: View {
                 dailyCarbs:    $dailyCarbs,
                 dailyProtein:  $dailyProtein,
                 dailyFat:      $dailyFat,
-                dailyCalories: $dailyCalories,
-                restingEnergy: $restingEnergy      // 🔹 NEU: hier einhängen
+                dailyCalories: $dailyCalories
             )
 
         case .units:

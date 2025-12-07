@@ -3,12 +3,21 @@
 //  GluVibProbe
 //
 //  Einfache Activity-Overview:
-//  - Header mit Datum
+//  - Sticky-Header (OverviewHeader) mit Datum
 //  - 2 große Cards: Steps Today & Active Energy Today
 //  - Tap auf Card → wechselt in die jeweilige Metrik (StepsView / ActivityEnergyView)
 //
 
 import SwiftUI
+
+// MARK: - Scroll Offset Preference
+// 👉 Neu: wie bei NutritionOverviewView, um den Scroll-Status für den Header zu erkennen
+private struct ActivityScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
 
 struct ActivityOverviewView: View {
 
@@ -21,6 +30,10 @@ struct ActivityOverviewView: View {
 
     @StateObject private var viewModel: ActivityOverviewViewModel
 
+    // MARK: - State (für Sticky-Header-Background)
+    // 👉 Neu: steuert, ob der OverviewHeader seinen Blur/Background aktivieren soll
+    @State private var hasScrolled: Bool = false
+
     // MARK: - Init
 
     init(viewModel: ActivityOverviewViewModel? = nil) {
@@ -32,65 +45,79 @@ struct ActivityOverviewView: View {
     // MARK: - Body
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
+        ZStack {
+            // MARK: Hintergrund in ACTIVITY-Farbwelt (analog Nutrition/Body)
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.1),
+                    Color.Glu.activityDomain.opacity(0.4)   // ⬅️ Activity-Rot
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
-                // HEADER: Titel + Datum
-                header
+            // 👉 Neu: ZStack, damit der OverviewHeader ÜBER dem ScrollView liegt (wie bei Nutrition)
+            ZStack(alignment: .top) {
 
-                // TWO MAIN CARDS
-                VStack(spacing: 16) {
-                    stepsCard
-                    activeEnergyCard
+                // MARK: - Scrollbarer Inhalt
+                ScrollView {
+                    VStack(spacing: 24) {
+
+                        // 👉 Neu: unsichtbarer GeometryReader misst globalen Offset
+                        GeometryReader { geo in
+                            Color.clear
+                                .preference(
+                                    key: ActivityScrollOffsetKey.self,
+                                    value: geo.frame(in: .global).minY
+                                )
+                        }
+                        .frame(height: 0)
+
+                        // TWO MAIN CARDS (unverändert)
+                        VStack(spacing: 16) {
+                            stepsCard
+                            activeEnergyCard
+                        }
+                    }
+                    // 👉 Neu: kleiner Top-Padding, damit Inhalt UNTER dem Header startet
+                    .padding(.top, 25)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
                 }
+                .onPreferenceChange(ActivityScrollOffsetKey.self) { offset in
+                    // 👉 Neu: sobald nach oben gescrollt wird (offset < 0), Header „aktiv“
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        hasScrolled = offset < 0
+                    }
+                }
+                .refreshable {
+                    await viewModel.refresh()
+                }
+
+                // MARK: - Sticky-Header mit Blur (OverviewHeader)
+                OverviewHeader(
+                    title: "Activity Overview",
+                    subtitle: todayString,                      // Datum wie bei Nutrition
+                    tintColor: Color.Glu.activityDomain,        // Domain-Farbe Activity
+                    hasScrolled: hasScrolled                    // aktuell nicht in Header genutzt, API-ready
+                )
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 24)
         }
-        .background(Color.Glu.backgroundSurface.ignoresSafeArea())
         .task {
-            await viewModel.refresh()
-        }
-        .refreshable {
             await viewModel.refresh()
         }
     }
 }
 
-// MARK: - Header
+// MARK: - Datum-Helper (wie in NutritionOverviewView)
 
 private extension ActivityOverviewView {
-
-    var header: some View {
-        VStack(spacing: 4) {
-
-            Text("Activity Overview")
-                .font(.title2.bold())
-                .foregroundStyle(Color.Glu.primaryBlue)
-
-            HStack {
-                // Linksbündig: Datum
-                Text(Date.now, style: .date)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
-
-                Spacer()
-
-                // Rechtsbündig: kleiner Tag-Label (optional)
-                Text("Today")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.Glu.activityDomain.opacity(0.9))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(Color.Glu.activityDomain.opacity(0.18))
-                    )
-            }
-            .padding(.top, 4)
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+    var todayString: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: Date())
     }
 }
 

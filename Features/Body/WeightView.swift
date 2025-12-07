@@ -14,6 +14,9 @@ struct WeightView: View {
     // 🔗 Settings für Target Weight & Units
     @ObservedObject private var settings = SettingsModel.shared
 
+    // 🔗 HealthStore für den echten Double-Wert aus HealthKit
+    @EnvironmentObject private var healthStore: HealthStore      // 🔥 NEU
+
     let onMetricSelected: (String) -> Void
 
     init(onMetricSelected: @escaping (String) -> Void = { _ in }) {
@@ -24,34 +27,34 @@ struct WeightView: View {
 
         // MARK: - Basis: aktuelle Einheit + kg-Werte aus Model
 
-        let unit           = settings.weightUnit          // .kg oder .lbs
-        let targetWeightKg = settings.targetWeightKg      // Basis immer kg
-        let currentKg      = viewModel.todayWeightKg      // Basis immer kg
+        let unit              = settings.weightUnit           // .kg oder .lbs
+        let targetWeightKgInt = settings.targetWeightKg       // Basis-Target (Int, wie gehabt)
+        let currentKgInt      = viewModel.effectiveTodayWeightKg   // Fallback-Int
 
-        // MARK: - KPI-Texte (nutzen zentrale WeightUnit-Logik)
+        // 🔥 ECHTER HealthKit-Wert als Double für KPI
+        let currentKgRaw      = healthStore.todayWeightKgRaw
 
-        let targetWeightText: String = unit.formatted(fromKg: targetWeightKg)
-        let currentWeightText: String = unit.formatted(fromKg: currentKg)
+        // Wenn HealthKit einen Double-Wert liefert → den nehmen,
+        // sonst auf das bisherige Int-Fallback gehen.
+        let currentKgForKPI: Double = currentKgRaw > 0
+            ? currentKgRaw
+            : Double(currentKgInt)
 
-        let deltaText: String = {
-            guard currentKg > 0, targetWeightKg > 0 else { return "–" }
+        let targetKgForKPI: Double = Double(targetWeightKgInt)
 
-            // Differenz immer in kg berechnen
-            let diffKg = currentKg - targetWeightKg
-            if diffKg == 0 {
-                return "0 \(unit.label)"
-            }
+        // MARK: - KPI-Texte (jetzt mit echter Nachkommastelle)
 
-            let sign = diffKg > 0 ? "+" : "−"
-            let diffDisplay = unit.convertedValue(fromKg: abs(diffKg))
-            return "\(sign)\(diffDisplay) \(unit.label)"
-        }()
+        let targetWeightText: String  = formatWeightKPI(kg: targetKgForKPI, unit: unit)
+        let currentWeightText: String = formatWeightKPI(kg: currentKgForKPI, unit: unit)
+        let deltaText: String         = formatDeltaKPI(currentKg: currentKgForKPI,
+                                                       targetKg: targetKgForKPI,
+                                                       unit: unit)
 
-        // Zielwert für Linie im Chart (in Anzeigeneinheit)
+        // Zielwert für Linie im Chart (weiterhin Int, keine Nachkommastellen nötig)
         let goalForChart: Int? = {
-            guard targetWeightKg > 0 else { return nil }
-            let converted = unit.convertedValue(fromKg: targetWeightKg)
-            return converted > 0 ? converted : nil
+            guard targetWeightKgInt > 0 else { return nil }
+            let convertedInt = unit.convertedValue(fromKg: targetWeightKgInt)
+            return convertedInt > 0 ? convertedInt : nil
         }()
 
         // MARK: - View
@@ -80,9 +83,16 @@ struct WeightView: View {
                         monthlyScale: viewModel.monthlyScale,
                         goalValue: goalForChart,
                         onMetricSelected: onMetricSelected,
-                        metrics: ["Sleep", "Weight"],
+                        metrics: [
+                            "Weight",
+                            "Sleep",
+                            "BMI",
+                            "Body Fat",
+                            "Resting Heart Rate"
+                        ],
                         showMonthlyChart: false,
-                        scaleType: .weightKg       // ⬅️ neu
+                        scaleType: .weightKg,
+                        chartStyle: .bar
                     )
                     .padding(.horizontal)
 
@@ -95,6 +105,65 @@ struct WeightView: View {
         }
         .onAppear {
             viewModel.onAppear()
+        }
+    }
+}
+
+// MARK: - KPI Formatting Helpers (1 echte Nachkommastelle)
+
+private extension WeightView {
+
+    /// Formatiert einen kg-Wert für KPI (Target / Current) mit 1 Nachkommastelle,
+    /// z. B. "94,3 kg" oder "207,7 lbs" – basierend auf der eingestellten Einheit.
+    func formatWeightKPI(kg: Double, unit: WeightUnit) -> String {
+        guard kg > 0 else { return "–" }
+
+        let valueInUnit = convertFromKg(kg, to: unit)
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+
+        let text = formatter.string(from: NSNumber(value: valueInUnit))
+            ?? String(format: "%.1f", valueInUnit)
+
+        return "\(text) \(unit.label)"
+    }
+
+    /// Formatiert das Delta zwischen aktuellem und Zielgewicht:
+    /// "+1,7 kg", "−2,3 kg" – ebenfalls mit 1 Nachkommastelle, basierend auf echten Doubles.
+    func formatDeltaKPI(currentKg: Double, targetKg: Double, unit: WeightUnit) -> String {
+        guard currentKg > 0, targetKg > 0 else { return "–" }
+
+        let diffKg = currentKg - targetKg
+        if abs(diffKg) < 0.0001 {
+            return "0,0 \(unit.label)"
+        }
+
+        let sign = diffKg > 0 ? "+" : "−"
+        let diffAbsKg = abs(diffKg)
+
+        let valueInUnit = convertFromKg(diffAbsKg, to: unit)
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+
+        let text = formatter.string(from: NSNumber(value: valueInUnit))
+            ?? String(format: "%.1f", valueInUnit)
+
+        return "\(sign)\(text) \(unit.label)"
+    }
+
+    /// Umrechnung kg → gewählte Einheit als Double
+    func convertFromKg(_ valueKg: Double, to unit: WeightUnit) -> Double {
+        switch unit {
+        case .kg:
+            return valueKg
+        case .lbs:
+            return valueKg * 2.20462
         }
     }
 }

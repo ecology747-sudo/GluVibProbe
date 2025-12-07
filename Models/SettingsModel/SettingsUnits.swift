@@ -72,8 +72,24 @@ extension WeightUnit {
     }
 
     /// Formatiert einen kg-Wert inkl. Einheit,
-    /// z. B. "82 kg" oder "181 lbs"
+    /// jetzt IMMER mit genau 1 Nachkommastelle.
+    ///
+    /// Beispiele:
+    /// - 82 → "82,0 kg"
+    /// - 75 → "75,0 kg"
+    /// - bei lbs: "181,0 lbs" (basierend auf gerundetem Int)
     func formatted(fromKg kg: Int) -> String {
-        "\(convertedValue(fromKg: kg)) \(label)"
+        let convertedInt = convertedValue(fromKg: kg)
+        let converted = Double(convertedInt)
+
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.minimumFractionDigits = 1   // genau 1 Nachkommastelle
+        f.maximumFractionDigits = 1
+
+        let numberString = f.string(from: NSNumber(value: converted))
+            ?? String(format: "%.1f", converted)
+
+        return "\(numberString) \(label)"
     }
 }

@@ -2,82 +2,80 @@
 //  SettingsModel.swift
 //  GluVibProbe
 //
+//  Zentrales Modell für alle Einstellungen & Zielwerte der App.
+//  Inkl. HbA1c-Liste (Metabolic Domain)
+//
 
 import Foundation
-import Combine   // wichtig für @Published & ObservableObject
+import Combine
 
-/// Zentrales Modell für alle Einstellungen & Zielwerte der App.
 final class SettingsModel: ObservableObject {
 
-    // Singleton für einfachen Zugriff im Projekt
+    // Singleton
     static let shared = SettingsModel()
-    
+
     // MARK: - Unsaved Changes Flag
-    
-    /// True, wenn es ungespeicherte Änderungen in der SettingsView gibt
     @Published var hasUnsavedChanges: Bool = false
-    
-    /// Markiert, dass es ungespeicherte Änderungen gibt
+
     func markUnsavedChanges() {
         hasUnsavedChanges = true
     }
 
-    /// Setzt den Unsaved-Status zurück (z. B. nach dem Speichern oder Laden)
     func clearUnsavedChanges() {
         hasUnsavedChanges = false
     }
 
     // MARK: - Published Values
 
-    /// Tagesziel für Schritte
     @Published var dailyStepGoal: Int = 10_000
-
-    /// Tagesziel für Schlaf in Minuten (z. B. 8 h = 480)
     @Published var dailySleepGoalMinutes: Int = 8 * 60
-    
-    // MARK: - Personal Settings
 
+    // MARK: Personal
     @Published var gender: String = "Male"
     @Published var birthDate: Date = Date()
     @Published var heightCm: Int = 170
     @Published var weightKg: Int = 75
     @Published var targetWeightKg: Int = 75
 
-    // MARK: - Units
-
+    // MARK: Units
     @Published var weightUnit: WeightUnit = .kg
     @Published var heightUnit: HeightUnit = .cm
     @Published var energyUnit: EnergyUnit = .kcal
     @Published var distanceUnit: DistanceUnit = .kilometers
-    // glucoseUnit hast du ja schon oben bei Metabolic
-    
-    // MARK: - Metabolic Targets
+    @Published var glucoseUnit: GlucoseUnit = .mgdL
 
+    // MARK: Metabolic Targets
     @Published var glucoseMin: Int = 70
     @Published var glucoseMax: Int = 180
     @Published var veryLowLimit: Int = 55
     @Published var veryHighLimit: Int = 250
-    @Published var glucoseUnit: GlucoseUnit = .mgdL
-    
-    // MARK: - Nutrition Targets
 
-    @Published var dailyCarbs: Int = 200       // g
-    @Published var dailyProtein: Int = 80      // g
-    @Published var dailyCalories: Int = 2500   // kcal
-    @Published var dailyFat: Int = 70          // g
+    // MARK: Nutrition Targets
+    @Published var dailyCarbs: Int = 200
+    @Published var dailyProtein: Int = 80
+    @Published var dailyCalories: Int = 2500
+    @Published var dailyFat: Int = 70
 
-    /// 🔹 NEU: Resting Energy (z. B. Grundumsatz in kcal/Tag)
-    @Published var restingEnergy: Int = 1800   // kcal (Startwert, beliebig anpassbar)
+    // ---------------------------------------------------------------
+    // MARK: - NEW HBA1C ENTRIES (Metabolic Domain)
+    // ---------------------------------------------------------------
+    @Published var hba1cEntries: [HbA1cEntry] = []   // NEW
+    // Immer der aktuellste HbA1c-Wert (nach Datum)
+    var latestHbA1cEntry: HbA1cEntry? {
+        hba1cEntries.max(by: { $0.date < $1.date })
+    }
 
+    /// Nur der Prozentwert des neuesten Eintrags (z.B. 6.7)
+    var latestHbA1cValuePercent: Double? {
+        latestHbA1cEntry?.valuePercent
+    }
 
-    // MARK: - Persistenz (UserDefaults)
+    // ---------------------------------------------------------------
 
-    /// Zugriff auf UserDefaults
     private let defaults = UserDefaults.standard
 
-    /// Alle Schlüssel, unter denen wir Einstellungen speichern
+    // MARK: - UserDefaults Keys
     private enum Keys {
-
         // Steps
         static let dailyStepGoal          = "settings_dailyStepGoal"
         static let dailySleepGoalMinutes  = "settings_dailySleepGoalMinutes"
@@ -107,106 +105,79 @@ final class SettingsModel: ObservableObject {
         static let dailyProtein  = "settings_dailyProtein"
         static let dailyCalories = "settings_dailyCalories"
         static let dailyFat      = "settings_dailyFat"
-        /// 🔹 NEU: Resting Energy
-        static let restingEnergy = "settings_restingEnergy"
-    }
 
+        // -----------------------------------------------------------
+        // MARK: - NEW KEY FOR HBA1C STORAGE
+        // -----------------------------------------------------------
+        static let hba1cEntries  = "settings_hba1cEntries"   // NEW
+    }
 
     // MARK: - Init
-
     private init() {
-        loadFromDefaults()   // ⬅️ Beim Start Werte aus UserDefaults laden
-        clearUnsavedChanges() // Nach dem Laden: Zustand ist "clean"
+        loadFromDefaults()
+        clearUnsavedChanges()
     }
 
-
-    // MARK: - Load-Funktion
-
-    /// Lädt gespeicherte Werte aus UserDefaults.
-    /// Wird beim App-Start im init() ausgeführt.
+    // MARK: - Load
     func loadFromDefaults() {
 
-        // MARK: Steps / Sleep
+        // Steps / Sleep
         if defaults.object(forKey: Keys.dailyStepGoal) != nil {
-            self.dailyStepGoal = defaults.integer(forKey: Keys.dailyStepGoal)
+            dailyStepGoal = defaults.integer(forKey: Keys.dailyStepGoal)
+        }
+        if defaults.object(forKey: Keys.dailySleepGoalMinutes) != nil {
+            dailySleepGoalMinutes = defaults.integer(forKey: Keys.dailySleepGoalMinutes)
         }
 
-        if defaults.object(forKey: Keys.dailySleepGoalMinutes) != nil {
-            self.dailySleepGoalMinutes = defaults.integer(forKey: Keys.dailySleepGoalMinutes)
-        }
-        
-        // MARK: Personal
+        // Personal
         if let genderValue = defaults.string(forKey: Keys.gender) {
             gender = genderValue
         }
-
         if defaults.object(forKey: Keys.birthDate) != nil {
-            let time = defaults.double(forKey: Keys.birthDate)
-            birthDate = Date(timeIntervalSince1970: time)
+            birthDate = Date(timeIntervalSince1970: defaults.double(forKey: Keys.birthDate))
         }
-
         if defaults.object(forKey: Keys.heightCm) != nil {
             heightCm = defaults.integer(forKey: Keys.heightCm)
         }
-
         if defaults.object(forKey: Keys.weightKg) != nil {
             weightKg = defaults.integer(forKey: Keys.weightKg)
         }
-
         if defaults.object(forKey: Keys.targetWeightKg) != nil {
             targetWeightKg = defaults.integer(forKey: Keys.targetWeightKg)
         }
-        
-        // MARK: Units
-        if let weightUnitRaw = defaults.string(forKey: Keys.weightUnit),
-           let unit = WeightUnit(rawValue: weightUnitRaw) {
-            weightUnit = unit
+
+        // Units
+        if let raw = defaults.string(forKey: Keys.weightUnit), let v = WeightUnit(rawValue: raw) {
+            weightUnit = v
+        }
+        if let raw = defaults.string(forKey: Keys.heightUnit), let v = HeightUnit(rawValue: raw) {
+            heightUnit = v
+        }
+        if let raw = defaults.string(forKey: Keys.energyUnit), let v = EnergyUnit(rawValue: raw) {
+            energyUnit = v
+        }
+        if let raw = defaults.string(forKey: Keys.distanceUnit), let v = DistanceUnit(rawValue: raw) {
+            distanceUnit = v
+        }
+        if let raw = defaults.string(forKey: Keys.glucoseUnit), let v = GlucoseUnit(rawValue: raw) {
+            glucoseUnit = v
         }
 
-        if let heightUnitRaw = defaults.string(forKey: Keys.heightUnit),
-           let unit = HeightUnit(rawValue: heightUnitRaw) {
-            heightUnit = unit
-        }
-
-        if let energyUnitRaw = defaults.string(forKey: Keys.energyUnit),
-           let unit = EnergyUnit(rawValue: energyUnitRaw) {
-            energyUnit = unit
-        }
-
-        if let distanceUnitRaw = defaults.string(forKey: Keys.distanceUnit),
-           let unit = DistanceUnit(rawValue: distanceUnitRaw) {
-            distanceUnit = unit
-        }
-
-        if let glucoseUnitRaw = defaults.string(forKey: Keys.glucoseUnit),
-           let unit = GlucoseUnit(rawValue: glucoseUnitRaw) {
-            glucoseUnit = unit
-        }
-        
-        // MARK: Metabolic
-
+        // Metabolic
         if defaults.object(forKey: Keys.glucoseMin) != nil {
             glucoseMin = defaults.integer(forKey: Keys.glucoseMin)
         }
-
         if defaults.object(forKey: Keys.glucoseMax) != nil {
             glucoseMax = defaults.integer(forKey: Keys.glucoseMax)
         }
-
         if defaults.object(forKey: Keys.veryLowLimit) != nil {
             veryLowLimit = defaults.integer(forKey: Keys.veryLowLimit)
         }
-
         if defaults.object(forKey: Keys.veryHighLimit) != nil {
             veryHighLimit = defaults.integer(forKey: Keys.veryHighLimit)
         }
 
-        if let unitRaw = defaults.string(forKey: Keys.glucoseUnit),
-           let unit = GlucoseUnit(rawValue: unitRaw) {
-            glucoseUnit = unit
-        }
-        
-        // MARK: Nutrition
+        // Nutrition
         if defaults.object(forKey: Keys.dailyCarbs) != nil {
             dailyCarbs = defaults.integer(forKey: Keys.dailyCarbs)
         }
@@ -219,55 +190,57 @@ final class SettingsModel: ObservableObject {
         if defaults.object(forKey: Keys.dailyFat) != nil {
             dailyFat = defaults.integer(forKey: Keys.dailyFat)
         }
-        /// 🔹 NEU: Resting Energy laden
-        if defaults.object(forKey: Keys.restingEnergy) != nil {
-            restingEnergy = defaults.integer(forKey: Keys.restingEnergy)
-        }
 
-        // Nach dem Laden: Zustand ist konsistent → keine unsaved changes
-        clearUnsavedChanges()
+        // -----------------------------------------------------------
+        // MARK: - NEW HBA1C LOAD LOGIC
+        // -----------------------------------------------------------
+        if let data = defaults.data(forKey: Keys.hba1cEntries) {
+            if let decoded = try? JSONDecoder().decode([HbA1cEntry].self, from: data) {
+                hba1cEntries = decoded
+            }
+        }
     }
 
-
-    // MARK: - Save-Funktion
-
-    /// Speichert alle relevanten Settings-Werte in UserDefaults.
-    /// Wird später vom Save-Button in der SettingsView aufgerufen.
+    // MARK: - Save
     func saveToDefaults() {
 
-        // MARK: Steps / Sleep
+        // Steps / Sleep
         defaults.set(dailyStepGoal,          forKey: Keys.dailyStepGoal)
         defaults.set(dailySleepGoalMinutes,  forKey: Keys.dailySleepGoalMinutes)
 
-        // MARK: Personal
-        defaults.set(gender,                        forKey: Keys.gender)
+        // Personal
+        defaults.set(gender, forKey: Keys.gender)
         defaults.set(birthDate.timeIntervalSince1970, forKey: Keys.birthDate)
-        defaults.set(heightCm,                      forKey: Keys.heightCm)
-        defaults.set(weightKg,                      forKey: Keys.weightKg)
-        defaults.set(targetWeightKg,                forKey: Keys.targetWeightKg)
+        defaults.set(heightCm,       forKey: Keys.heightCm)
+        defaults.set(weightKg,       forKey: Keys.weightKg)
+        defaults.set(targetWeightKg, forKey: Keys.targetWeightKg)
 
-        // MARK: Units
+        // Units
         defaults.set(weightUnit.rawValue,   forKey: Keys.weightUnit)
         defaults.set(heightUnit.rawValue,   forKey: Keys.heightUnit)
         defaults.set(energyUnit.rawValue,   forKey: Keys.energyUnit)
         defaults.set(distanceUnit.rawValue, forKey: Keys.distanceUnit)
         defaults.set(glucoseUnit.rawValue,  forKey: Keys.glucoseUnit)
 
-        // MARK: Metabolic
+        // Metabolic
         defaults.set(glucoseMin,    forKey: Keys.glucoseMin)
         defaults.set(glucoseMax,    forKey: Keys.glucoseMax)
         defaults.set(veryLowLimit,  forKey: Keys.veryLowLimit)
         defaults.set(veryHighLimit, forKey: Keys.veryHighLimit)
 
-        // MARK: Nutrition
+        // Nutrition
         defaults.set(dailyCarbs,    forKey: Keys.dailyCarbs)
         defaults.set(dailyProtein,  forKey: Keys.dailyProtein)
         defaults.set(dailyCalories, forKey: Keys.dailyCalories)
         defaults.set(dailyFat,      forKey: Keys.dailyFat)
-        /// 🔹 NEU: Resting Energy speichern
-        defaults.set(restingEnergy, forKey: Keys.restingEnergy)
-        
-        // Nach erfolgreichem Speichern: keine unsaved changes mehr
+
+        // -----------------------------------------------------------
+        // MARK: - NEW HBA1C SAVE LOGIC
+        // -----------------------------------------------------------
+        if let encoded = try? JSONEncoder().encode(hba1cEntries) {
+            defaults.set(encoded, forKey: Keys.hba1cEntries)
+        }
+
         clearUnsavedChanges()
     }
 }

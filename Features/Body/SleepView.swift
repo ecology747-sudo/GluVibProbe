@@ -43,9 +43,16 @@ struct SleepView: View {
                         monthlyScale: viewModel.monthlyScale,
                         goalValue: Int(viewModel.goalValueForChart),
                         onMetricSelected: onMetricSelected,
-                        metrics: ["Sleep", "Weight"],
+                        metrics: [                       // !!! UPDATED – alle 5 Body-Metriken
+                            "Weight",
+                            "Sleep",
+                            "BMI",
+                            "Body Fat",
+                            "Resting Heart Rate"
+                        ],
                         showMonthlyChart: true,
-                        scaleType: .sleepMinutes
+                        scaleType: .sleepMinutes,
+                        chartStyle: .bar               // !!! NEW – Last 90 Days als Line-Chart
                     )
                     .padding(.horizontal)
                 }

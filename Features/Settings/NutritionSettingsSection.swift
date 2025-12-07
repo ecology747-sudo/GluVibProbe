@@ -8,7 +8,7 @@ import SwiftUI
 /// Domain: NUTRITION – Targets für Carbs, Protein, Fat, Calories
 ///
 /// - Nutzt die zentrale Domain-Farbe: Color.Glu.nutritionAccent (Aqua)
-/// - Zeigt nur den Nutrition-Bereich (Daily Carbs, Protein, Fat, Calories, Resting Energy)
+/// - Zeigt nur den Nutrition-Bereich (Daily Carbs, Protein, Fat, Calories)
 /// - Optik wie eine Domain-Kachel (analog BodySettingsSection / ActivitySettingsSection)
 struct NutritionSettingsSection: View {
 
@@ -18,7 +18,6 @@ struct NutritionSettingsSection: View {
     @Binding var dailyProtein: Int
     @Binding var dailyFat: Int
     @Binding var dailyCalories: Int
-    @Binding var restingEnergy: Int    // 🔥 NEU
 
     // MARK: - Sheet Flags
 
@@ -26,7 +25,6 @@ struct NutritionSettingsSection: View {
     @State private var showProteinSheet: Bool = false
     @State private var showFatSheet: Bool = false
     @State private var showCaloriesSheet: Bool = false
-    @State private var showRestingEnergySheet: Bool = false   // 🔥 NEU
 
     // MARK: - Label-Helper
 
@@ -43,10 +41,6 @@ struct NutritionSettingsSection: View {
     }
 
     private func caloriesLabel(_ kcal: Int) -> String {
-        "\(kcal) kcal"
-    }
-
-    private func restingEnergyLabel(_ kcal: Int) -> String {   // 🔥 NEU
         "\(kcal) kcal"
     }
 
@@ -89,7 +83,6 @@ struct NutritionSettingsSection: View {
                     proteinRow
                     fatRow
                     caloriesRow
-                    restingEnergyRow    // 🔥 NEU
                 }
                 .padding(16)
             }
@@ -201,31 +194,6 @@ struct NutritionSettingsSection: View {
         }
     }
 
-    // 🔹 Resting Energy – einzeilig + Sheet  🔥 NEU
-    private var restingEnergyRow: some View {
-        Button { showRestingEnergySheet = true } label: {
-            HStack {
-                Text("Resting Energy")
-                    .font(.subheadline)
-                    .foregroundColor(Color.Glu.primaryBlue)
-
-                Spacer()
-
-                Text(restingEnergyLabel(restingEnergy))
-                    .font(.body.weight(.medium))
-                    .foregroundColor(Color.Glu.primaryBlue)
-
-                Image(systemName: "chevron.up.chevron.down")
-                    .foregroundColor(Color.Glu.primaryBlue.opacity(0.7))
-            }
-            .padding(.vertical, 4)
-        }
-        .buttonStyle(.plain)
-        .sheet(isPresented: $showRestingEnergySheet) {
-            restingEnergySheet
-        }
-    }
-
     // MARK: - Sheets
 
     private var carbsSheet: some View {
@@ -323,31 +291,6 @@ struct NutritionSettingsSection: View {
         .padding()
         .presentationDetents([.fraction(0.45)])
     }
-
-    // 🔹 Resting Energy Sheet  🔥 NEU
-    private var restingEnergySheet: some View {
-        VStack(spacing: 16) {
-            Text("Resting Energy")
-                .font(.headline)
-                .foregroundColor(Color.Glu.primaryBlue)
-
-            Picker("", selection: $restingEnergy) {
-                // 25-kcal-Schritte, 800–4 000 kcal (typischer Ruheenergie-Bereich)
-                ForEach(Array(stride(from: 800, through: 4_000, by: 25)), id: \.self) { kcal in
-                    Text(restingEnergyLabel(kcal))
-                        .font(.title2)
-                        .foregroundColor(Color.Glu.primaryBlue)
-                        .tag(kcal)
-                }
-            }
-            .pickerStyle(.wheel)
-            .frame(maxHeight: 260)
-
-            doneButton("Done") { showRestingEnergySheet = false }
-        }
-        .padding()
-        .presentationDetents([.fraction(0.45)])
-    }
 }
 
 // MARK: - Preview
@@ -359,8 +302,7 @@ struct NutritionSettingsSection: View {
                 dailyCarbs:    .constant(200),
                 dailyProtein:  .constant(80),
                 dailyFat:      .constant(70),
-                dailyCalories: .constant(2500),
-                restingEnergy: .constant(1800)
+                dailyCalories: .constant(2500)
             )
         }
     }

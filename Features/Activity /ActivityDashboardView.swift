@@ -45,7 +45,11 @@ struct ActivityDashboardView: View {
         // -----------------------------------------------------
         // Body-Screens → ebenfalls wegparken
         // -----------------------------------------------------
-        case .sleep, .weight:
+        case .sleep,
+             .weight,
+             .bmi,                // ✅ NEW
+             .bodyFat,            // ✅ NEW
+             .restingHeartRate:   // ✅ NEW
             StepsView(onMetricSelected: handleMetricSelection)
         }
     }
@@ -72,7 +76,7 @@ struct ActivityDashboardView: View {
     }
 }
 
-#Preview {
+#Preview("ActivityDashboardView") {
     let previewStore = HealthStore.preview()
     let previewState = AppState()
 

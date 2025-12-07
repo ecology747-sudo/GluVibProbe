@@ -92,8 +92,12 @@ struct ContentView: View {
     private var bodyRootView: some View {
         switch appState.currentStatsScreen {
 
-        case .sleep, .weight:
-            // 👉 Detail-Screens (Sleep / Weight)
+        case .sleep,
+             .weight,
+             .bmi,
+             .bodyFat,
+             .restingHeartRate:
+            // 👉 Alle Body-Detail-Screens (5 Metriken)
             BodyDashboardView()
 
         default:
@@ -146,8 +150,11 @@ struct ContentView: View {
             appState.currentStatsScreen = .nutritionOverview
 
         case .activity:
-            // 👉 Sinnvoll: Steps als Default-Metrik
-            appState.currentStatsScreen = .steps
+            // 🔹 ÄNDERUNG:
+            // Bisher: appState.currentStatsScreen = .steps
+            // → hat direkt das Activity-Dashboard geöffnet.
+            // Jetzt: Activity startet wie Body/Nutrition mit Overview.
+            appState.currentStatsScreen = .none
 
         case .body:
             // 👉 Immer mit Overview starten (jede andere Case ⇒ Overview)

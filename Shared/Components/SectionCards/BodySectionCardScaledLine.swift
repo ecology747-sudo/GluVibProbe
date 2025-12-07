@@ -1,62 +1,61 @@
-//
-//  BodySectionCardScaled.swift
-//  GluVibProbe
-//
-//  Helper-basierte SectionCard für Body-Metriken
-//  (Weight, Sleep).
-//
+// !!! NEW FILE
+//  BodySectionCardScaledLine.swift                                      // !!! NEW
+//  GluVibProbe                                                           // !!! NEW
+//                                                                        // !!! NEW
+//  Helper-basierte SectionCard für Body-Metriken mit LineChart           // !!! NEW
+//  (für BMI, Body Fat, Resting Heart Rate).                              // !!! NEW
 
-import SwiftUI
+import SwiftUI                                                            // !!! NEW
 
-struct BodySectionCardScaled: View {
+struct BodySectionCardScaledLine: View {                                  // !!! NEW
 
-    // MARK: - Eingabewerte
+    // MARK: - Eingabewerte                                               // !!! NEW
 
-    let sectionTitle: String
-    let title: String
+    let sectionTitle: String                                              // !!! NEW
+    let title: String                                                     // !!! NEW
 
-    // KPI-Werte
-    let kpiTitle: String
-    let kpiTargetText: String
-    let kpiCurrentText: String
-    let kpiDeltaText: String
-    let hasTarget: Bool
+    // KPI-Werte                                                          // !!! NEW
+    let kpiTitle: String                                                  // !!! NEW
+    let kpiTargetText: String                                             // !!! NEW
+    let kpiCurrentText: String                                            // !!! NEW
+    let kpiDeltaText: String                                              // !!! NEW
+    let hasTarget: Bool                                                   // !!! NEW
 
-    // Originaldaten (90 Tage, Perioden, Monat) – bereits in Display-Einheit
-    let last90DaysData: [DailyStepsEntry]
-    let periodAverages: [PeriodAverageEntry]
-    let monthlyData: [MonthlyMetricEntry]
+    // Originaldaten (90 Tage, Perioden, Monat) – bereits in Display-Einheit  // !!! NEW
+    let last90DaysData: [DailyStepsEntry]                                 // !!! NEW
+    let periodAverages: [PeriodAverageEntry]                              // !!! NEW
+    let monthlyData: [MonthlyMetricEntry]                                 // !!! NEW
 
-    // Skalen aus dem ViewModel
-    let dailyScale: MetricScaleResult
-    let periodScale: MetricScaleResult
-    let monthlyScale: MetricScaleResult
+    // Skalen aus dem ViewModel                                           // !!! NEW
+    let dailyScale: MetricScaleResult                                     // !!! NEW
+    let periodScale: MetricScaleResult                                    // !!! NEW
+    let monthlyScale: MetricScaleResult                                   // !!! NEW
 
-    /// Zielwert (z. B. Target Weight oder Target Sleep, in Display-Einheit)
-    let goalValue: Int?
+    /// Zielwert (z. B. Target BMI, Target Body Fat)                      // !!! NEW
+    let goalValue: Int?                                                   // !!! NEW
 
-    /// Chip-Callback (z. B. Sleep / Weight)
-    let onMetricSelected: (String) -> Void
-    let metrics: [String]
+    /// Chip-Callback (z. B. "BMI" / "Body Fat" / "Resting HR")           // !!! NEW
+    let onMetricSelected: (String) -> Void                                // !!! NEW
+    let metrics: [String]                                                 // !!! NEW
 
-    /// Steuert, ob der Monats-Chart angezeigt wird
-    let showMonthlyChart: Bool
+    /// Steuert, ob der Monats-Chart angezeigt wird                        // !!! NEW
+    let showMonthlyChart: Bool                                            // !!! NEW
 
-    /// Skala-Typ für die dynamische Periode (z. B. .weightKg, .sleepHours)
-    let scaleType: MetricScaleHelper.MetricScaleType
+    /// Skala-Typ für die dynamische Periode                              // !!! NEW
+    let scaleType: MetricScaleHelper.MetricScaleType                      // !!! NEW
 
-    // Domain-Farbe
-    private let color = Color.Glu.bodyAccent
+    // Domain-Farbe                                                        // !!! NEW
+    private let color = Color.Glu.bodyAccent                              // !!! NEW
 
-    // MARK: - Interner UI-State (Periodenwahl)
+    // MARK: - Interner UI-State (Periodenwahl)                            // !!! NEW
 
-    @State private var selectedPeriod: Last90DaysPeriod = .days30
+    @State private var selectedPeriod: Last90DaysPeriod = .days30         // !!! NEW
 
-    // Gefilterte 90-Tage-Daten basierend auf der aktuellen Periodenwahl
-    private var filteredLast90DaysData: [DailyStepsEntry] {
+    // Gefilterte 90-Tage-Daten basierend auf der aktuellen Periodenwahl  // !!! NEW
+    private var filteredLast90DaysData: [DailyStepsEntry] {               // !!! NEW
         guard let maxDate = last90DaysData.map(\.date).max() else { return [] }
-        let calendar = Calendar.current
 
+        let calendar = Calendar.current
         let startDate = calendar.date(
             byAdding: .day,
             value: -selectedPeriod.days + 1,
@@ -68,12 +67,11 @@ struct BodySectionCardScaled: View {
             .sorted { $0.date < $1.date }
     }
 
-    // MARK: - Adaptive Skala für die aktuell gewählte Periode
+    // MARK: - Adaptive Skala für die aktuell gewählte Periode             // !!! NEW
 
-    private var dailyScaleForSelectedPeriod: MetricScaleResult {
+    private var dailyScaleForSelectedPeriod: MetricScaleResult {          // !!! NEW
         let values = filteredLast90DaysData.map { Double($0.steps) }
 
-        // Wenn keine Daten → auf ursprüngliche 90-Tage-Skala zurückfallen
         guard !values.isEmpty else {
             return dailyScale
         }
@@ -81,9 +79,9 @@ struct BodySectionCardScaled: View {
         return MetricScaleHelper.scale(values, for: scaleType)
     }
 
-    // MARK: - Body
+    // MARK: - Body                                                         // !!! NEW
 
-    var body: some View {
+    var body: some View {                                                 // !!! NEW
         VStack(alignment: .leading, spacing: 16) {
 
             // SECTION HEADER
@@ -95,20 +93,20 @@ struct BodySectionCardScaled: View {
             // KPI-ZEILE
             kpiHeader
 
-            // TOP: 90-Day Scaled Chart + PeriodPicker
+            // TOP: 90-Day Scaled Line Chart + PeriodPicker
             ChartCard(borderColor: color) {
                 VStack(spacing: 8) {
 
                     periodPicker
 
-                    Last90DaysScaledBarChart(
+                    Last90DaysScaledLineChart(
                         data: filteredLast90DaysData,
                         yAxisTicks: dailyScaleForSelectedPeriod.yAxisTicks,
                         yMax: dailyScaleForSelectedPeriod.yMax,
                         valueLabel: dailyScaleForSelectedPeriod.valueLabel,
-                        barColor: color,
+                        lineColor: color,
                         goalValue: goalValue.map(Double.init),
-                        barWidth: barWidthForSelectedPeriod,
+                        lineWidth: barWidthForSelectedPeriod,
                         xValue: { $0.date },
                         yValue: { Double($0.steps) }
                     )
@@ -116,7 +114,7 @@ struct BodySectionCardScaled: View {
                 .frame(height: 260)
             }
 
-            // MIDDLE: Period Averages Scaled Chart
+            // MIDDLE: Period Averages Scaled Chart (weiterhin Bar-Chart)
             ChartCard(borderColor: color) {
                 AveragePeriodsScaledBarChart(
                     data: periodAverages,
@@ -149,28 +147,23 @@ struct BodySectionCardScaled: View {
         .padding(.vertical, 4)
     }
 
-    // MARK: - Balkenbreite je nach Periodenwahl
+    // MARK: - Balken-/Linienbreite je nach Periodenwahl                    // !!! NEW
 
-    private var barWidthForSelectedPeriod: CGFloat {
+    private var barWidthForSelectedPeriod: CGFloat {                       // !!! NEW
         switch selectedPeriod {
-        case .days7:
-            return 16
-        case .days14:
-            return 12
-        case .days30:
-            return 8
-        case .days90:
-            return 4
+        case .days7:  return 16
+        case .days14: return 12
+        case .days30: return 8
+        case .days90: return 4
         }
     }
 }
 
-// MARK: - Metric Chips
+// MARK: - Metric Chips                                                    // !!! NEW
 
-private extension BodySectionCardScaled {
+private extension BodySectionCardScaledLine {
 
     var metricChips: some View {
-
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(metrics, id: \.self) { metric in
@@ -207,9 +200,9 @@ private extension BodySectionCardScaled {
     }
 }
 
-// MARK: - KPI Header
+// MARK: - KPI Header                                                      // !!! NEW
 
-private extension BodySectionCardScaled {
+private extension BodySectionCardScaledLine {
 
     var kpiHeader: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -264,9 +257,9 @@ private extension BodySectionCardScaled {
     }
 }
 
-// MARK: - Period Picker
+// MARK: - Period Picker                                                   // !!! NEW
 
-private extension BodySectionCardScaled {
+private extension BodySectionCardScaledLine {
 
     var periodPicker: some View {
         HStack(spacing: 12) {
@@ -337,38 +330,38 @@ private extension BodySectionCardScaled {
     }
 }
 
-// MARK: - Preview
+// MARK: - Preview                                                         // !!! NEW
 
-#Preview("BodySectionCardScaled – Weight Demo") {
-    BodySectionCardScaled(
+#Preview("BodySectionCardScaledLine – BMI Demo") {                        // !!! NEW
+    BodySectionCardScaledLine(
         sectionTitle: "Body",
-        title: "Weight",
-        kpiTitle: "Weight Today",
-        kpiTargetText: "80 kg",
-        kpiCurrentText: "82 kg",
-        kpiDeltaText: "+2 kg",
-        hasTarget: true,
+        title: "BMI",
+        kpiTitle: "BMI Today",
+        kpiTargetText: "24.0",
+        kpiCurrentText: "27.3",
+        kpiDeltaText: "+3.3",
+        hasTarget: false,
         last90DaysData: [],
         periodAverages: [],
         monthlyData: [],
         dailyScale: MetricScaleResult(
-            yAxisTicks: [60, 70, 80, 90, 100],
-            yMax: 100,
+            yAxisTicks: [20, 25, 30],
+            yMax: 35,
             valueLabel: { "\($0)" }
         ),
         periodScale: MetricScaleResult(
-            yAxisTicks: [60, 70, 80, 90, 100],
-            yMax: 100,
+            yAxisTicks: [20, 25, 30],
+            yMax: 35,
             valueLabel: { "\($0)" }
         ),
         monthlyScale: MetricScaleResult(
-            yAxisTicks: [60, 70, 80, 90, 100],
-            yMax: 100,
+            yAxisTicks: [20, 25, 30],
+            yMax: 35,
             valueLabel: { "\($0)" }
         ),
-        goalValue: 80,
+        goalValue: nil,
         onMetricSelected: { _ in },
-        metrics: ["Sleep", "Weight"],
+        metrics: ["BMI", "Body Fat", "Resting HR"],
         showMonthlyChart: false,
         scaleType: .weightKg
     )

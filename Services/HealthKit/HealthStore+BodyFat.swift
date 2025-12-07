@@ -1,8 +1,8 @@
 //
-//  HealthStore+Weight.swift
+//  HealthStore+BodyFat.swift
 //  GluVibProbe
 //
-//  Weight-Logik ausgelagert aus HealthStore.swift
+//  Body-Fat-Logik (Body Domain)
 //
 
 import Foundation
@@ -11,33 +11,33 @@ import HealthKit
 extension HealthStore {
 
     // ============================================================
-    // MARK: - WEIGHT (kg) – Body Domain
+    // MARK: - BODY FAT (%) – Body Domain
     // ============================================================
 
-    /// Letztes bekanntes Gewicht in kg (unabhängig vom Tag)
-    func fetchWeightToday() {
+    func fetchBodyFatToday() {
         if isPreview {
-            // Im Preview setzen wir den Wert direkt im preview()-Factory
+            todayBodyFatPercent =
+                previewDailyBodyFat.last?.bodyFatPercent ?? 0      // !!! FIX
             return
         }
 
-        guard let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return }
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bodyFatPercentage) else {
+            return
+        }
 
-        // ❗ Kein Start-of-day → wir wollen "letztes Gewicht insgesamt"
         let predicate = HKQuery.predicateForSamples(
             withStart: nil,
             end: Date(),
             options: []
         )
 
-        // letzter Eintrag (neueste Messung)
         let sort = NSSortDescriptor(
             key: HKSampleSortIdentifierEndDate,
             ascending: false
         )
 
         let query = HKSampleQuery(
-            sampleType: weightType,
+            sampleType: type,
             predicate: predicate,
             limit: 1,
             sortDescriptors: [sort]
@@ -47,33 +47,29 @@ extension HealthStore {
                 let sample = samples?.first as? HKQuantitySample
             else { return }
 
-            // 🔥 ECHTER HealthKit-Wert als Double
-            let kgDouble = sample.quantity.doubleValue(for: .gramUnit(with: .kilo))
+            let unit = HKUnit.percent()
+            let raw  = sample.quantity.doubleValue(for: unit)
+            let pct  = raw * 100.0
 
             DispatchQueue.main.async {
-                // ungefilterter Wert für KPI
-                self.todayWeightKgRaw = kgDouble
-                // gerundeter Int-Wert für Charts etc.
-                self.todayWeightKg    = Int(round(kgDouble))
+                self.todayBodyFatPercent = pct
             }
         }
 
         healthStore.execute(query)
     }
 
-    /// Tägliches Gewicht der letzten `days` Tage
-    /// 👉 generisch als [DailyStepsEntry], `steps` = weightKg (Int)
-    func fetchWeightDaily(
+    func fetchBodyFatDaily(
         last days: Int,
-        completion: @escaping ([DailyStepsEntry]) -> Void
+        completion: @escaping ([BodyFatEntry]) -> Void
     ) {
         if isPreview {
-            let slice = Array(previewDailyWeight.suffix(days))
+            let slice = Array(previewDailyBodyFat.suffix(days))
             DispatchQueue.main.async { completion(slice) }
             return
         }
 
-        guard let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bodyFatPercentage) else {
             return
         }
 
@@ -94,22 +90,25 @@ extension HealthStore {
         let interval = DateComponents(day: 1)
 
         let query = HKStatisticsCollectionQuery(
-            quantityType: weightType,
+            quantityType: type,
             quantitySamplePredicate: predicate,
-            options: .discreteAverage,   // Ø Gewicht pro Tag
+            options: .discreteAverage,
             anchorDate: startDate,
             intervalComponents: interval
         )
 
         query.initialResultsHandler = { _, results, _ in
-            var daily: [DailyStepsEntry] = []
+            var daily: [BodyFatEntry] = []
 
             results?.enumerateStatistics(from: startDate, to: now) { stats, _ in
-                let valueKg = stats.averageQuantity()?.doubleValue(for: .gramUnit(with: .kilo)) ?? 0
+                let unit = HKUnit.percent()
+                let raw  = stats.averageQuantity()?.doubleValue(for: unit) ?? 0
+                let pct  = raw * 100.0
+
                 daily.append(
-                    DailyStepsEntry(
+                    BodyFatEntry(
                         date: stats.startDate,
-                        steps: Int(round(valueKg))    // steps = weightKg (Int für Charts)
+                        bodyFatPercent: pct
                     )
                 )
             }
@@ -122,25 +121,23 @@ extension HealthStore {
         healthStore.execute(query)
     }
 
-    /// Gewicht der letzten 90 Tage → für 90d-Chart
-    func fetchLast90DaysWeight() {
-        fetchWeightDaily(last: 90) { [weak self] entries in
-            self?.last90DaysWeight = entries
+    func fetchLast90DaysBodyFat() {
+        fetchBodyFatDaily(last: 90) { [weak self] entries in
+            self?.last90DaysBodyFat = entries
         }
     }
 
-    /// Monatliche Gewichtswerte (Ø Gewicht / Monat)
-    func fetchMonthlyWeight() {
-        fetchWeightDaily(last: 180) { [weak self] entries in
+    func fetchMonthlyBodyFat() {
+        fetchBodyFatDaily(last: 180) { [weak self] entries in
             guard let self else { return }
 
             let calendar = Calendar.current
-            var perMonth: [DateComponents: (sum: Int, count: Int)] = [:]
+            var perMonth: [DateComponents: (sum: Double, count: Int)] = [:]
 
             for e in entries {
                 let comps = calendar.dateComponents([.year, .month], from: e.date)
                 var bucket = perMonth[comps] ?? (0, 0)
-                bucket.sum   += e.steps
+                bucket.sum   += e.bodyFatPercent
                 bucket.count += 1
                 perMonth[comps] = bucket
             }
@@ -155,12 +152,17 @@ extension HealthStore {
                 let date       = calendar.date(from: comps) ?? Date()
                 let monthShort = date.formatted(.dateTime.month(.abbreviated))
                 let bucket     = perMonth[comps] ?? (0, 1)
-                let avg        = bucket.count > 0 ? bucket.sum / bucket.count : 0
-                return MonthlyMetricEntry(monthShort: monthShort, value: avg)
+                let avg        = bucket.count > 0
+                    ? bucket.sum / Double(bucket.count)
+                    : 0
+                return MonthlyMetricEntry(
+                    monthShort: monthShort,
+                    value: Int(round(avg))
+                )
             }
 
             DispatchQueue.main.async {
-                self.monthlyWeight = result
+                self.monthlyBodyFat = result
             }
         }
     }

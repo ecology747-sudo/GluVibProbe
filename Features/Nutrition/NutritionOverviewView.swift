@@ -3,25 +3,51 @@
 //  GluVibProbe
 //
 //  Nutrition Overview (Landing Page der Nutrition-Domain)
-//  - Header mit Titel, Datum & Nutrition Score
-//  - Macro Target Bars (Carbs / Protein / Fat) – direkt unter dem Header
-//  - Macro Distribution Pie (Makro-Verteilung des heutigen Intakes)
-//  - Daily Energy Balance (Ring + Active/Resting/Nutrition)
+//  - Sticky-Header (OverviewHeader) mit Titel & Datum
+//  - Blur + Tint, sobald gescrollt wird
+//  - Horizontaler Pager für 3 Tage (DayBefore, Yesterday, Today)
+//  - Score-Chip unter dem Header
+//  - Macro Target Bars
+//  - Macro Distribution Pie
+//  - Daily Energy Balance
 //  - Insight Card
 //
 
 import SwiftUI
 import Charts
 
+// MARK: - Scroll Offset Preference
+// Dient dazu, festzustellen, ob der ScrollView nach oben bewegt wurde.
+// Damit steuern wir, ob der Header seinen Blur-Hintergrund aktiviert.
+private struct NutritionScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct NutritionOverviewView: View {
 
     // MARK: - Environment
-
     @EnvironmentObject var appState: AppState
 
     // MARK: - ViewModel
-
     @StateObject private var viewModel: NutritionOverviewViewModel
+
+    // MARK: - State (für Sticky-Header-Background & Pager)
+
+    /// Steuert, ob der Blur im Header aktiv ist
+    @State private var hasScrolled: Bool = false
+
+    /// Pager-Index:
+    /// 0 = DayBefore (vorvorgestern)
+    /// 1 = Yesterday (gestern)
+    /// 2 = Today (heute)
+    /// 👉 Start immer auf Today (= 2), damit du nach RECHTS "zurück" wischen kannst
+    @State private var selectedPage: Int = 2   // MARK: - NEU
+
+    // MARK: - Header-Konstante (Design-Reserve, aktuell nicht zwingend gebraucht)
+    private let headerHeight: CGFloat = 60
 
     // MARK: - Init
 
@@ -32,7 +58,11 @@ struct NutritionOverviewView: View {
             _viewModel = StateObject(
                 wrappedValue: NutritionOverviewViewModel(
                     healthStore: HealthStore.shared,
-                    settings: .shared
+                    settings: .shared,
+                    weightViewModel: WeightViewModel(
+                        healthStore: HealthStore.shared,
+                        settings: .shared
+                    )
                 )
             )
         }
@@ -42,42 +72,151 @@ struct NutritionOverviewView: View {
 
     var body: some View {
         ZStack {
-            // Hintergrund in Nutrition-Farbwelt
+
+            // MARK: Hintergrund in Nutrition-Farbwelt (bleibt unverändert)
             LinearGradient(
                 colors: [
-                    Color.white.opacity(0.10),
-                    Color.Glu.nutritionAccent.opacity(0.22)
+                    Color.white.opacity(0.1),
+                    Color.Glu.nutritionAccent.opacity(0.4)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
 
-            ScrollView {
-                VStack(spacing: 20) {
+            // MARK: - ZStack: Pager-Inhalt unten, Header oben drüber (Overlay)
+            ZStack(alignment: .top) {
 
-                    // 1) HEADER (Title + Date + Score)
-                    headerSection
+                // MARK: - Horizontaler Pager (3 Tage)
+                TabView(selection: $selectedPage) {
 
-                    // 2) MACRO TARGET BARS (vollbreit, direkt unter Header)
-                    macroTargetsSection
+                    // 0 = DayBefore (2 Tage zurück)
+                    dayScrollView
+                        .tag(0)
 
-                    // 3) MACRO DISTRIBUTION PIE (Makro-Verteilung)
-                    macroDistributionSection
+                    // 1 = Yesterday (1 Tag zurück)
+                    dayScrollView
+                        .tag(1)
 
-                    // 4) DAILY ENERGY BALANCE
-                    energyRingSection
-
-                    // 5) INSIGHT CARD
-                    insightSection
+                    // 2 = Today (heute)
+                    dayScrollView
+                        .tag(2)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+                // Blur-Aktivierung anhand des Scroll-Offsets (von allen Seiten gesammelt)
+                .onPreferenceChange(NutritionScrollOffsetKey.self) { offset in
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        hasScrolled = offset < 0
+                    }
+                }
+                // MARK: - REAKTION auf Pager-Wechsel → ViewModel-Tag setzen + reload
+                .onChange(of: selectedPage) { newIndex in
+                    let newOffset = dayOffset(for: newIndex)       // 🔥 NICHT mehr selectedDate setzen
+                    viewModel.selectedDayOffset = newOffset
+                    Task {
+                        await viewModel.refresh()
+                    }
+                }
+                .onAppear {
+                    // Beim ersten Anzeigen: Pager-Index an aktuell gesetzten Offset anpassen
+                    selectedPage = pageIndex(for: viewModel.selectedDayOffset)
+                }
+
+                // MARK: - HEADER (Overlay, nutzt OverviewHeader-Komponente)
+                OverviewHeader(
+                    title: "Nutrition Overview",
+                    subtitle: headerSubtitle,                      // 🔥 dynamisches Datum
+                    tintColor: Color.Glu.nutritionAccent,
+                    hasScrolled: hasScrolled
+                )
             }
         }
         .task {
+            // Initial-Ladung für den aktuellen Tag
             await viewModel.refresh()
+        }
+    }
+}
+
+// MARK: - Datum-Formatierung / Header-Untertitel
+
+private extension NutritionOverviewView {
+
+    /// Nutzt das `selectedDate` aus dem ViewModel (read-only),
+    /// formatiert es aber nur als Text für den Header.
+    var headerSubtitle: String {
+        dateString(for: viewModel.selectedDate)
+    }
+
+    func dateString(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+
+    /// Mapping Pager-Index → DayOffset (in Tagen relativ zu heute)
+    /// 0 = DayBefore (-2), 1 = Yesterday (-1), 2 = Today (0)
+    func dayOffset(for pageIndex: Int) -> Int {
+        switch pageIndex {
+        case 0: return -2
+        case 1: return -1
+        default: return 0
+        }
+    }
+
+    /// Mapping DayOffset → Pager-Index
+    ///  0 → 2 (Today)
+    /// -1 → 1 (Yesterday)
+    /// -2 → 0 (DayBefore)
+    func pageIndex(for offset: Int) -> Int {
+        switch offset {
+        case -2: return 0
+        case -1: return 1
+        default: return 2
+        }
+    }
+}
+
+// MARK: - Tages-ScrollView (eine "Maske" für alle 3 Tage)
+
+private extension NutritionOverviewView {
+
+    /// Diese ScrollView wird für alle 3 Pager-Seiten wiederverwendet.
+    /// Die Inhalte (Zahlen) ändern sich nur, weil das ViewModel andere Tagesdaten lädt.
+    var dayScrollView: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+
+                // MARK: - Offset-Messung GLOBAL
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(
+                            key: NutritionScrollOffsetKey.self,
+                            value: geo.frame(in: .global).minY   // globaler Offset
+                        )
+                }
+                .frame(height: 0)
+
+                // 1) SCORE-SECTION (Nutrition-spezifisch, bleibt im Inhalt!)
+                scoreSection
+
+                // 2) MACRO TARGET BARS
+                macroTargetsSection
+
+                // 3) MACRO DISTRIBUTION PIE
+                macroDistributionSection
+
+                // 4) DAILY ENERGY BALANCE
+                energyRingSection
+
+                // 5) INSIGHT CARD
+                insightSection
+            }
+            // WICHTIG: Platz nach oben, damit der Inhalt UNTER dem Header startet
+            .padding(.top, 30)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
         }
         .refreshable {
             await viewModel.refresh()
@@ -85,70 +224,49 @@ struct NutritionOverviewView: View {
     }
 }
 
-// MARK: - 1) Header
+// MARK: - Score-Section (Score-Chip unter dem Header)
 
 private extension NutritionOverviewView {
 
-    var headerSection: some View {
-        VStack(spacing: 8) {
+    /// Zeigt nur den Score-Chip, nutzt weiterhin viewModel.nutritionScore
+    var scoreSection: some View {
+        HStack {
+            Spacer()
 
-            // Titel zentriert
-            Text("Nutrition Overview")
-                .font(.title2.bold())
-                .foregroundStyle(Color.Glu.primaryBlue)
-                .frame(maxWidth: .infinity, alignment: .center)
-
-            // Unterzeile mit Datum (links) & Nutrition Score (rechts)
-            HStack {
-                Text("Today · \(todayString)")
-                    .font(.subheadline.weight(.medium))
+            HStack(spacing: 6) {
+                Text("Score")
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color.Glu.primaryBlue.opacity(0.7))
 
-                Spacer()
-
-                HStack(spacing: 6) {
-                    Text("Score")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.Glu.primaryBlue.opacity(0.7))
-
-                    Text("\(viewModel.nutritionScore)")
-                        .font(.caption.weight(.bold))
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 10)
-                        .background(
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.Glu.nutritionDomain.opacity(0.9),
-                                            Color.Glu.nutritionDomain.opacity(0.6)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                Text("\(viewModel.nutritionScore)")
+                    .font(.caption.weight(.bold))
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 10)
+                    .background(
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        viewModel.scoreColor.opacity(0.9),
+                                        viewModel.scoreColor.opacity(0.6)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
-                        )
-                        .foregroundStyle(Color.white)
-                }
+                            )
+                    )
+                    .foregroundStyle(Color.white)
             }
         }
     }
-
-    var todayString: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: Date())
-    }
 }
 
-// MARK: - 2) Macro Target Bars (unter Header, vollbreit)
+// MARK: - 2) Macro Target Bars (unter Score, vollbreit)
 
 private extension NutritionOverviewView {
 
     var macroTargetsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-
             VStack(spacing: 10) {
                 macroTargetRow(
                     label: "Carbs",
@@ -215,7 +333,7 @@ private extension NutritionOverviewView {
 
                 Spacer()
 
-                let todayText  = todayValue > 0 ? "\(todayValue) g" : "0 g"
+                let todayText  = "\(todayValue) g"
                 let targetText = targetValue > 0 ? "\(targetValue) g" : "–"
 
                 Text("\(todayText) / \(targetText)  (\(percentOfGoal)%)")
@@ -234,7 +352,6 @@ private extension NutritionOverviewView {
 
                 GeometryReader { geo in
                     let width = geo.size.width
-                    // Balken max. 100 % Breite – schießt nicht mehr rechts heraus
                     let ratio = min(max(CGFloat(percentOfGoal) / 100.0, 0), 1.0)
 
                     RoundedRectangle(cornerRadius: 20)
@@ -267,7 +384,7 @@ private extension NutritionOverviewView {
 private extension NutritionOverviewView {
 
     var macroDistributionSection: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
 
             // PIE-CHART – Tap auf Diagramm → CARBS-Metrik
             if #available(iOS 17.0, *) {
@@ -298,7 +415,7 @@ private extension NutritionOverviewView {
                     }
                 }
                 .chartLegend(.hidden)
-                .frame(width: 130, height: 130)
+                .frame(width: 110, height: 110)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     appState.currentStatsScreen = .carbs
@@ -311,7 +428,7 @@ private extension NutritionOverviewView {
                         .font(.caption2)
                         .foregroundStyle(Color.Glu.primaryBlue.opacity(0.6))
                 }
-                .frame(width: 130, height: 130)
+                .frame(width: 110, height: 110)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     appState.currentStatsScreen = .carbs
@@ -380,14 +497,12 @@ private extension NutritionOverviewView {
                 .fill(color)
                 .frame(width: 10, height: 10)
 
-            // 👉 Identisch wie Energy-Kachel: Label = semibold
             Text(label)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.Glu.primaryBlue)
 
             Spacer()
 
-            // 👉 Werte = bold, wie in Energy-Kachel
             Text("\(grams) g (\(percentage)%)")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.9))
@@ -408,7 +523,7 @@ private extension NutritionOverviewView {
 
             HStack(alignment: .center, spacing: 16) {
 
-                // Ring links – gleiche Größe wie Pie (130x130)
+                // Ring links – gleiche Größe wie Pie (110x110)
                 ZStack {
                     let ringColor: Color = viewModel.isEnergyRemaining
                         ? Color.Glu.nutritionDomain
@@ -438,16 +553,22 @@ private extension NutritionOverviewView {
                         .rotationEffect(.degrees(-90))
                         .animation(.easeOut(duration: 0.8), value: viewModel.energyProgress)
 
-                    // Nur Zahl + "kcal remaining/over"
-                    VStack(spacing: 4) {
-                        Text(viewModel.formattedEnergyBalanceValue)
-                            .font(.headline.weight(.bold))
+                    // 🔹 Neue Beschriftung im Ring:
+                    //    "490 kcal"
+                    //    "Remaining" / "Over" darunter
+                    VStack(spacing: 2) {
+                        Text("\(viewModel.formattedEnergyBalanceValue) kcal")
+                            .font(.subheadline.weight(.bold))
                             .foregroundColor(
                                 viewModel.isEnergyRemaining ? .green : .red
                             )
 
-                        Text(viewModel.energyBalanceLabelText)
-                            .font(.caption2)
+                        let label = viewModel.energyBalanceLabelText
+                            .replacingOccurrences(of: "kcal ", with: "")
+                            .capitalized   // "remaining" -> "Remaining"
+
+                        Text(label)
+                            .font(.caption2.weight(.semibold))
                             .foregroundColor(
                                 viewModel.isEnergyRemaining
                                 ? .green.opacity(0.9)
@@ -455,21 +576,139 @@ private extension NutritionOverviewView {
                             )
                     }
                 }
-                .frame(width: 130, height: 130)
+                .frame(width: 110, height: 110)
 
-                // Werte rechts vom Ring – gleiche Font wie Macro-Legende
-                VStack(alignment: .leading, spacing: 6) {
+                // 🔹 Rechte Seite: Burned & Intake-Kacheln
+                VStack(spacing: 10) {
 
-                    energyRow(label: "Active",
-                              value: viewModel.formattedActiveEnergyKcal)
+                    // MARK: Burned-Card (Active + Resting)
+                    VStack(alignment: .leading, spacing: 8) {
 
-                    energyRow(label: "Resting",
-                              value: viewModel.formattedRestingEnergyKcal)
+                        // Label-Capsule "Burned"
+                        HStack {
+                            Text("Burned")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.Glu.primaryBlue)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.98))
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(Color.Glu.nutritionDomain, lineWidth: 0.6)                                        )
+                                )
 
-                    energyRow(label: "Nutrition",
-                              value: viewModel.formattedNutritionEnergyKcal)
+                            Spacer()
+                        }
+
+                        // Gesamt-Burned (Active + Resting)
+                        let totalBurned = viewModel.todayActiveEnergyKcal + viewModel.restingEnergyKcal
+
+                        Text("\(totalBurned.formatted(.number.grouping(.automatic))) kcal")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(Color.Glu.primaryBlue)
+
+                        // Detailzeilen: Active / Resting
+                        HStack {
+                            Text("Active")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.75))
+
+                            Spacer()
+
+                            Text(viewModel.formattedActiveEnergyKcal)
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                        }
+
+                        HStack {
+                            Text("Resting")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.75))
+
+                            Spacer()
+
+                            Text(viewModel.formattedRestingEnergyKcal)
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                        }
+                    }
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.96),
+                                        Color.Glu.nutritionDomain.opacity(0.20)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.Glu.nutritionDomain.opacity(0.9), lineWidth: 0.6)
+                            )
+                    )
+
+                    // MARK: Intake-Card (Nutrition)
+                    VStack(alignment: .leading, spacing: 8) {
+
+                        // Label-Capsule "Intake"
+                        HStack {
+                            Text("Intake")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.Glu.primaryBlue)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(Color(.systemGray6))
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(Color.Glu.nutritionDomain, lineWidth: 0.6)
+                                        )
+                                )
+
+                            Spacer()
+                        }
+
+                        Text(viewModel.formattedNutritionEnergyKcal)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(Color.Glu.primaryBlue)
+
+                        HStack {
+                            Text("Nutrition")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.75))
+
+                            Spacer()
+
+                            Text(viewModel.formattedNutritionEnergyKcal)
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                        }
+                    }
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(.systemGray6),
+                                        Color.Glu.nutritionDomain.opacity(0.20)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.Glu.nutritionDomain.opacity(0.9), lineWidth: 0.6)                            )
+                    )
                 }
-
             }
         }
         .padding(12)
@@ -493,6 +732,7 @@ private extension NutritionOverviewView {
             appState.currentStatsScreen = .calories
         }
     }
+}
 
     private func energyRow(label: String, value: String) -> some View {
         HStack {
@@ -507,7 +747,7 @@ private extension NutritionOverviewView {
                 .foregroundStyle(Color.Glu.primaryBlue)
         }
     }
-}
+
 
 // MARK: - 5) Insight Card
 
@@ -528,7 +768,7 @@ private extension NutritionOverviewView {
             .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)   // ⬅️ WICHTIG
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.white.opacity(0.98))
@@ -551,12 +791,17 @@ private extension NutritionOverviewView {
 #Preview("NutritionOverviewView") {
     let previewStore = HealthStore.preview()
     let previewState = AppState()
-    let previewVM   = NutritionOverviewViewModel(
+
+    let previewVM = NutritionOverviewViewModel(
         healthStore: previewStore,
-        settings: .shared
+        settings: .shared,
+        weightViewModel: WeightViewModel(
+            healthStore: previewStore,
+            settings: .shared
+        )
     )
 
-    return NutritionOverviewView(viewModel: previewVM)
+    NutritionOverviewView(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
 }

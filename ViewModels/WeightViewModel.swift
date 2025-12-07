@@ -13,7 +13,7 @@ final class WeightViewModel: ObservableObject {
 
     // MARK: - Published Output für die View
 
-    /// Letztes bekanntes Gewicht (kg, Basis in kg)
+    /// Letztes bekanntes Gewicht (kg, Basis in kg – Rohwert aus HealthKit)
     @Published var todayWeightKg: Int = 0
 
     /// Rohdaten: Gewicht der letzten 90 Tage (direkt aus HealthStore, Basis kg)
@@ -115,29 +115,91 @@ final class WeightViewModel: ObservableObject {
         forwardFilled(dailyWeight365Raw)
     }
 
-    /// 90-Tage-Reihe für den Chart (ebenfalls forward-filled, Basis kg → dann Einheit)
-    private var last90DaysFilledBase: [DailyStepsEntry] {
-        let filled = dailyWeight365Filled
-        guard !filled.isEmpty else { return [] }
+    // MARK: - Effektives "Heute"-Gewicht (inkl. Fallback)
 
-        if filled.count <= 90 {
-            return filled
-        } else {
-            return Array(filled.suffix(90))
+    /// 🔥 Zentrale Logik:
+    /// - Wenn HealthKit heute/zuletzt ein Gewicht liefert → benutze das
+    /// - Wenn keine HealthKit-Daten existieren → Fallback auf Settings.weightKg
+    /// - Wenn es gefüllte Tageswerte gibt, aber `todayWeightKg == 0`,
+    ///   dann nimm den letzten gefüllten Wert.
+    var effectiveTodayWeightKg: Int {
+        // 1) HealthKit liefert explizit einen Wert
+        if todayWeightKg > 0 {
+            return todayWeightKg
         }
+
+        // 2) Es gibt gefüllte historische Werte → letztes Gewicht nehmen
+        if let lastFilled = dailyWeight365Filled.last, lastFilled.steps > 0 {
+            return lastFilled.steps
+        }
+
+        // 3) Keine HealthKit-Daten → Fallback auf Settings
+        return settings.weightKg
+    }
+
+    // MARK: - NEU: Effektives Gewicht für ein beliebiges Datum (kg)
+
+    /// Liefert das "effektive" Gewicht für einen bestimmten Kalendertag.
+    ///
+    /// Logik:
+    /// - Suche in `dailyWeight365Filled` einen Eintrag für genau diesen Tag.
+    /// - Wenn vorhanden und > 0 → nimm diesen Wert.
+    /// - Sonst: suche den letzten vorherigen Tag mit Wert (> 0) → Forward-Fill rückwärts.
+    /// - Wenn gar kein HealthKit-Gewicht vorhanden ist → Fallback auf Settings.weightKg.
+    func effectiveWeightKg(on date: Date) -> Int {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: date)
+
+        let filled = dailyWeight365Filled
+        guard !filled.isEmpty else {
+            return settings.weightKg
+        }
+
+        // 1) Exakter Tag
+        if let exact = filled.first(where: { calendar.isDate($0.date, inSameDayAs: dayStart) }),
+           exact.steps > 0 {
+            return exact.steps
+        }
+
+        // 2) Letzter Tag vor diesem Datum mit Wert
+        let previous = filled
+            .filter { $0.date < dayStart && $0.steps > 0 }
+            .sorted { $0.date < $1.date }
+            .last
+
+        if let previous = previous {
+            return previous.steps
+        }
+
+        // 3) Fallback: Settings-Gewicht
+        return settings.weightKg
     }
 
     // MARK: - Durchschnittswerte (auf Basis der gefüllten Reihe, kg)
 
+    /// 🔥 Neu wie bei Nutrition/Protein:
+    /// Durchschnitt nur über Tage mit Messung (steps > 0) und fester Zeitraum (letzte N Kalendertage)
     private func averageKg(last days: Int) -> Int {
         let filled = dailyWeight365Filled
         guard !filled.isEmpty else { return 0 }
 
-        let slice = filled.suffix(days)
-        guard !slice.isEmpty else { return 0 }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
 
-        let sum = slice.reduce(0) { $0 + $1.steps }
-        return sum / slice.count
+        guard let endDate = calendar.date(byAdding: .day, value: -1, to: today),
+              let startDate = calendar.date(byAdding: .day, value: -days, to: today) else {
+            return 0
+        }
+
+        let filtered = filled.filter { entry in
+            let d = calendar.startOfDay(for: entry.date)
+            return d >= startDate && d <= endDate && entry.steps > 0
+        }
+
+        guard !filtered.isEmpty else { return 0 }
+
+        let sum = filtered.reduce(0) { $0 + $1.steps }
+        return sum / filtered.count
     }
 
     var avgWeightLast7Days: Int   { averageKg(last: 7) }
@@ -162,10 +224,22 @@ final class WeightViewModel: ObservableObject {
 
     // MARK: - Chart-Daten in der gewählten Einheit (kg / lbs)
 
-    /// 90-Tage-Daten (forward-filled) in der aktuell gewählten Einheit
+    /// 🔥 90-Tage-Daten: nur echte Messungen (steps > 0), keine Forward-Fill-Balken
+    private var last90DaysRawForChartBase: [DailyStepsEntry] {
+        let sorted = last90DaysWeightRaw.sorted { $0.date < $1.date }
+        let nonZero = sorted.filter { $0.steps > 0 }
+
+        if nonZero.count <= 90 {
+            return nonZero
+        } else {
+            return Array(nonZero.suffix(90))
+        }
+    }
+
+    /// 90-Tage-Daten in der aktuell gewählten Einheit
     var last90DaysDataForChart: [DailyStepsEntry] {
         let unit = settings.weightUnit
-        let base = last90DaysFilledBase
+        let base = last90DaysRawForChartBase
 
         guard unit != .kg else {
             return base
@@ -231,9 +305,10 @@ final class WeightViewModel: ObservableObject {
     /// Formatierter Wert für die KPI "Weight Today" inkl. Einheit
     /// nutzt SettingsModel.weightUnit + WeightUnit-Extension
     var formattedTodayWeightKg: String {
-        guard todayWeightKg > 0 else { return "–" }
+        let valueKg = effectiveTodayWeightKg        // 🔥 Fallback-Logik nutzen
+        guard valueKg > 0 else { return "–" }
 
         let unit = settings.weightUnit       // .kg oder .lbs
-        return unit.formatted(fromKg: todayWeightKg)
+        return unit.formatted(fromKg: valueKg)
     }
 }

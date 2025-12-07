@@ -22,11 +22,16 @@ final class AppState: ObservableObject {
         case fat
         case calories     // Nutrition Energy
 
-        // 🔹 Andere Domains (falls Navigation ausgebaut wird)
+        // 🔹 Activity-Domain
         case steps
         case activityEnergy
+
+        // 🔹 Body-Domain (bisher + neu)
         case weight
         case sleep
+        case bmi               // BMI Detail-Screen
+        case bodyFat           // Body-Fat Detail-Screen
+        case restingHeartRate  // Resting-Heart-Rate Detail-Screen
     }
 
     // Beim Start steht kein Detail-Screen fest

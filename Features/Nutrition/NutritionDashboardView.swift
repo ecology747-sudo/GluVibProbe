@@ -44,9 +44,15 @@ struct NutritionDashboardView: View {
 
         // -----------------------------------------------------
         // Andere Domains – Fallback
-        // (sollten eigentlich nicht über dieses Dashboard kommen)
+        // (sollen eigentlich nicht über dieses Dashboard kommen)
         // -----------------------------------------------------
-        case .steps, .activityEnergy, .weight, .sleep:
+        case .steps,
+             .activityEnergy,
+             .weight,
+             .sleep,
+             .bmi,                 // !!! NEW
+             .bodyFat,             // !!! NEW
+             .restingHeartRate:    // !!! NEW
             CarbsView(onMetricSelected: handleMetricSelection)
         }
     }
