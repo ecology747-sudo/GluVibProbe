@@ -1,4 +1,5 @@
-//  RestingHeartRateView.swift                                         // !!! UPDATED
+//
+//  RestingHeartRateView.swift
 //  GluVibProbe
 //
 //  Body-Domain: Resting Heart Rate
@@ -6,41 +7,48 @@
 //  - Daten aus RestingHeartRateViewModel
 //
 
-import SwiftUI                                                         // !!! UPDATED
+import SwiftUI
 
-struct RestingHeartRateView: View {                                   // !!! UPDATED
+struct RestingHeartRateView: View {
 
     // MARK: - ViewModel
 
-    @StateObject private var viewModel = RestingHeartRateViewModel()  // !!! UPDATED
+    @StateObject private var viewModel = RestingHeartRateViewModel()
 
     // MARK: - Metric-Navigation Callback
 
-    let onMetricSelected: (String) -> Void                            // !!! UPDATED
+    let onMetricSelected: (String) -> Void
 
-    init(onMetricSelected: @escaping (String) -> Void = { _ in }) {   // !!! UPDATED
+    // 🔙 NEU: optionaler Back-Callback (zur BodyOverview)
+    let onBack: (() -> Void)?          // !!! NEW
+
+    init(
+        onMetricSelected: @escaping (String) -> Void = { _ in },
+        onBack: (() -> Void)? = nil    // !!! NEW
+    ) {
         self.onMetricSelected = onMetricSelected
+        self.onBack = onBack           // !!! NEW
     }
 
     // MARK: - Body
 
-    var body: some View {                                             // !!! UPDATED
+    var body: some View {
 
-        // KPI-Texte (werden über Extension geliefert, s.u.)           // !!! UPDATED
-        let currentText: String = viewModel.todayRestingHeartRateText // !!! UPDATED
+        // KPI-Texte
+        let currentText: String = viewModel.todayRestingHeartRateText
         let targetText: String  = "–"
         let deltaText: String   = "–"
 
-        return ZStack {                                               // !!! UPDATED
+        return ZStack {
 
             // Body-Hintergrund
-            Color.Glu.bodyAccent.opacity(0.18)                        // !!! UPDATED
+            Color.Glu.bodyAccent.opacity(0.18)
                 .ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    BodySectionCardScaled(                            // !!! UPDATED
+                    BodySectionCardScaled(
                         sectionTitle: "Body",
                         title: "Resting Heart Rate",
                         kpiTitle: "Resting HR Today",
@@ -69,12 +77,12 @@ struct RestingHeartRateView: View {                                   // !!! UPD
                         ],
                         showMonthlyChart: false,
                         scaleType: .heartRateBpm,
-                        chartStyle: .line                             // !!! NEW
+                        chartStyle: .line,
+                        onBack: onBack          // !!! NEW – Pfeil in SectionHeader
                     )
                     .padding(.horizontal)
-
                 }
-                .padding(.top, 16)
+           
             }
             .refreshable {
                 viewModel.refresh()
@@ -86,21 +94,18 @@ struct RestingHeartRateView: View {                                   // !!! UPD
     }
 }
 
-// MARK: - Fallback-Formatter für KPI-Text                           // !!! NEW
-// Wird später durch echte BPM-Formatierung ersetzt, wenn wir
-// das RestingHeartRateViewModel gemeinsam ansehen.                  // !!! NEW
-
-                                                                    // !!! NEW
-
 // MARK: - Preview
 
-#Preview("RestingHeartRateView – Body Domain") {                      // !!! UPDATED
+#Preview("RestingHeartRateView – Body Domain") {
     let appState    = AppState()
     let healthStore = HealthStore.preview()
 
-    return RestingHeartRateView() { metric in
-        print("Selected metric:", metric)
-    }
+    return RestingHeartRateView(
+        onMetricSelected: { metric in
+            print("Selected metric:", metric)
+        },
+        onBack: nil
+    )
     .environmentObject(appState)
     .environmentObject(healthStore)
 }

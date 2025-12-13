@@ -191,8 +191,9 @@ final class StepsViewModel: ObservableObject {
     ///   - heutiger Tag ausgeschlossen
     ///   - Tage ohne Schritte (steps <= 0) werden ignoriert
     ///   - geteilt wird durch die Anzahl der Tage mit Eintrag, nicht durch `days`
-    private func averageSteps(last days: Int) -> Int {
-        guard !dailySteps365.isEmpty else { return 0 }
+    //private func averageSteps(last days: Int) -> Int {
+    func averageSteps(last days: Int) -> Int {  
+    guard !dailySteps365.isEmpty else { return 0 }
 
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())

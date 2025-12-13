@@ -30,9 +30,10 @@ struct BodyOverviewView: View {
 
     @StateObject private var viewModel: BodyOverviewViewModel
 
-    // MARK: - State (für Sticky-Header-Background)
+    // MARK: - State (für Sticky-Header & Pager)
 
     @State private var hasScrolled: Bool = false
+    @State private var selectedPage: Int = 2      // 0 = DayBefore, 1 = Yesterday, 2 = Today
 
     // MARK: - Init
 
@@ -65,48 +66,52 @@ struct BodyOverviewView: View {
             )
             .ignoresSafeArea()
 
-            // Inhalt + Sticky Header im Overlay
+            // Inhalt + Sticky Header + Custom Dots im Overlay
             ZStack(alignment: .top) {
 
-                // MARK: - ScrollView mit Offset-Messung
-                ScrollView {
-                    VStack(spacing: 16) {
+                // MARK: - Horizontaler Pager (3 Tage)
+                TabView(selection: $selectedPage) {
 
-                        // Globaler Scroll-Offset für Sticky-Header
-                        GeometryReader { geo in
-                            Color.clear
-                                .preference(
-                                    key: BodyScrollOffsetKey.self,
-                                    value: geo.frame(in: .global).minY
-                                )
-                        }
-                        .frame(height: 0)
-
-                        // Inhalt unter dem Header
-                        content
-                    }
-                    // Abstand vom Header
-                    .padding(.top, 52)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
+                    dayScrollView.tag(0)  // DayBefore
+                    dayScrollView.tag(1)  // Yesterday
+                    dayScrollView.tag(2)  // Today
                 }
-                .refreshable {
-                    await viewModel.refresh()
-                }
+                .tabViewStyle(.page(indexDisplayMode: .never))   // System-Dots AUS
                 .onPreferenceChange(BodyScrollOffsetKey.self) { offset in
                     withAnimation(.easeInOut(duration: 0.22)) {
                         hasScrolled = offset < 0
                     }
                 }
+                .onChange(of: selectedPage) { newIndex in
+                    viewModel.selectedDayOffset = dayOffset(for: newIndex)
+                    Task { await viewModel.refresh() }
+                }
+                .onAppear {
+                    selectedPage = pageIndex(for: viewModel.selectedDayOffset)
+                }
 
                 // MARK: - Sticky OverviewHeader (Overlay)
                 OverviewHeader(
                     title: "Body Overview",
-                    subtitle: formattedToday(),
+                    subtitle: formattedHeaderSubtitle(),
                     tintColor: Color.Glu.bodyDomain,
                     hasScrolled: hasScrolled
                 )
+
+                // MARK: - Custom PageDots
+                VStack {
+                    Spacer()
+                    PageDots(
+                        selected: selectedPage,
+                        total: 3,
+                        color: Color.Glu.bodyDomain
+                    )
+                    .padding(.bottom, 12)
+                }
             }
+        }
+        .task(id: viewModel.selectedDayOffset) {
+            await viewModel.refresh()
         }
     }
 
@@ -115,61 +120,118 @@ struct BodyOverviewView: View {
     private var content: some View {
         VStack(spacing: 16) {
 
-            // 🔶 Weight → .weight
             WeightMainCard(viewModel: viewModel)
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    appState.currentStatsScreen = .weight
-                }
+                .onTapGesture { appState.currentStatsScreen = .weight }
 
             HStack(spacing: 12) {
-
-                // 🔵 Sleep → .sleep
                 SleepSmallCard(viewModel: viewModel)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        appState.currentStatsScreen = .sleep
-                    }
+                    .onTapGesture { appState.currentStatsScreen = .sleep }
 
-                // ❤️ Heart & stress → .restingHeartRate
                 HeartSmallCard(viewModel: viewModel)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        appState.currentStatsScreen = .restingHeartRate
-                    }
+                    .onTapGesture { appState.currentStatsScreen = .restingHeartRate }
             }
 
             HStack(spacing: 12) {
-
-                // 🧍‍♂️ BMI → .bmi
                 BMISmallCard(viewModel: viewModel)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        appState.currentStatsScreen = .bmi
-                    }
+                    .onTapGesture { appState.currentStatsScreen = .bmi }
 
-                // 🧈 Body fat → .bodyFat
                 BodyFatSmallCard(viewModel: viewModel)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        appState.currentStatsScreen = .bodyFat
-                    }
+                    .onTapGesture { appState.currentStatsScreen = .bodyFat }
             }
 
             BodyInsightCard(viewModel: viewModel)
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    // Optional: später z.B. zu .weight oder .sleep springen
+        }
+    }
+}
+
+// MARK: - Tages-ScrollView
+
+private extension BodyOverviewView {
+
+    var dayScrollView: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: BodyScrollOffsetKey.self,
+                        value: geo.frame(in: .global).minY
+                    )
                 }
+                .frame(height: 0)
+
+                content
+            }
+            .padding(.top, 52)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 60)   // Platz für CustomDots
+        }
+        .refreshable { await viewModel.refresh() }
+    }
+}
+
+// MARK: - Datum / Header Subtitle
+
+private extension BodyOverviewView {
+
+    /// TODAY, YESTERDAY oder Datum
+    func formattedHeaderSubtitle() -> String {
+        switch viewModel.selectedDayOffset {
+        case 0:
+            return "TODAY"
+        case -1:
+            return "YESTERDAY"
+        default:
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            return formatter.string(from: viewModel.selectedDate)
+        }
+    }
+}
+
+// MARK: - Pager Mapping
+
+private extension BodyOverviewView {
+
+    func dayOffset(for pageIndex: Int) -> Int {
+        switch pageIndex {
+        case 0: return -2
+        case 1: return -1
+        default: return 0
         }
     }
 
-    // MARK: - Datum für Header
+    func pageIndex(for offset: Int) -> Int {
+        switch offset {
+        case -2: return 0
+        case -1: return 1
+        default: return 2
+        }
+    }
+}
 
-    private func formattedToday() -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: Date())
+// MARK: - Custom PageDots
+
+private struct PageDots: View {
+    let selected: Int
+    let total: Int
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<total, id: \.self) { index in
+                Circle()
+                    .fill(index == selected ? color : color.opacity(0.35))
+                    .frame(width: 8, height: 8)
+            }
+        }
+        .padding(.horizontal, 16)
     }
 }
 
@@ -179,28 +241,30 @@ private struct WeightMainCard: View {
 
     @ObservedObject var viewModel: BodyOverviewViewModel
 
-    // eigenes Accent-Color für diese Card
+    // eigenes Accent-Color für diese Card (bleibt Body-Domain)
     private let accent = Color.Glu.bodyDomain
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
 
-            // Title row with big trend arrow on the right
+            // HEADER mit Titel + Trendpfeil (analog ActivityOverview)
             HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "scalemass.fill")
-                        .foregroundColor(accent)
-
-                    Text("Weight & trend")
+                Label {
+                    Text("Weight")
+                        .font(.headline.weight(.semibold))
                         .foregroundColor(Color.Glu.primaryBlue)
+                } icon: {
+                    Image(systemName: "figure.stand")
+                        .foregroundColor(Color.Glu.bodyDomain)
                 }
-                .font(.headline.weight(.semibold))
 
                 Spacer()
 
-                Image(systemName: viewModel.trendArrowSymbol())
-                    .font(.largeTitle.weight(.bold))
-                    .foregroundColor(viewModel.trendArrowColor())
+                // Trendpfeil – exakt wie in ActivityOverview-Steps (Design)
+                Image(systemName: viewModel.trendArrowSymbol())      // <<< aus ViewModel
+                    .font(.title2.weight(.bold))                    // gleiche Größe
+                    .foregroundColor(viewModel.trendArrowColor())   // grün / rot / blau
+                    .padding(.trailing, 2)
             }
 
             // KPI
@@ -222,24 +286,26 @@ private struct WeightMainCard: View {
                 .minimumScaleFactor(0.8)
             }
 
-            // Compact bar chart
+            // Compact BAR chart
             if !viewModel.weightTrend.isEmpty {
-                WeightMiniTrendChart(data: viewModel.weightTrend)
+                WeightMiniBarChart(data: viewModel.weightTrend)
                     .frame(height: 60)
             }
         }
-        .padding(16)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.white)
-                .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 6)
+                .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 3)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(accent.opacity(0.70), lineWidth: 1.2)   // stärkere Outline
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.Glu.bodyDomain.opacity(0.55), lineWidth: 1.6)
                 )
         )
     }
 }
+
 
 // MARK: - Sleep small tile
 
@@ -247,12 +313,13 @@ private struct SleepSmallCard: View {
 
     @ObservedObject var viewModel: BodyOverviewViewModel
 
-    // Lime wie „Protein“ (Recovery-Feeling)
+    // Lime wie „Protein“ (Recovery-Feeling) – nur Icon/Text, nicht mehr Rahmenfarbe
     private let accent = Color.Glu.metabolicDomain
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
 
+            // HEADER (Icon + Titel)
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "moon.zzz.fill")
@@ -266,6 +333,7 @@ private struct SleepSmallCard: View {
                 Spacer()
             }
 
+            // MITTLERER BLOCK (Wert + Beschreibung)
             VStack(alignment: .leading, spacing: 4) {
                 Text(viewModel.formattedSleep(minutes: viewModel.lastNightSleepMinutes))
                     .font(.title3.bold())
@@ -276,10 +344,15 @@ private struct SleepSmallCard: View {
                     .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
             }
 
-            // 🔧 HIER ist die korrigierte Version
+            // UNTERER BLOCK (Progress + Text)
             VStack(alignment: .leading, spacing: 4) {
-                let ratio = min(viewModel.sleepGoalCompletion, 1.5)
-                let percent = Int(ratio * 100)
+                // !!! CHANGED: 100 % Target = voller Balken
+                let rawRatio = viewModel.sleepGoalMinutes > 0
+                    ? Double(viewModel.lastNightSleepMinutes) / Double(viewModel.sleepGoalMinutes)
+                    : 0.0
+
+                let ratio = max(0.0, min(rawRatio, 1.0))          // !!! CHANGED (Clamp 0...1)
+                let percent = Int(rawRatio * 100)                 // !!! CHANGED (Prozent aus Rohwert)
 
                 let goalMinutes = viewModel.sleepGoalMinutes
                 let goalHours = Double(goalMinutes) / 60.0
@@ -288,24 +361,24 @@ private struct SleepSmallCard: View {
                     ? String(format: "%.0f h", goalHours)
                     : String(format: "%.1f h", goalHours)
 
-                ProgressView(value: ratio, total: 1.0)
+                ProgressView(value: ratio, total: 1.0)           // !!! CHANGED (Total = 1.0)
                     .tint(accent)
 
-                Text("Goal completion: \(percent)% of \(goalString)")
+                Text("\(percent)% of \(goalString)")
                     .font(.footnote)
                     .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .frame(height: 170)   // ✅ feste Höhe für Sleep
+        .frame(height: 130)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.white)
                 .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 3)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(accent.opacity(0.55), lineWidth: 1.2)
+                        .stroke(Color.Glu.bodyDomain.opacity(0.55), lineWidth: 1.2)
                 )
         )
     }
@@ -317,16 +390,17 @@ private struct HeartSmallCard: View {
 
     @ObservedObject var viewModel: BodyOverviewViewModel
 
-    // Aqua wie „Carbs“ – energetisch, frisch
+    // Aqua wie „Carbs“ – nur Icon/Text, nicht mehr Rahmenfarbe
     private let accent = Color.Glu.nutritionDomain
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
 
+            // HEADER (Icon + Titel) – exakt wie Sleep
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "heart.fill")
-                        .foregroundColor(accent)
+                        .foregroundColor(.red)
 
                     Text("Heart")
                         .foregroundColor(Color.Glu.primaryBlue)
@@ -336,6 +410,7 @@ private struct HeartSmallCard: View {
                 Spacer()
             }
 
+            // MITTLERER BLOCK (Wert + Beschreibung) – analog Sleep
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(viewModel.restingHeartRateBpm) bpm")
                     .font(.title3.bold())
@@ -346,26 +421,33 @@ private struct HeartSmallCard: View {
                     .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(viewModel.hrvMs) ms")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(Color.Glu.primaryBlue)
+            // UNTERER BLOCK – Progress „blind“ + Textzeile
+            // → gleiche vertikale Höhe wie bei Sleep
+            VStack(alignment: .leading, spacing: 4) {
 
-                Text("HRV today")
+                // Unsichtbare ProgressBar nur für das Layout,
+                // damit der Abstand nach unten identisch zu Sleep ist.
+                ProgressView(value: 0.5)
+                    .tint(accent)
+                    .opacity(0)   // 🔥 unsichtbar, aber gleiche Höhe wie bei Sleep
+
+                Text("\(viewModel.hrvMs) ms · HRV today")
                     .font(.footnote)
                     .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .frame(height: 170)   // ✅ gleiche Höhe wie Sleep
+        .frame(height: 130)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.white)
                 .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 3)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(accent.opacity(0.55), lineWidth: 1.2)
+                        .stroke(Color.Glu.bodyDomain.opacity(0.55), lineWidth: 1.2)
                 )
         )
     }
@@ -377,7 +459,7 @@ private struct BMISmallCard: View {
 
     @ObservedObject var viewModel: BodyOverviewViewModel
 
-    // Wieder Lime wie Protein/Sleep
+    // Wieder Lime wie Protein/Sleep – nur Icon/Text
     private let accent = Color.Glu.metabolicDomain
 
     var body: some View {
@@ -386,7 +468,7 @@ private struct BMISmallCard: View {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "figure.arms.open")
-                        .foregroundColor(accent)
+                        .foregroundColor(Color.Glu.nutritionDomain)
 
                     Text("BMI")
                         .foregroundColor(Color.Glu.primaryBlue)
@@ -408,14 +490,15 @@ private struct BMISmallCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .frame(height: 130)   // ✅ feste Höhe für BMI
+        .frame(height: 100)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.white)
                 .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 3)
                 .overlay(
+                    // !!! CHANGED: Rahmenfarbe vereinheitlicht auf Body-Domain
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(accent.opacity(0.55), lineWidth: 1.2)
+                        .stroke(Color.Glu.bodyDomain.opacity(0.55), lineWidth: 1.2)
                 )
         )
     }
@@ -427,7 +510,7 @@ private struct BodyFatSmallCard: View {
 
     @ObservedObject var viewModel: BodyOverviewViewModel
 
-    // Orange wie Fat / Body-Domain
+    // Orange wie Fat / Body-Domain – nur Icon/Text
     private let accent = Color.Glu.bodyDomain
 
     var body: some View {
@@ -458,14 +541,15 @@ private struct BodyFatSmallCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .frame(height: 130)   // ✅ gleiche Höhe wie BMI
+        .frame(height: 100)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.white)
                 .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 3)
                 .overlay(
+                    // !!! CHANGED: Rahmenfarbe vereinheitlicht auf Body-Domain
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(accent.opacity(0.55), lineWidth: 1.2)
+                        .stroke(Color.Glu.bodyDomain.opacity(0.55), lineWidth: 1.2)
                 )
         )
     }
@@ -480,7 +564,7 @@ private struct BodyInsightCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Insight")                    // 🔁 Titel angepasst
+                Text("Insight")
                     .font(.headline)
                     .foregroundColor(Color.Glu.primaryBlue)
                 Spacer()
@@ -497,16 +581,16 @@ private struct BodyInsightCard: View {
                 .fill(Color.white)
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
                 .overlay(
+                    // !!! CHANGED: Rahmenfarbe vereinheitlicht auf Body-Domain
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .stroke(Color.Glu.bodyDomain.opacity(0.55), lineWidth: 1.2)
                 )
         )
     }
 }
-
 // MARK: - Mini bar chart for weight
 
-private struct WeightMiniTrendChart: View {
+private struct WeightMiniBarChart: View {
 
     let data: [WeightTrendPoint]
 
@@ -517,12 +601,11 @@ private struct WeightMiniTrendChart: View {
                 y: .value("Weight", point.weightKg)
             )
         }
-        .foregroundStyle(Color.Glu.bodyDomain)   // 🔶 Body Domain Farbe
+        .foregroundStyle(Color.Glu.bodyDomain)   // Body-Domain-Farbe
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartPlotStyle { plotArea in
-            plotArea
-                .background(Color.clear)
+            plotArea.background(Color.clear)
         }
     }
 }

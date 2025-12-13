@@ -15,12 +15,19 @@ struct WeightView: View {
     @ObservedObject private var settings = SettingsModel.shared
 
     // 🔗 HealthStore für den echten Double-Wert aus HealthKit
-    @EnvironmentObject private var healthStore: HealthStore      // 🔥 NEU
+    @EnvironmentObject private var healthStore: HealthStore
 
     let onMetricSelected: (String) -> Void
 
-    init(onMetricSelected: @escaping (String) -> Void = { _ in }) {
+    // optionaler Back-Callback
+    let onBack: (() -> Void)?
+
+    init(
+        onMetricSelected: @escaping (String) -> Void = { _ in },
+        onBack: (() -> Void)? = nil
+    ) {
         self.onMetricSelected = onMetricSelected
+        self.onBack = onBack
     }
 
     var body: some View {
@@ -31,7 +38,7 @@ struct WeightView: View {
         let targetWeightKgInt = settings.targetWeightKg       // Basis-Target (Int, wie gehabt)
         let currentKgInt      = viewModel.effectiveTodayWeightKg   // Fallback-Int
 
-        // 🔥 ECHTER HealthKit-Wert als Double für KPI
+        // Echter HealthKit-Wert als Double für KPI
         let currentKgRaw      = healthStore.todayWeightKgRaw
 
         // Wenn HealthKit einen Double-Wert liefert → den nehmen,
@@ -42,13 +49,15 @@ struct WeightView: View {
 
         let targetKgForKPI: Double = Double(targetWeightKgInt)
 
-        // MARK: - KPI-Texte (jetzt mit echter Nachkommastelle)
+        // MARK: - KPI-Texte (mit echter Nachkommastelle)
 
         let targetWeightText: String  = formatWeightKPI(kg: targetKgForKPI, unit: unit)
         let currentWeightText: String = formatWeightKPI(kg: currentKgForKPI, unit: unit)
-        let deltaText: String         = formatDeltaKPI(currentKg: currentKgForKPI,
-                                                       targetKg: targetKgForKPI,
-                                                       unit: unit)
+        let deltaText: String         = formatDeltaKPI(
+            currentKg: currentKgForKPI,
+            targetKg: targetKgForKPI,
+            unit: unit
+        )
 
         // Zielwert für Linie im Chart (weiterhin Int, keine Nachkommastellen nötig)
         let goalForChart: Int? = {
@@ -92,12 +101,12 @@ struct WeightView: View {
                         ],
                         showMonthlyChart: false,
                         scaleType: .weightKg,
-                        chartStyle: .bar
+                        chartStyle: .bar,
+                        onBack: onBack
                     )
                     .padding(.horizontal)
-
                 }
-                .padding(.top, 16)
+               
             }
             .refreshable {
                 viewModel.refresh()
@@ -174,7 +183,10 @@ private extension WeightView {
     let appState    = AppState()
     let healthStore = HealthStore.preview()
 
-    return WeightView()
-        .environmentObject(appState)
-        .environmentObject(healthStore)
+    return WeightView(
+        onMetricSelected: { _ in },
+        onBack: nil
+    )
+    .environmentObject(appState)
+    .environmentObject(healthStore)
 }

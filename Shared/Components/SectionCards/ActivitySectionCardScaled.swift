@@ -3,17 +3,17 @@
 //  GluVibProbe
 //
 //  Helper-basierte SectionCard für alle Activity-Metriken
-//  (Steps, Activity Energy).
+//  (Steps, Active Time, Activity Energy).
 //
 
 import SwiftUI
 
 struct ActivitySectionCardScaled: View {
 
-    // MARK: - Eingabewerte
+    // MARK: - Eingabewerte (müssen zur Aufruf-Signatur passen!)
 
-    let sectionTitle: String
-    let title: String
+    let sectionTitle: String          // aktuell leer in den Activity-Views
+    let title: String                 // "Steps", "Active Time", "Activity Energy"
 
     // KPI-Werte
     let kpiTitle: String
@@ -32,10 +32,10 @@ struct ActivitySectionCardScaled: View {
     let periodScale: MetricScaleResult
     let monthlyScale: MetricScaleResult
 
-    /// Zielwert (z. B. Steps-Goal für horizontale Linie)
+    // Zielwert (optional)
     let goalValue: Int?
 
-    /// Chip-Callback (Steps / Activity Energy)
+    // Navigation + Chips
     let onMetricSelected: (String) -> Void
     let metrics: [String]
 
@@ -62,26 +62,9 @@ struct ActivitySectionCardScaled: View {
             .sorted { $0.date < $1.date }
     }
 
-    // MARK: - Adaptive Skala für die aktuell gewählte Periode
-
-    /// Ermittelt dynamisch die Skala für die aktuell gewählte Periode
-    /// auf Basis der *sichtbaren* Werte.
-    ///
-    /// - Steps           → .steps
-    /// - Activity Energy → .energyDaily
+    // 👉 Kein MetricScaleHelper-Typ hier – wir verwenden einfach die Skala aus dem ViewModel
     private var dailyScaleForSelectedPeriod: MetricScaleResult {
-        let values = filteredLast90DaysData.map { Double($0.steps) }
-
-        // Wenn noch keine Daten für die Periode vorliegen,
-        // fallback auf die ursprüngliche 90-Tage-Skala aus dem ViewModel.
-        guard !values.isEmpty else {
-            return dailyScale
-        }
-
-        let scaleType: MetricScaleHelper.MetricScaleType =
-            (title == "Activity Energy") ? .energyDaily : .steps
-
-        return MetricScaleHelper.scale(values, for: scaleType)
+        dailyScale
     }
 
     // MARK: - Body
@@ -89,10 +72,9 @@ struct ActivitySectionCardScaled: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
 
-            // SECTION HEADER
-            SectionHeader(title: sectionTitle, subtitle: nil)
+            // ⛔ Kein SectionHeader hier – der liegt in StepsView / ActivityEnergyView / ExerciseMinutesView
 
-            // METRIC CHIPS
+            // METRIC CHIPS (zweireihig, linksbündig)
             metricChips
 
             // KPI-ZEILE
@@ -166,48 +148,104 @@ struct ActivitySectionCardScaled: View {
     }
 }
 
-// MARK: - Metric Chips
+// MARK: - Metric Chips (zweireihig)
 
 private extension ActivitySectionCardScaled {
 
     var metricChips: some View {
+        VStack(alignment: .leading, spacing: 12) {          // !!! UPDATED: weniger Abstand zwischen den Reihen
 
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(metrics, id: \.self) { metric in
-                    let active = (metric == title)
-
-                    Text(metric)
-                        .font(.caption2.weight(.medium))
-                        .padding(.vertical, 5)
-                        .padding(.horizontal, 9)
-                        .background(
-                            Capsule().fill(
-                                active ? color : Color.Glu.backgroundSurface
-                            )
-                        )
-                        .overlay(
-                            Capsule().stroke(
-                                active ? Color.clear : color.opacity(0.8),
-                                lineWidth: active ? 0 : 1
-                            )
-                        )
-                        .foregroundStyle(
-                            active
-                                ? Color.Glu.primaryBlue
-                                : Color.Glu.primaryBlue.opacity(0.85)
-                        )
-                        .onTapGesture {
-                            onMetricSelected(metric)
-                        }
+            HStack(spacing: 6) {                           // !!! UPDATED: etwas enger zusammen
+                ForEach(metrics.prefix(3), id: \.self) { metric in
+                    metricChip(metric)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+
+            HStack(spacing: 6) {                           // !!! UPDATED: identischer Abstand in Reihe 2
+                ForEach(metrics.suffix(from: 3), id: \.self) { metric in
+                    metricChip(metric)
+                }
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)   // !!! bleibt: beide Reihen linksbündig
+        .padding(.vertical, 4)
     }
 }
 
+private extension ActivitySectionCardScaled {
+
+    // MARK: - Metric Chip mit Outline im Inaktiv-Zustand
+
+    private func metricChip(_ metric: String) -> some View {
+        let isActive = (metric == title)
+
+        // !!! NEU: Farben & Linienstärken für beide Zustände
+        let strokeColor: Color = isActive
+            ? Color.white.opacity(0.90)        // aktiver Chip → weißer Rand
+            : color.opacity(0.90)              // inaktiv → rote/Activity-Farbe als Linie
+
+        let lineWidth: CGFloat = isActive ? 1.6 : 1.2
+
+        let backgroundFill: some ShapeStyle = isActive
+            ? LinearGradient(                   // aktiver Chip → kräftig gefüllt
+                colors: [
+                    color.opacity(0.95),
+                    color.opacity(0.75)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              )
+            : LinearGradient(                   // inaktiv → transparenter Look, Form bleibt durch Outline sichtbar
+                colors: [
+                    Color.clear,
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              )
+
+        let shadowOpacity: Double = isActive ? 0.25 : 0.15
+        let shadowRadius: CGFloat = isActive ? 4 : 2.5
+        let shadowYOffset: CGFloat = isActive ? 2 : 1.5
+
+        return Button {
+            onMetricSelected(metric)            // Auswahl-Callback bleibt unverändert
+        } label: {
+            Text(metric)
+                .font(.caption.weight(.semibold))      // etwas größer, gut lesbar
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .layoutPriority(1)
+                .padding(.vertical, 5)
+                .padding(.horizontal, 14)
+                .background(
+                    Capsule()
+                        .fill(backgroundFill)          // !!! hier wird aktiv/inaktiv unterschieden
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(
+                            strokeColor,               // !!! inaktiv: rote/Activity-Linie
+                            lineWidth: lineWidth
+                        )
+                )
+                .shadow(
+                    color: Color.black.opacity(shadowOpacity),
+                    radius: shadowRadius,
+                    x: 0,
+                    y: shadowYOffset
+                )
+                .foregroundStyle(
+                    isActive
+                    ? Color.white                       // aktiver Chip → weiße Schrift
+                    : Color.Glu.primaryBlue.opacity(0.95)
+                )
+                .scaleEffect(isActive ? 1.05 : 1.0)     // „Hover“-Effekt beim aktiven Chip
+                .animation(.easeOut(duration: 0.15), value: isActive)
+        }
+        .buttonStyle(.plain)
+    }
+}
 // MARK: - KPI Header
 
 private extension ActivitySectionCardScaled {
@@ -234,41 +272,24 @@ private extension ActivitySectionCardScaled {
                     title: "Delta",
                     valueText: kpiDeltaText,
                     unit: nil,
-                    valueColor: deltaColor,    // Activity-Delta-Farblogik
                     domain: .activity
                 )
             } else {
-                Spacer()
+                
                 KPICard(
                     title: "Current",
                     valueText: kpiCurrentText,
                     unit: nil,
                     domain: .activity
                 )
-                Spacer()
+        
             }
         }
         .padding(.bottom, 10)
     }
-
-    /// Farbe für Delta in der Activity-Domain:
-    /// - "+" → GRÜN  (über Ziel = gut)
-    /// - "−" → ROT   (unter Ziel = schlecht)
-    /// - sonst neutral blau
-    var deltaColor: Color {
-        let trimmed = kpiDeltaText.trimmingCharacters(in: .whitespaces)
-
-        if trimmed.hasPrefix("+") {
-            return .green
-        }
-        if trimmed.hasPrefix("-") || trimmed.hasPrefix("−") {
-            return .red
-        }
-        return Color.Glu.primaryBlue.opacity(0.75)
-    }
 }
 
-// MARK: - Period Picker
+// MARK: - Period Picker (wie bei Nutrition, nur Activity-Farbe)
 
 private extension ActivitySectionCardScaled {
 
@@ -282,7 +303,7 @@ private extension ActivitySectionCardScaled {
                 Button {
                     selectedPeriod = period
                 } label: {
-                    Text(period.rawValue)   // "7", "14", "30", "90"
+                    Text(period.rawValue)
                         .font(.caption2.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -339,41 +360,4 @@ private extension ActivitySectionCardScaled {
         }
         .padding(.horizontal, 4)
     }
-}
-
-// MARK: - Preview
-
-#Preview("ActivitySectionCardScaled – Steps Demo") {
-    ActivitySectionCardScaled(
-        sectionTitle: "Activity",
-        title: "Steps",
-        kpiTitle: "Steps Today",
-        kpiTargetText: "10 000",
-        kpiCurrentText: "8 532",
-        kpiDeltaText: "+1 468",
-        hasTarget: true,
-        last90DaysData: [],
-        periodAverages: [],
-        monthlyData: [],
-        dailyScale: MetricScaleResult(
-            yAxisTicks: [0, 2000, 4000, 6000, 8000, 10000],
-            yMax: 10000,
-            valueLabel: { "\($0)" }
-        ),
-        periodScale: MetricScaleResult(
-            yAxisTicks: [0, 2000, 4000, 6000, 8000, 10000],
-            yMax: 10000,
-            valueLabel: { "\($0)" }
-        ),
-        monthlyScale: MetricScaleResult(
-            yAxisTicks: [0, 50000, 100000],
-            yMax: 100000,
-            valueLabel: { "\($0)" }
-        ),
-        goalValue: 10_000,
-        onMetricSelected: { _ in },
-        metrics: ["Steps", "Activity Energy"]
-    )
-    .padding()
-    .background(Color.Glu.backgroundSurface)
 }

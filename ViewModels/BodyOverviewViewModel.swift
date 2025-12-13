@@ -4,7 +4,7 @@
 //
 //  ViewModel for the real Body Overview
 //  - Uses HealthStore + SettingsModel
-//  - Preview bleibt über Mock-Daten stabil
+//  - Datenfluss analog zur NutritionOverview (selectedDayOffset / selectedDate / refresh())
 //
 
 import Foundation
@@ -27,7 +27,7 @@ final class BodyOverviewViewModel: ObservableObject {
     private let healthStore: HealthStore
     private let settings: SettingsModel
     private let dateProvider: () -> Date
-    private let bodyInsightEngine = BodyInsightEngine()   // 👈 NEU
+    private let bodyInsightEngine = BodyInsightEngine()   // bleibt
 
     // MARK: - Published outputs
 
@@ -50,10 +50,17 @@ final class BodyOverviewViewModel: ObservableObject {
     @Published var bmi: Double = 0.0
     @Published var bodyFatPercent: Double = 0.0
 
-    // MARK: - State
+    // MARK: - NEU: Day Selection (Today / Yesterday / DayBefore)
 
-    @Published var isLoading: Bool = false
-    @Published var errorMessage: String? = nil
+    /// 0 = Today, -1 = Yesterday, -2 = DayBefore (wie bei NutritionOverview)
+    @Published var selectedDayOffset: Int = 0             // bleibt, analog Nutrition
+
+    /// Abgeleitetes Datum basierend auf `selectedDayOffset`
+    var selectedDate: Date {
+        let calendar = Calendar.current
+        let base = calendar.startOfDay(for: dateProvider())
+        return calendar.date(byAdding: .day, value: selectedDayOffset, to: base) ?? base
+    }
 
     // MARK: - Init
 
@@ -66,141 +73,116 @@ final class BodyOverviewViewModel: ObservableObject {
         self.settings = settings
         self.dateProvider = dateProvider
 
-        Task {
-            await loadData()
-        }
+        // WICHTIG:
+        // Kein automatisches Laden mehr hier, genau wie bei NutritionOverviewViewModel.
+        // Die View ruft `refresh()` selbst auf (z. B. in .task oder bei Pager-Wechsel).
     }
 
-    // MARK: - Public API
+    // MARK: - Public API (analog NutritionOverviewViewModel)
 
-    func refresh() async {
-        await loadData()
-    }
+    /// Lädt alle Body-Metriken für `selectedDate` neu.
+    /// Wird von der View aufgerufen:
+    /// - beim ersten Anzeigen (.task)
+    /// - bei Pull-to-Refresh
+    /// - bei Änderung des Pager-Index (DayBefore / Yesterday / Today)
+    func refresh() async {                                 // zentrale Load-Funktion wie bei Nutrition
+        // Ziel-Datum für die Abfrage (Today / Yesterday / DayBefore)
+        let targetDate = selectedDate
 
-    // MARK: - Core Loading Logic
+        do {
+            // Parallel-Fetch der Body-Metriken über die neuen Helper
+            async let sleepMinutesAsync = try healthStore.fetchDailySleepMinutes(for: targetDate)
+            async let weightKgRawAsync  = try healthStore.fetchDailyWeightKgRaw(for: targetDate)
+            async let bmiAsync          = try healthStore.fetchDailyBMI(for: targetDate)
+            async let bodyFatAsync      = try healthStore.fetchDailyBodyFatPercent(for: targetDate)
+            async let restingHRAsync    = try healthStore.fetchDailyRestingHeartRate(for: targetDate)
+            async let weightTrendAsync  = try healthStore.fetchLast90DaysWeightTrend()
 
-    /// Lädt Daten entweder aus echten HealthStore-Werten (Produktivmodus)
-    /// oder aus Mock-Daten (Preview / Design-Phase).
-    private func loadData() async {
-        isLoading = true
-        errorMessage = nil
+            let (
+                sleepMinutes,
+                weightKgRaw,
+                bmiValue,
+                bodyFatValue,
+                restingHR,
+                weightTrendEntries
+            ) = try await (
+                sleepMinutesAsync,
+                weightKgRawAsync,
+                bmiAsync,
+                bodyFatAsync,
+                restingHRAsync,
+                weightTrendAsync
+            )
 
-        if healthStore.isPreview {
-            await loadPreviewMockData()
-        } else {
-            await loadFromHealthStore()
-        }
+            // -------------------------
+            // Sleep
+            // -------------------------
+            let sleepGoal = settings.dailySleepGoalMinutes
 
-        isLoading = false
-    }
+            self.lastNightSleepMinutes = sleepMinutes
+            self.sleepGoalMinutes = sleepGoal
 
-    // ============================================================
-    // MARK: - Preview / Mock-Daten (für Previews & Design)
-    // ============================================================
-
-    private func loadPreviewMockData() async {
-        let today = dateProvider()
-
-        // Dummy weight trend (10 measurements, slightly decreasing)
-        let weightTrendMock: [WeightTrendPoint] = (0..<10).map { offset in
-            let date = Calendar.current.date(
-                byAdding: .day,
-                value: -9 + offset,
-                to: today
-            ) ?? today
-
-            let weight = 96.0 - Double(offset) * 0.2
-            return WeightTrendPoint(date: date, weightKg: weight)
-        }
-
-        self.todayWeightKg = 96.0
-        self.targetWeightKg = 92.0
-        self.weightDeltaKg = (todayWeightKg ?? 0) - targetWeightKg
-        self.weightTrend = weightTrendMock
-
-        self.lastNightSleepMinutes = 450            // 7.5h
-        self.sleepGoalMinutes = 480                 // 8h
-        self.sleepGoalCompletion = Double(lastNightSleepMinutes) / Double(sleepGoalMinutes)
-
-        self.restingHeartRateBpm = 58
-        self.hrvMs = 72
-
-        self.bmi = 29.4
-        self.bodyFatPercent = 23.0
-    }
-
-    // ============================================================
-    // MARK: - Produktiv: Werte direkt aus HealthStore + Settings
-    // ============================================================
-
-    private func loadFromHealthStore() async {
-
-        // 🔹 Basis: HealthStore wurde bereits über requestAuthorization() befüllt.
-        // Wir lesen hier die aktuellen Published-Werte aus und ergänzen sie mit Settings.
-
-        // -------------------------
-        // Sleep
-        // -------------------------
-        let sleepMinutes = healthStore.todaySleepMinutes
-        let sleepGoal = settings.dailySleepGoalMinutes
-
-        self.lastNightSleepMinutes = sleepMinutes
-        self.sleepGoalMinutes = sleepGoal
-        if sleepGoal > 0 {
-            self.sleepGoalCompletion = Double(sleepMinutes) / Double(sleepGoal)
-        } else {
-            self.sleepGoalCompletion = 0.0
-        }
-
-        // -------------------------
-        // Weight + Fallback + Trend
-        // -------------------------
-        let hkWeightRaw = healthStore.todayWeightKgRaw          // echter Double-Wert aus HK
-        let hasHKWeight = hkWeightRaw > 0
-
-        let settingsWeight = Double(settings.weightKg)
-        let settingsTarget = Double(settings.targetWeightKg)
-
-        let currentWeight: Double
-        if hasHKWeight {
-            currentWeight = hkWeightRaw
-        } else {
-            // 🔥 Fallback: Settings-Wert
-            currentWeight = settingsWeight
-        }
-
-        self.todayWeightKg = currentWeight
-        self.targetWeightKg = settingsTarget
-        self.weightDeltaKg = currentWeight - settingsTarget
-
-        // Trend: nur anzeigen, wenn es auch wirklich HealthKit-Gewicht gibt
-        if hasHKWeight, !healthStore.last90DaysWeight.isEmpty {
-            // z.B. letzte 10 Mess-Tage als kleinen Trend
-            let lastEntries = Array(healthStore.last90DaysWeight.suffix(10))
-            self.weightTrend = lastEntries.map { entry in
-                WeightTrendPoint(
-                    date: entry.date,
-                    weightKg: Double(entry.steps)   // steps = kg-Int aus Weight-Query
-                )
+            if sleepGoal > 0 {
+                self.sleepGoalCompletion = Double(sleepMinutes) / Double(sleepGoal)
+            } else {
+                self.sleepGoalCompletion = 0.0
             }
-        } else {
-            // ❗ Kein HealthKit-Weight → kein Chart, nur KPI
-            self.weightTrend = []
+
+            // -------------------------
+            // Weight + Fallback + Trend
+            // -------------------------
+            let hasHKWeight = weightKgRaw > 0
+            let settingsWeight = Double(settings.weightKg)
+            let settingsTarget = Double(settings.targetWeightKg)
+
+            let currentWeight: Double
+            if hasHKWeight {
+                currentWeight = weightKgRaw
+            } else {
+                // 🔥 Fallback: Settings-Wert (bestehendes Verhalten)
+                currentWeight = settingsWeight
+            }
+
+            self.todayWeightKg = currentWeight
+            self.targetWeightKg = settingsTarget
+            self.weightDeltaKg = currentWeight - settingsTarget
+
+            // Trend: nur anzeigen, wenn es auch wirklich HealthKit-Gewicht gibt
+            if hasHKWeight, !weightTrendEntries.isEmpty {
+                // z.B. letzte 10 Mess-Tage als kleinen Trend
+                let lastEntries = Array(weightTrendEntries.suffix(10))
+                self.weightTrend = lastEntries.map { entry in
+                    WeightTrendPoint(
+                        date: entry.date,
+                        weightKg: Double(entry.steps)   // steps = kg-Int aus Weight-Query
+                    )
+                }
+            } else {
+                // ❗ Kein HealthKit-Weight → kein Chart, nur KPI
+                self.weightTrend = []
+            }
+
+            // -------------------------
+            // Resting Heart Rate
+            // -------------------------
+            self.restingHeartRateBpm = restingHR
+
+            // HRV noch nicht aus HealthKit angebunden → Placeholder
+            self.hrvMs = 0
+
+            // -------------------------
+            // Body Composition
+            // -------------------------
+            self.bmi = bmiValue
+            self.bodyFatPercent = bodyFatValue
+
+            // Optional: später hier einen Body-Score / abgeleitete Werte berechnen,
+            // analog zu recalculateDerivedValues() bei NutritionOverview.
+
+        } catch {
+            // Fehlerbehandlung analog NutritionOverview (nur Logging)
+            print("BodyOverviewViewModel.refresh error:", error.localizedDescription)
         }
-
-        // -------------------------
-        // Resting Heart Rate
-        // -------------------------
-        self.restingHeartRateBpm = healthStore.todayRestingHeartRate
-
-        // HRV noch nicht aus HealthKit angebunden → Placeholder
-        self.hrvMs = 0
-
-        // -------------------------
-        // Body Composition
-        // -------------------------
-        self.bmi = healthStore.todayBMI
-        self.bodyFatPercent = healthStore.todayBodyFatPercent
     }
 
     // MARK: - Formatting helpers (used by the View)
@@ -260,27 +242,89 @@ final class BodyOverviewViewModel: ObservableObject {
 
     // MARK: - Trend & insight helpers
 
+    /// Trend-Pfeil-Symbol – Logik analog ActivityOverview-Steps:
+    /// gestern vs. Durchschnitt der vorangegangenen 1–3 Tage,
+    /// Schwelle ~0.3 kg
     func trendArrowSymbol() -> String {
-        guard let first = weightTrend.first?.weightKg,
-              let last = weightTrend.last?.weightKg else {
+        // wir brauchen mindestens 2 Punkte (mind. ein „gestern“ + ein „davor“)
+        guard weightTrend.count >= 2 else {
             return "arrow.right"
         }
-        let diff = last - first
-        if diff > 0.5 {
+
+        // chronologisch sortieren
+        let sorted = weightTrend.sorted { $0.date < $1.date }
+        let count = sorted.count
+
+        // letzter Eintrag = heute, vorletzter = gestern
+        let yesterdayIndex = count - 2
+        guard yesterdayIndex > 0 else {
+            // es gibt keinen Tag „davor“
+            return "arrow.right"
+        }
+
+        let yesterdayWeight = sorted[yesterdayIndex].weightKg
+
+        // bis zu 3 Tage vor „gestern“ mitteln
+        let startIndex = max(0, yesterdayIndex - 3)
+        let previousSlice = sorted[startIndex..<yesterdayIndex]
+        guard !previousSlice.isEmpty else {
+            return "arrow.right"
+        }
+
+        let sumPrev = previousSlice.reduce(0.0) { partial, point in
+            partial + point.weightKg
+        }
+        let avgPrev = sumPrev / Double(previousSlice.count)
+
+        let diff = yesterdayWeight - avgPrev
+        let threshold: Double = 0.3   // ~0,3 kg als „deutlich“ definieren
+
+        if diff > threshold {
+            // Gewicht ↑
             return "arrow.up.right"
-        } else if diff < -0.5 {
+        } else if diff < -threshold {
+            // Gewicht ↓
             return "arrow.down.right"
         } else {
+            // quasi stabil
             return "arrow.right"
         }
     }
 
+    /// Trend-Pfeil-Farbe:
+    /// - Gewicht ↑ (diff > 0)  → rot
+    /// - Gewicht ↓ (diff < 0)  → grün
+    /// - stabil                 → primaryBlue
     func trendArrowColor() -> Color {
-        guard let first = weightTrend.first?.weightKg,
-              let last = weightTrend.last?.weightKg else {
+        guard weightTrend.count >= 2 else {
             return Color.Glu.primaryBlue
         }
-        let diff = last - first
+
+        let sorted = weightTrend.sorted { $0.date < $1.date }
+        let count = sorted.count
+
+        let yesterdayIndex = count - 2
+        guard yesterdayIndex > 0 else {
+            return Color.Glu.primaryBlue
+        }
+
+        let yesterdayWeight = sorted[yesterdayIndex].weightKg
+
+        let startIndex = max(0, yesterdayIndex - 3)
+        let previousSlice = sorted[startIndex..<yesterdayIndex]
+        guard !previousSlice.isEmpty else {
+            return Color.Glu.primaryBlue
+        }
+
+        let sumPrev = previousSlice.reduce(0.0) { partial, point in
+            partial + point.weightKg
+        }
+        let avgPrev = sumPrev / Double(previousSlice.count)
+
+        let diff = yesterdayWeight - avgPrev
+
+        // hier bewusst die „Gewichtslogik“:
+        // ↑ = rot, ↓ = grün
         return deltaColor(for: diff)
     }
 
@@ -301,7 +345,7 @@ final class BodyOverviewViewModel: ObservableObject {
 
     static var preview: BodyOverviewViewModel {
         let vm = BodyOverviewViewModel(
-            healthStore: HealthStore(isPreview: true),
+            healthStore: HealthStore.preview(),             // nutzt Preview-Store wie Nutrition
             settings: .shared
         )
         return vm

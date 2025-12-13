@@ -31,9 +31,17 @@ struct NutritionSectionCardScaled: View {
     let periodScale: MetricScaleResult
     let monthlyScale: MetricScaleResult
 
+    // Zielwert (optional)
     let goalValue: Int?
+
+    // Navigation + Chips
     let onMetricSelected: (String) -> Void
+    let onBack: () -> Void
+
     let metrics: [String]
+
+    // !!! NEW: Header in der Card ein-/ausschaltbar
+    let showHeader: Bool                     // !!! NEW
 
     // Domain-Farbe
     private let color = Color.Glu.nutritionAccent
@@ -60,26 +68,13 @@ struct NutritionSectionCardScaled: View {
 
     // MARK: - Adaptive Skala für die aktuell gewählte Periode
 
-    /// Ermittelt dynamisch die Skala für die aktuell gewählte Periode
-    /// auf Basis der *sichtbaren* Werte.
-    ///
-    /// - Nutrition Energy  → .energyDaily
-    /// - Carbs/Protein/Fat → .grams
     private var dailyScaleForSelectedPeriod: MetricScaleResult {
         let values = filteredLast90DaysData.map { Double($0.steps) }
 
-        // Wenn noch keine Daten für die Periode vorliegen,
-        // fallback auf die ursprüngliche 90-Tage-Skala aus dem ViewModel.
         guard !values.isEmpty else {
             return dailyScale
         }
 
-        // 🔥 Generische Logik:
-        // Für alle Nutrition-Metriken wird der Helper mit
-        // den *sichtbaren* Werten gefüttert.
-        //
-        // Energy → eigenes Profil (.energyDaily)
-        // Gramm-Metriken → gemeinsames Profil (.grams)
         let scaleType: MetricScaleHelper.MetricScaleType =
             (title == "Nutrition Energy") ? .energyDaily : .grams
 
@@ -91,8 +86,15 @@ struct NutritionSectionCardScaled: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
 
-            // SECTION HEADER
-            SectionHeader(title: sectionTitle, subtitle: nil)
+            // SECTION HEADER nur, wenn gewünscht
+            if showHeader {                     // !!! NEW
+                SectionHeader(
+                    title: sectionTitle,        // z. B. "Nutrition"
+                    subtitle: nil,
+                    tintColor: color,
+                    onBack: onBack
+                )
+            }
 
             // METRIC CHIPS
             metricChips
@@ -100,7 +102,7 @@ struct NutritionSectionCardScaled: View {
             // KPI-ZEILE
             kpiHeader
 
-            // TOP: 90-Day Scaled Chart + PeriodPicker (Liquid-Glas) in einer Karte
+            // TOP: 90-Day Scaled Chart + PeriodPicker in einer Karte
             ChartCard(borderColor: color) {
                 VStack(spacing: 8) {
 
@@ -118,7 +120,7 @@ struct NutritionSectionCardScaled: View {
                         yValue: { Double($0.steps) }
                     )
                 }
-                .frame(height: 260)   // gleiche Gesamt-Höhe wie die anderen Charts
+                .frame(height: 260)
             }
 
             // MIDDLE: Period Averages Scaled Chart
@@ -236,7 +238,7 @@ private extension NutritionSectionCardScaled {
                     title: "Delta",
                     valueText: kpiDeltaText,
                     unit: nil,
-                    valueColor: deltaColor,    // ⬅️ neue Logik
+                    valueColor: deltaColor,
                     domain: .nutrition
                 )
             } else {
@@ -253,16 +255,11 @@ private extension NutritionSectionCardScaled {
         .padding(.bottom, 10)
     }
 
-    /// Farbe für Delta in der Nutrition-Domain:
-    /// - current <= target  → GRÜN  (unter Ziel = gut)
-    /// - current  > target  → ROT   (über Ziel = schlecht)
     var deltaColor: Color {
-        // numerische Werte aus Current & Target extrahieren
         let current = extractNumber(from: kpiCurrentText)
         let target  = extractNumber(from: kpiTargetText)
 
         guard let current, let target else {
-            // Fallback, wenn Parsing fehlschlägt
             return Color.Glu.primaryBlue.opacity(0.75)
         }
 
@@ -273,7 +270,6 @@ private extension NutritionSectionCardScaled {
         }
     }
 
-    /// Hilfsfunktion: extrahiert eine Double-Zahl aus einem String wie "10.460 kJ" oder "150 g"
     func extractNumber(from text: String) -> Double? {
         let cleaned = text
             .filter { "0123456789.,-".contains($0) }
@@ -283,7 +279,7 @@ private extension NutritionSectionCardScaled {
     }
 }
 
-// MARK: - Period Picker (Liquid-Glas Optik)
+// MARK: - Period Picker
 
 private extension NutritionSectionCardScaled {
 
@@ -297,7 +293,7 @@ private extension NutritionSectionCardScaled {
                 Button {
                     selectedPeriod = period
                 } label: {
-                    Text(period.rawValue)   // "7", "14", "30", "90"
+                    Text(period.rawValue)
                         .font(.caption2.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -307,7 +303,6 @@ private extension NutritionSectionCardScaled {
                             Capsule()
                                 .fill(
                                     active
-                                    // 🔥 AKTIV: kräftiger, dunkler Verlauf
                                     ? LinearGradient(
                                         colors: [
                                             color.opacity(0.95),
@@ -316,7 +311,6 @@ private extension NutritionSectionCardScaled {
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                       )
-                                    // 🔹 INAKTIV: sehr dezenter Glas-Hintergrund
                                     : LinearGradient(
                                         colors: [
                                             Color.white.opacity(0.10),
@@ -344,10 +338,10 @@ private extension NutritionSectionCardScaled {
                         )
                         .foregroundStyle(
                             active
-                            ? Color.white                         // 🔥 aktiver Text = weiß
-                            : Color.Glu.primaryBlue.opacity(0.95) // inaktiv = blau
+                            ? Color.white
+                            : Color.Glu.primaryBlue.opacity(0.95)
                         )
-                        .scaleEffect(active ? 1.05 : 1.0)          // leicht größer im aktiven Zustand
+                        .scaleEffect(active ? 1.05 : 1.0)
                         .animation(.easeOut(duration: 0.15), value: active)
                 }
             }
@@ -356,41 +350,4 @@ private extension NutritionSectionCardScaled {
         }
         .padding(.horizontal, 4)
     }
-}
-
-// MARK: - Preview
-
-#Preview("NutritionSectionCardScaled – Demo") {
-    NutritionSectionCardScaled(
-        sectionTitle: "Nutrition",
-        title: "Nutrition Energy",
-        kpiTitle: "Energy Today",
-        kpiTargetText: "2 500 kcal",
-        kpiCurrentText: "1 800 kcal",
-        kpiDeltaText: "-700 kcal",
-        hasTarget: true,
-        last90DaysData: [],
-        periodAverages: [],
-        monthlyData: [],
-        dailyScale: MetricScaleResult(
-            yAxisTicks: [0, 500, 1000, 1500, 2000],
-            yMax: 2000,
-            valueLabel: { "\($0)" }
-        ),
-        periodScale: MetricScaleResult(
-            yAxisTicks: [0, 500, 1000, 1500, 2000],
-            yMax: 2000,
-            valueLabel: { "\($0)" }
-        ),
-        monthlyScale: MetricScaleResult(
-            yAxisTicks: [0, 500, 1000, 1500, 2000],
-            yMax: 2000,
-            valueLabel: { "\($0)" }
-        ),
-        goalValue: 2500,
-        onMetricSelected: { _ in },
-        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"]
-    )
-    .padding()
-    .background(Color.Glu.backgroundSurface)
 }

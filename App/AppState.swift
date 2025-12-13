@@ -25,7 +25,8 @@ final class AppState: ObservableObject {
         // 🔹 Activity-Domain
         case steps
         case activityEnergy
-
+        case activityExerciseMinutes
+        case movementSplit        // !!! NEW
         // 🔹 Body-Domain (bisher + neu)
         case weight
         case sleep

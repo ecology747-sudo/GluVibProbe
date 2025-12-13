@@ -102,7 +102,8 @@ struct NutritionOverviewView: View {
                     dayScrollView
                         .tag(2)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .automatic))
+                // 🔴 System-Dots deaktivieren, wir nutzen CustomPageDots
+                .tabViewStyle(.page(indexDisplayMode: .never))
                 // Blur-Aktivierung anhand des Scroll-Offsets (von allen Seiten gesammelt)
                 .onPreferenceChange(NutritionScrollOffsetKey.self) { offset in
                     withAnimation(.easeInOut(duration: 0.22)) {
@@ -129,11 +130,31 @@ struct NutritionOverviewView: View {
                     tintColor: Color.Glu.nutritionAccent,
                     hasScrolled: hasScrolled
                 )
+
+                // MARK: - Custom PageDots (Nutrition-Farbe, immer sichtbar)
+                VStack {
+                    Spacer()
+                    PageDots(
+                        selected: selectedPage,
+                        total: 3,
+                        color: Color.Glu.nutritionAccent
+                    )
+                    .padding(.bottom, 12)
+                }
             }
         }
         .task {
             // Initial-Ladung für den aktuellen Tag
             await viewModel.refresh()
+        }
+        .onChange(of: appState.currentStatsScreen) { newScreen in   // !!! NEW
+            // Wenn wir aus einer Detail-Metrik zurück in die Overview kommen,
+            // Daten für den aktuell gewählten Tag neu laden
+            if newScreen == .nutritionOverview || newScreen == .none {   // !!! NEW
+                Task {                                                   // !!! NEW
+                    await viewModel.refresh()                            // !!! NEW
+                }                                                        // !!! NEW
+            }                                                            // !!! NEW
         }
     }
 }
@@ -142,10 +163,19 @@ struct NutritionOverviewView: View {
 
 private extension NutritionOverviewView {
 
-    /// Nutzt das `selectedDate` aus dem ViewModel (read-only),
-    /// formatiert es aber nur als Text für den Header.
+    /// Liefert den Text für den Header:
+    /// - TODAY      für offset 0
+    /// - YESTERDAY  für offset -1
+    /// - Datum      für offset ≤ -2
     var headerSubtitle: String {
-        dateString(for: viewModel.selectedDate)
+        switch viewModel.selectedDayOffset {
+        case 0:
+            return "TODAY"
+        case -1:
+            return "YESTERDAY"
+        default:
+            return dateString(for: viewModel.selectedDate)
+        }
     }
 
     func dateString(for date: Date) -> String {
@@ -154,6 +184,9 @@ private extension NutritionOverviewView {
         formatter.timeStyle = .none
         return formatter.string(from: date)
     }
+
+    // ... dayOffset(for:) und pageIndex(for:) bleiben unverändert
+
 
     /// Mapping Pager-Index → DayOffset (in Tagen relativ zu heute)
     /// 0 = DayBefore (-2), 1 = Yesterday (-1), 2 = Today (0)
@@ -216,7 +249,7 @@ private extension NutritionOverviewView {
             // WICHTIG: Platz nach oben, damit der Inhalt UNTER dem Header startet
             .padding(.top, 30)
             .padding(.horizontal, 16)
-            .padding(.bottom, 24)
+            .padding(.bottom, 60)   // etwas mehr Platz für CustomPageDots
         }
         .refreshable {
             await viewModel.refresh()
@@ -234,7 +267,7 @@ private extension NutritionOverviewView {
             Spacer()
 
             HStack(spacing: 6) {
-                Text("Score")
+                Text("Nutrition Score")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color.Glu.primaryBlue.opacity(0.7))
 
@@ -734,19 +767,19 @@ private extension NutritionOverviewView {
     }
 }
 
-    private func energyRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.subheadline.weight(.semibold))   // wie Macro-Legende
-                .foregroundStyle(Color.Glu.primaryBlue)
+private func energyRow(label: String, value: String) -> some View {
+    HStack {
+        Text(label)
+            .font(.subheadline.weight(.semibold))   // wie Macro-Legende
+            .foregroundStyle(Color.Glu.primaryBlue)
 
-            Spacer()
+        Spacer()
 
-            Text(value)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Color.Glu.primaryBlue)
-        }
+        Text(value)
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(Color.Glu.primaryBlue)
     }
+}
 
 
 // MARK: - 5) Insight Card
@@ -783,6 +816,25 @@ private extension NutritionOverviewView {
                     y: 6
                 )
         )
+    }
+}
+
+// MARK: - Custom PageDots (wie in BodyOverview)
+
+private struct PageDots: View {
+    let selected: Int
+    let total: Int
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<total, id: \.self) { index in
+                Circle()
+                    .fill(index == selected ? color : color.opacity(0.35))
+                    .frame(width: 8, height: 8)
+            }
+        }
+        .padding(.horizontal, 16)
     }
 }
 

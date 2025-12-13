@@ -1,103 +1,113 @@
+//
 //  BMIView.swift                                                     // !!! UPDATED
 //  GluVibProbe                                                        // !!! UPDATED
 //
 //  Body-Domain: BMI
 //  - Daten aus BMIViewModel
-//  - Line-Chart (Last 90 Days) über zentrale BodySectionCardScaled   // !!! UPDATED
+//  - Chart über zentrale BodySectionCardScaled
+//
 
-import SwiftUI                                                        // !!! UPDATED
+import SwiftUI
 
-struct BMIView: View {                                               // !!! UPDATED
+struct BMIView: View {
 
     // MARK: - ViewModel
 
-    @StateObject private var viewModel = BMIViewModel()              // !!! UPDATED
+    @StateObject private var viewModel = BMIViewModel()
 
     // MARK: - Metric-Navigation Callback
 
     /// Wird vom Body-Domain-Container gesetzt, um zwischen
     /// Weight / Sleep / BMI / Body Fat / Resting HR zu wechseln.
-    let onMetricSelected: (String) -> Void                           // !!! UPDATED
+    let onMetricSelected: (String) -> Void
 
-    init(onMetricSelected: @escaping (String) -> Void = { _ in }) {  // !!! UPDATED
-        self.onMetricSelected = onMetricSelected                     // !!! UPDATED
+    // 🔙 NEU: optionaler Back-Callback (zur BodyOverview)
+    let onBack: (() -> Void)?
+
+    init(
+        onMetricSelected: @escaping (String) -> Void = { _ in },
+        onBack: (() -> Void)? = nil          // !!! NEW
+    ) {
+        self.onMetricSelected = onMetricSelected
+        self.onBack = onBack                // !!! NEW
     }
 
     // MARK: - Body
 
-    var body: some View {                                            // !!! UPDATED
+    var body: some View {
 
         // KPI-Texte
-        let currentBMIText: String = viewModel.todayBMIText          // !!! UPDATED
-        let targetText: String      = "–"                             // !!! UPDATED
-        let deltaText: String       = "–"                             // !!! UPDATED
+        let currentBMIText: String = viewModel.todayBMIText
+        let targetText: String      = "–"
+        let deltaText: String       = "–"
 
-        return ZStack {                                              // !!! UPDATED
+        return ZStack {
             // 👉 Body-Domain-Hintergrund
-            Color.Glu.bodyAccent.opacity(0.18)                       // !!! UPDATED
-                .ignoresSafeArea()                                   // !!! UPDATED
+            Color.Glu.bodyAccent.opacity(0.18)
+                .ignoresSafeArea()
 
-            ScrollView {                                             // !!! UPDATED
-                VStack(alignment: .leading, spacing: 16) {           // !!! UPDATED
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
 
-                    // !!! UPDATED: zentrale SectionCard mit chartStyle: .line
-                    BodySectionCardScaled(                           // !!! UPDATED
-                        sectionTitle: "Body",                        // !!! UPDATED
-                        title: "BMI",                               // !!! UPDATED
-                        kpiTitle: "BMI Today",                      // !!! UPDATED
-                        kpiTargetText: targetText,                  // !!! UPDATED
-                        kpiCurrentText: currentBMIText,             // !!! UPDATED
-                        kpiDeltaText: deltaText,                    // !!! UPDATED
-                        hasTarget: false,                           // !!! UPDATED
+                    BodySectionCardScaled(
+                        sectionTitle: "Body",
+                        title: "BMI",
+                        kpiTitle: "BMI Today",
+                        kpiTargetText: targetText,
+                        kpiCurrentText: currentBMIText,
+                        kpiDeltaText: deltaText,
+                        hasTarget: false,
 
-                        last90DaysData: viewModel.last90DaysDataForChart, // !!! UPDATED
-                        periodAverages: viewModel.periodAveragesForChart, // !!! UPDATED
-                        monthlyData: viewModel.monthlyData,         // !!! UPDATED
+                        last90DaysData: viewModel.last90DaysDataForChart,
+                        periodAverages: viewModel.periodAveragesForChart,
+                        monthlyData: viewModel.monthlyData,
 
-                        dailyScale: viewModel.dailyScale,           // !!! UPDATED
-                        periodScale: viewModel.periodScale,         // !!! UPDATED
-                        monthlyScale: viewModel.monthlyScale,       // !!! UPDATED
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
 
-                        goalValue: nil,                             // !!! UPDATED
+                        goalValue: nil,
 
-                        onMetricSelected: onMetricSelected,         // !!! UPDATED
-                        metrics: [                                  // !!! UPDATED
+                        onMetricSelected: onMetricSelected,
+                        metrics: [
                             "Weight",
                             "Sleep",
                             "BMI",
                             "Body Fat",
                             "Resting Heart Rate"
                         ],
-                        showMonthlyChart: false,                    // !!! UPDATED
-                        // Temporär nutzen wir dieselbe Skala wie Weight,    // !!! UPDATED
-                        // bis ein eigener BMI-ScaleType eingeführt ist.     // !!! UPDATED
-                        scaleType: .weightKg,                       // !!! UPDATED
-                        chartStyle: .bar                          // !!! NEW
+                        showMonthlyChart: false,
+                        // temporär gleiche Skala wie Weight
+                        scaleType: .weightKg,
+                        chartStyle: .bar,
+                        onBack: onBack              // !!! NEW – Pfeil-Logik
                     )
-                    .padding(.horizontal)                           // !!! UPDATED
-
+                    .padding(.horizontal)
                 }
-                .padding(.top, 16)                                  // !!! UPDATED
+              
             }
-            .refreshable {                                          // !!! UPDATED
-                viewModel.refresh()                                 // !!! UPDATED
+            .refreshable {
+                viewModel.refresh()
             }
         }
-        .onAppear {                                                 // !!! UPDATED
-            viewModel.onAppear()                                    // !!! UPDATED
+        .onAppear {
+            viewModel.onAppear()
         }
     }
 }
 
 // MARK: - Preview
 
-#Preview("BMIView – Body Domain") {                                   // !!! UPDATED
-    let appState    = AppState()                                      // !!! UPDATED
-    let healthStore = HealthStore.preview()                           // !!! UPDATED
+#Preview("BMIView – Body Domain") {
+    let appState    = AppState()
+    let healthStore = HealthStore.preview()
 
-    return BMIView() { metric in                                      // !!! UPDATED
-        print("Selected metric:", metric)                             // !!! UPDATED
-    }
-    .environmentObject(appState)                                      // !!! UPDATED
-    .environmentObject(healthStore)                                   // !!! UPDATED
+    return BMIView(
+        onMetricSelected: { metric in
+            print("Selected metric:", metric)
+        },
+        onBack: nil
+    )
+    .environmentObject(appState)
+    .environmentObject(healthStore)
 }

@@ -5,10 +5,6 @@
 
 import SwiftUI
 
-/// Dashboard für die Nutrition-Domain:
-/// Steuert, welche Detail-View angezeigt wird.
-/// Wird NUR angezeigt, wenn ein Nutrition-Detail aktiv ist.
-/// Die Overview wird NICHT hier angezeigt, sondern in ContentView.
 struct NutritionDashboardView: View {
 
     @EnvironmentObject var appState: AppState
@@ -19,41 +15,56 @@ struct NutritionDashboardView: View {
         switch appState.currentStatsScreen {
 
         // -----------------------------------------------------
-        // NEUE FÄLLE → werden NICHT hier behandelt
+        // Overview / kein Detail aktiv
         // -----------------------------------------------------
         case .none,
              .nutritionOverview:
-            // Sollte nie passieren, aber wir geben
-            // einen Fallback zurück, damit der Switch vollständig ist.
             EmptyView()
 
         // -----------------------------------------------------
         // Nutrition-Metriken
         // -----------------------------------------------------
         case .carbs:
-            CarbsView(onMetricSelected: handleMetricSelection)
+            CarbsView(
+                onMetricSelected: handleMetricSelection,
+                onBack: { appState.currentStatsScreen = .nutritionOverview }
+            )
 
         case .protein:
-            ProteinView(onMetricSelected: handleMetricSelection)
+            ProteinView(
+                onMetricSelected: handleMetricSelection,
+                onBack: { appState.currentStatsScreen = .nutritionOverview }
+            )
 
         case .fat:
-            FatView(onMetricSelected: handleMetricSelection)
+            FatView(
+                onMetricSelected: handleMetricSelection,
+                onBack: { appState.currentStatsScreen = .nutritionOverview }
+            )
 
         case .calories:
-            NutritionEnergyView(onMetricSelected: handleMetricSelection)
+            NutritionEnergyView(
+                onMetricSelected: handleMetricSelection,
+                onBack: { appState.currentStatsScreen = .nutritionOverview }
+            )
 
         // -----------------------------------------------------
-        // Andere Domains – Fallback
-        // (sollen eigentlich nicht über dieses Dashboard kommen)
+        // Andere Domains – Fallback (sollten hier eigentlich
+        // nicht landen, aber für Vollständigkeit)
         // -----------------------------------------------------
         case .steps,
              .activityEnergy,
+             .activityExerciseMinutes,
+             .movementSplit,
              .weight,
              .sleep,
-             .bmi,                 // !!! NEW
-             .bodyFat,             // !!! NEW
-             .restingHeartRate:    // !!! NEW
-            CarbsView(onMetricSelected: handleMetricSelection)
+             .bmi,
+             .bodyFat,
+             .restingHeartRate:
+            CarbsView(
+                onMetricSelected: handleMetricSelection
+                // onBack wird hier NICHT übergeben → Default {} greift
+            )
         }
     }
 
@@ -63,27 +74,23 @@ struct NutritionDashboardView: View {
         switch metric {
         case "Carbs":
             appState.currentStatsScreen = .carbs
-
         case "Protein":
             appState.currentStatsScreen = .protein
-
         case "Fat":
             appState.currentStatsScreen = .fat
-
         case "Nutrition Energy":
             appState.currentStatsScreen = .calories
-
         default:
             break
         }
     }
 }
 
-#Preview("NutritionDashboardView") {
-    let previewStore = HealthStore.preview()
-    let previewState = AppState()
+#Preview("NutritionDashboardView") {                          // !!! NEW
+    let previewStore = HealthStore.preview()                  // !!! NEW
+    let previewState = AppState()                             // !!! NEW
 
-    return NutritionDashboardView()
-        .environmentObject(previewStore)
-        .environmentObject(previewState)
+    return NutritionDashboardView()                           // !!! NEW
+        .environmentObject(previewStore)                      // !!! NEW
+        .environmentObject(previewState)                      // !!! NEW
 }

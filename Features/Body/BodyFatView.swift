@@ -1,104 +1,112 @@
-//  BodyFatView.swift                                                 // !!! UPDATED
+//
+//  BodyFatView.swift
 //  GluVibProbe
 //
 //  Body-Domain: Body Fat Percentage
-//  - zentrale SectionCard (mit chartStyle: .line)
+//  - zentrale SectionCard
 //  - Daten aus BodyFatViewModel
 //
 
-import SwiftUI                                                        // !!! UPDATED
+import SwiftUI
 
-struct BodyFatView: View {                                            // !!! UPDATED
+struct BodyFatView: View {
 
     // MARK: - ViewModel
 
-    @StateObject private var viewModel = BodyFatViewModel()          // !!! UPDATED
+    @StateObject private var viewModel = BodyFatViewModel()
 
     // MARK: - Metric-Navigation Callback
 
-    let onMetricSelected: (String) -> Void                           // !!! UPDATED
+    let onMetricSelected: (String) -> Void
 
-    init(onMetricSelected: @escaping (String) -> Void = { _ in }) {  // !!! UPDATED
+    // 🔙 NEU: optionaler Back-Callback (zur BodyOverview)
+    let onBack: (() -> Void)?          // !!! NEW
+
+    init(
+        onMetricSelected: @escaping (String) -> Void = { _ in },
+        onBack: (() -> Void)? = nil    // !!! NEW
+    ) {
         self.onMetricSelected = onMetricSelected
+        self.onBack = onBack           // !!! NEW
     }
 
     // MARK: - Body
 
-    var body: some View {                                            // !!! UPDATED
+    var body: some View {
 
         // KPI-Text
-        let currentText: String = viewModel.todayBodyFatText         // !!! UPDATED
+        let currentText: String = viewModel.todayBodyFatText
         let targetText: String  = "–"
         let deltaText: String   = "–"
 
-        return ZStack {                                              // !!! UPDATED
+        return ZStack {
 
-            Color.Glu.bodyAccent.opacity(0.18)                       // !!! UPDATED
+            Color.Glu.bodyAccent.opacity(0.18)
                 .ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    // !!! UPDATED: zentrale SectionCard mit chartStyle: .line
                     BodySectionCardScaled(
-                        sectionTitle: "Body",                        // !!! UPDATED
-                        title: "Body Fat",                           // !!! UPDATED
-                        kpiTitle: "Body Fat Today",                  // !!! UPDATED
-                        kpiTargetText: targetText,                   // !!! UPDATED
-                        kpiCurrentText: currentText,                 // !!! UPDATED
-                        kpiDeltaText: deltaText,                     // !!! UPDATED
-                        hasTarget: false,                            // !!! UPDATED
+                        sectionTitle: "Body",
+                        title: "Body Fat",
+                        kpiTitle: "Body Fat Today",
+                        kpiTargetText: targetText,
+                        kpiCurrentText: currentText,
+                        kpiDeltaText: deltaText,
+                        hasTarget: false,
 
-                        last90DaysData: viewModel.last90DaysDataForChart,   // !!! UPDATED
-                        periodAverages: viewModel.periodAveragesForChart,   // !!! UPDATED
-                        monthlyData: viewModel.monthlyData,                 // !!! UPDATED
+                        last90DaysData: viewModel.last90DaysDataForChart,
+                        periodAverages: viewModel.periodAveragesForChart,
+                        monthlyData: viewModel.monthlyData,
 
-                        dailyScale: viewModel.dailyScale,            // !!! UPDATED
-                        periodScale: viewModel.periodScale,          // !!! UPDATED
-                        monthlyScale: viewModel.monthlyScale,        // !!! UPDATED
+                        dailyScale: viewModel.dailyScale,
+                        periodScale: viewModel.periodScale,
+                        monthlyScale: viewModel.monthlyScale,
 
-                        goalValue: nil,                              // !!! UPDATED
+                        goalValue: nil,
 
-                        onMetricSelected: onMetricSelected,          // !!! UPDATED
-                        metrics: [                                   // !!! UPDATED
+                        onMetricSelected: onMetricSelected,
+                        metrics: [
                             "Weight",
                             "Sleep",
                             "BMI",
                             "Body Fat",
                             "Resting Heart Rate"
                         ],
-                        showMonthlyChart: false,                     // !!! UPDATED
+                        showMonthlyChart: false,
 
-                        // Eigener Scale-Type wäre möglich.
-                        // Aktuell speichern wir BodyFat als Prozent 0–100, daher:
-                        scaleType: .weightKg,                        // !!! TEMP: eigener ScaleType folgt später
-
-                        chartStyle: .bar                            // !!! NEW
+                        // aktueller ScaleType (kann später spezialisiert werden)
+                        scaleType: .weightKg,
+                        chartStyle: .bar,
+                        onBack: onBack          // !!! NEW – Pfeil durchreichen
                     )
                     .padding(.horizontal)
-
                 }
-                .padding(.top, 16)
+              
             }
             .refreshable {
-                viewModel.refresh()                                 // !!! UPDATED
+                viewModel.refresh()
             }
         }
         .onAppear {
-            viewModel.onAppear()                                    // !!! UPDATED
+            viewModel.onAppear()
         }
     }
 }
 
 // MARK: - Preview
 
-#Preview("BodyFatView – Body Domain") {                               // !!! UPDATED
+#Preview("BodyFatView – Body Domain") {
     let appState    = AppState()
     let healthStore = HealthStore.preview()
 
-    return BodyFatView() { metric in
-        print("Selected metric:", metric)
-    }
+    return BodyFatView(
+        onMetricSelected: { metric in
+            print("Selected metric:", metric)
+        },
+        onBack: nil
+    )
     .environmentObject(appState)
     .environmentObject(healthStore)
 }

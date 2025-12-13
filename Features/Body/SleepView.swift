@@ -10,11 +10,16 @@ struct SleepView: View {
     @StateObject private var viewModel: SleepViewModel
     let onMetricSelected: (String) -> Void
 
+    // !!! NEW: optionaler Back-Callback
+    let onBack: (() -> Void)?
+
     init(
         viewModel: SleepViewModel? = nil,
-        onMetricSelected: @escaping (String) -> Void = { _ in }
+        onMetricSelected: @escaping (String) -> Void = { _ in },
+        onBack: (() -> Void)? = nil        // !!! NEW
     ) {
         self.onMetricSelected = onMetricSelected
+        self.onBack = onBack              // !!! NEW
         _viewModel = StateObject(wrappedValue: viewModel ?? SleepViewModel())
     }
 
@@ -43,7 +48,7 @@ struct SleepView: View {
                         monthlyScale: viewModel.monthlyScale,
                         goalValue: Int(viewModel.goalValueForChart),
                         onMetricSelected: onMetricSelected,
-                        metrics: [                       // !!! UPDATED – alle 5 Body-Metriken
+                        metrics: [                       // alle 5 Body-Metriken
                             "Weight",
                             "Sleep",
                             "BMI",
@@ -52,11 +57,12 @@ struct SleepView: View {
                         ],
                         showMonthlyChart: true,
                         scaleType: .sleepMinutes,
-                        chartStyle: .bar               // !!! NEW – Last 90 Days als Line-Chart
+                        chartStyle: .bar,
+                        onBack: onBack                 // !!! NEW – Pfeil-Logik
                     )
                     .padding(.horizontal)
                 }
-                .padding(.top, 16)
+              
             }
             .refreshable {
                 viewModel.refresh()
@@ -77,7 +83,8 @@ struct SleepView: View {
 
     return SleepView(
         viewModel: viewModel,
-        onMetricSelected: { _ in }
+        onMetricSelected: { _ in },
+        onBack: nil
     )
     .environmentObject(appState)
     .environmentObject(healthStore)

@@ -1,29 +1,31 @@
 //
-//  ActivityEnergyView.swift
+//  ExerciseMinutesView.swift
 //  GluVibProbe
 //
-//  Reine View für den Activity-Energy-Screen (MVVM)
+//  Reine View für den Active-Time-Screen (vormals Exercise Minutes) – MVVM
 //
 
 import SwiftUI
 
-struct ActivityEnergyView: View {
+struct ExerciseMinutesView: View {
 
     // MARK: - Environment
     @EnvironmentObject var appState: AppState
 
     // MARK: - ViewModel
 
-    @StateObject private var viewModel: ActivityEnergyViewModel
+    @StateObject private var viewModel: ExerciseMinutesViewModel
 
     // Callback aus dem Dashboard (für Metric-Chips)
     let onMetricSelected: (String) -> Void
 
+    // MARK: - Init
+
     /// Haupt-Init für die App:
-    /// - ohne ViewModel → ActivityEnergyViewModel benutzt automatisch HealthStore.shared
+    /// - ohne ViewModel → ExerciseMinutesViewModel benutzt automatisch HealthStore.shared
     /// - mit ViewModel → z.B. in Previews kann ein spezielles VM übergeben werden
     init(
-        viewModel: ActivityEnergyViewModel? = nil,
+        viewModel: ExerciseMinutesViewModel? = nil,
         onMetricSelected: @escaping (String) -> Void = { _ in }
     ) {
         self.onMetricSelected = onMetricSelected
@@ -31,9 +33,13 @@ struct ActivityEnergyView: View {
         if let viewModel {
             _viewModel = StateObject(wrappedValue: viewModel)
         } else {
-            _viewModel = StateObject(wrappedValue: ActivityEnergyViewModel())
+            _viewModel = StateObject(
+                wrappedValue: ExerciseMinutesViewModel()
+            )
         }
     }
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
@@ -56,22 +62,31 @@ struct ActivityEnergyView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
 
-                        // Haupt-Section mit KPI + Charts (Activity Energy) – SCALED
+                        // Haupt-Section mit KPI + Charts (Active Time) – SCALED
                         ActivitySectionCardScaled(
                             sectionTitle: "",
-                            title: "Activity Energy",
-                            kpiTitle: "Active Energy Today",
-                            kpiTargetText: "–",                              // aktuell kein Ziel
-                            kpiCurrentText: viewModel.formattedTodayActiveEnergy,
-                            kpiDeltaText: "–",                                // kein Delta, da kein Ziel
-                            hasTarget: false,                                 // nur Current-KPI
-                            last90DaysData: viewModel.last90DaysDataForChart,
-                            periodAverages: viewModel.periodAveragesForChart,
+                            title: "Active Time",
+                            kpiTitle: "Active Time Today",
+                            // Aktuell ohne Ziel-Flow:
+                            kpiTargetText: "",
+                            kpiCurrentText: viewModel.formattedTodayExerciseMinutes,
+                            kpiDeltaText: "",
+                            hasTarget: false,
+
+                            // Chart-Daten
+                            last90DaysData: viewModel.last90DaysChartData,
+                            periodAverages: viewModel.periodAverages,
                             monthlyData: viewModel.monthlyData,
+
+                            // Skalen (MetricScaleHelper)
                             dailyScale: viewModel.dailyScale,
                             periodScale: viewModel.periodScale,
                             monthlyScale: viewModel.monthlyScale,
-                            goalValue: nil,                                   // keine RuleMark-Linie
+
+                            // Zielwert aktuell nicht genutzt
+                            goalValue: nil,
+
+                            // Metric-Chip-Navigation
                             onMetricSelected: onMetricSelected,
                             metrics: [
                                 "Steps",
@@ -85,6 +100,7 @@ struct ActivityEnergyView: View {
                     .padding(.top, 8)
                 }
                 .refreshable {
+                    // Pull-to-Refresh → HealthKit neu abfragen
                     viewModel.refresh()
                 }
             }
@@ -95,14 +111,12 @@ struct ActivityEnergyView: View {
     }
 }
 
-// MARK: - Preview
-
-#Preview("ActivityEnergyView – Activity") {
+#Preview("ExerciseMinutesView – Activity") {
     let previewStore = HealthStore.preview()
-    let previewVM = ActivityEnergyViewModel(healthStore: previewStore)
+    let previewVM = ExerciseMinutesViewModel(healthStore: previewStore)
     let previewState = AppState()
 
-    ActivityEnergyView(viewModel: previewVM)
+    return ExerciseMinutesView(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
 }

@@ -9,6 +9,11 @@ import SwiftUI
 
 struct StepsView: View {
 
+    // MARK: - Environment
+    @EnvironmentObject var appState: AppState
+
+    // MARK: - ViewModel
+
     @StateObject private var viewModel: StepsViewModel
 
     // Callback aus dem Dashboard (für Metric-Chips)
@@ -36,35 +41,53 @@ struct StepsView: View {
             Color.Glu.activityAccent.opacity(0.18)
                 .ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+            VStack(spacing: 0) {
 
-                    // Haupt-Section mit KPI + Charts (Steps) – SCALED
-                    ActivitySectionCardScaled(
-                        sectionTitle: "Activity",
-                        title: "Steps",
-                        kpiTitle: "Steps Today",
-                        kpiTargetText: viewModel.formattedDailyStepGoal,
-                        kpiCurrentText: viewModel.formattedTodaySteps,
-                        kpiDeltaText: viewModel.kpiDeltaText,
-                        hasTarget: true,
-                        last90DaysData: viewModel.last90DaysDataForChart,
-                        periodAverages: viewModel.periodAverages,
-                        monthlyData: viewModel.monthlyData,
-                        dailyScale: viewModel.dailyScale,
-                        periodScale: viewModel.periodScale,
-                        monthlyScale: viewModel.monthlyScale,
-                        goalValue: viewModel.dailyStepsGoalInt,
-                        onMetricSelected: onMetricSelected,
-                        metrics: ["Steps", "Activity Energy"]
-                    )
-                    .padding(.horizontal)
+                // DOMAIN-HEADER „Activity“ (Rot) + Back-Pfeil
+                SectionHeader(
+                    title: "Activity",
+                    subtitle: nil,
+                    tintColor: Color.Glu.activityDomain,
+                    onBack: {
+                        // Zurück zur Activity Overview
+                        appState.currentStatsScreen = .none
+                    }
+                )
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+
+                        // Haupt-Section mit KPI + Charts (Steps) – SCALED
+                        ActivitySectionCardScaled(
+                            sectionTitle: "",
+                            title: "Steps",
+                            kpiTitle: "Steps Today",
+                            kpiTargetText: viewModel.formattedDailyStepGoal,
+                            kpiCurrentText: viewModel.formattedTodaySteps,
+                            kpiDeltaText: viewModel.kpiDeltaText,
+                            hasTarget: true,
+                            last90DaysData: viewModel.last90DaysDataForChart,
+                            periodAverages: viewModel.periodAverages,
+                            monthlyData: viewModel.monthlyData,
+                            dailyScale: viewModel.dailyScale,
+                            periodScale: viewModel.periodScale,
+                            monthlyScale: viewModel.monthlyScale,
+                            goalValue: viewModel.dailyStepsGoalInt,
+                            onMetricSelected: onMetricSelected,
+                            metrics: [
+                                "Steps",
+                                "Active Time",
+                                "Activity Energy",
+                                "Movement Split"
+                            ]
+                        )
+                        .padding(.horizontal)
+                    }
+                    .padding(.top, 8)
                 }
-                .padding(.top, 16)
-            }
-            .refreshable {
-                // 👇 beim „Pull-to-Refresh“:
-                viewModel.refresh()
+                .refreshable {
+                    viewModel.refresh()
+                }
             }
         }
         .onAppear {
@@ -74,12 +97,11 @@ struct StepsView: View {
 }
 
 #Preview("StepsView – Activity") {
-    // 🔹 Preview-HealthStore mit 365-Tage-Demodaten
     let previewStore = HealthStore.preview()
-
-    // 🔹 ViewModel bekommt diesen Preview-Store (isPreview == true)
     let previewVM = StepsViewModel(healthStore: previewStore)
+    let previewState = AppState()
 
     return StepsView(viewModel: previewVM)
-        .environmentObject(previewStore) // falls andere Views den Store als EnvironmentObject brauchen
+        .environmentObject(previewStore)
+        .environmentObject(previewState)
 }

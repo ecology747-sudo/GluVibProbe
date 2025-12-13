@@ -8,6 +8,8 @@ import SwiftUI
 /// Dashboard für die Activity-Domain:
 /// - Steps
 /// - Activity Energy
+/// - Exercise Minutes
+/// - Movement Split                                      // !!! NEW
 ///
 /// Sleep & Weight gehören zur Body-Domain und werden hier nicht dargestellt.
 struct ActivityDashboardView: View {
@@ -35,6 +37,12 @@ struct ActivityDashboardView: View {
         case .activityEnergy:
             ActivityEnergyView(onMetricSelected: handleMetricSelection)
 
+        case .activityExerciseMinutes:
+            ExerciseMinutesView(onMetricSelected: handleMetricSelection)
+
+        case .movementSplit:                                 // !!! NEW
+            MovementSplitView(onMetricSelected: handleMetricSelection) // !!! NEW
+
         // -----------------------------------------------------
         // Nutrition-Screens → im Activity-Dashboard wegparken
         // (sollten hier nicht vorkommen)
@@ -47,9 +55,9 @@ struct ActivityDashboardView: View {
         // -----------------------------------------------------
         case .sleep,
              .weight,
-             .bmi,                // ✅ NEW
-             .bodyFat,            // ✅ NEW
-             .restingHeartRate:   // ✅ NEW
+             .bmi,
+             .bodyFat,
+             .restingHeartRate:
             StepsView(onMetricSelected: handleMetricSelection)
         }
     }
@@ -61,8 +69,14 @@ struct ActivityDashboardView: View {
         case "Steps":
             appState.currentStatsScreen = .steps
 
+        case "Active Time":
+            appState.currentStatsScreen = .activityExerciseMinutes
+
         case "Activity Energy":
             appState.currentStatsScreen = .activityEnergy
+
+        case "Movement Split":                                // !!! NEW
+            appState.currentStatsScreen = .movementSplit      // !!! NEW
 
         case "Weight":
             appState.currentStatsScreen = .weight

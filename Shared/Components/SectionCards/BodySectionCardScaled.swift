@@ -8,10 +8,10 @@
 
 import SwiftUI
 
-// !!! NEW: Chart-Stil für den Last-90-Days-Block
-enum Last90DaysChartStyle {                                            // !!! NEW
-    case bar                                                            // !!! NEW
-    case line                                                           // !!! NEW
+// Chart-Stil für den Last-90-Days-Block
+enum Last90DaysChartStyle {
+    case bar
+    case line
 }
 
 struct BodySectionCardScaled: View {
@@ -52,53 +52,58 @@ struct BodySectionCardScaled: View {
     let scaleType: MetricScaleHelper.MetricScaleType
 
     /// Stil des Last-90-Days-Charts (Bar vs. Line)
-    let chartStyle: Last90DaysChartStyle                                // !!! UPDATED (ohne Default hier)
+    let chartStyle: Last90DaysChartStyle
+
+    /// optionaler Back-Handler für den Header
+    let onBack: (() -> Void)?
 
     // Domain-Farbe
     private let color = Color.Glu.bodyAccent
 
-    // MARK: - Init (explizit, mit chartStyle-Default)
+    // MARK: - Init (mit chartStyle- & onBack-Default)
 
-    init(                                                                 // !!! NEW
-        sectionTitle: String,                                             // !!! NEW
-        title: String,                                                    // !!! NEW
-        kpiTitle: String,                                                 // !!! NEW
-        kpiTargetText: String,                                            // !!! NEW
-        kpiCurrentText: String,                                           // !!! NEW
-        kpiDeltaText: String,                                             // !!! NEW
-        hasTarget: Bool,                                                  // !!! NEW
-        last90DaysData: [DailyStepsEntry],                                // !!! NEW
-        periodAverages: [PeriodAverageEntry],                             // !!! NEW
-        monthlyData: [MonthlyMetricEntry],                                // !!! NEW
-        dailyScale: MetricScaleResult,                                    // !!! NEW
-        periodScale: MetricScaleResult,                                   // !!! NEW
-        monthlyScale: MetricScaleResult,                                  // !!! NEW
-        goalValue: Int?,                                                  // !!! NEW
-        onMetricSelected: @escaping (String) -> Void,                     // !!! NEW
-        metrics: [String],                                                // !!! NEW
-        showMonthlyChart: Bool,                                           // !!! NEW
-        scaleType: MetricScaleHelper.MetricScaleType,                     // !!! NEW
-        chartStyle: Last90DaysChartStyle = .bar                           // !!! NEW (Default = .bar)
+    init(
+        sectionTitle: String,
+        title: String,
+        kpiTitle: String,
+        kpiTargetText: String,
+        kpiCurrentText: String,
+        kpiDeltaText: String,
+        hasTarget: Bool,
+        last90DaysData: [DailyStepsEntry],
+        periodAverages: [PeriodAverageEntry],
+        monthlyData: [MonthlyMetricEntry],
+        dailyScale: MetricScaleResult,
+        periodScale: MetricScaleResult,
+        monthlyScale: MetricScaleResult,
+        goalValue: Int?,
+        onMetricSelected: @escaping (String) -> Void,
+        metrics: [String],
+        showMonthlyChart: Bool,
+        scaleType: MetricScaleHelper.MetricScaleType,
+        chartStyle: Last90DaysChartStyle = .bar,
+        onBack: (() -> Void)? = nil
     ) {
-        self.sectionTitle     = sectionTitle                              // !!! NEW
-        self.title            = title                                     // !!! NEW
-        self.kpiTitle         = kpiTitle                                  // !!! NEW
-        self.kpiTargetText    = kpiTargetText                             // !!! NEW
-        self.kpiCurrentText   = kpiCurrentText                            // !!! NEW
-        self.kpiDeltaText     = kpiDeltaText                              // !!! NEW
-        self.hasTarget        = hasTarget                                 // !!! NEW
-        self.last90DaysData   = last90DaysData                            // !!! NEW
-        self.periodAverages   = periodAverages                            // !!! NEW
-        self.monthlyData      = monthlyData                               // !!! NEW
-        self.dailyScale       = dailyScale                                // !!! NEW
-        self.periodScale      = periodScale                               // !!! NEW
-        self.monthlyScale     = monthlyScale                              // !!! NEW
-        self.goalValue        = goalValue                                 // !!! NEW
-        self.onMetricSelected = onMetricSelected                          // !!! NEW
-        self.metrics          = metrics                                   // !!! NEW
-        self.showMonthlyChart = showMonthlyChart                          // !!! NEW
-        self.scaleType        = scaleType                                 // !!! NEW
-        self.chartStyle       = chartStyle                                // !!! NEW
+        self.sectionTitle     = sectionTitle
+        self.title            = title
+        self.kpiTitle         = kpiTitle
+        self.kpiTargetText    = kpiTargetText
+        self.kpiCurrentText   = kpiCurrentText
+        self.kpiDeltaText     = kpiDeltaText
+        self.hasTarget        = hasTarget
+        self.last90DaysData   = last90DaysData
+        self.periodAverages   = periodAverages
+        self.monthlyData      = monthlyData
+        self.dailyScale       = dailyScale
+        self.periodScale      = periodScale
+        self.monthlyScale     = monthlyScale
+        self.goalValue        = goalValue
+        self.onMetricSelected = onMetricSelected
+        self.metrics          = metrics
+        self.showMonthlyChart = showMonthlyChart
+        self.scaleType        = scaleType
+        self.chartStyle       = chartStyle
+        self.onBack           = onBack
     }
 
     // MARK: - Interner UI-State (Periodenwahl)
@@ -139,8 +144,13 @@ struct BodySectionCardScaled: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
 
-            // SECTION HEADER
-            SectionHeader(title: sectionTitle, subtitle: nil)
+            // SECTION HEADER mit Body-Farbe & optionalem Back-Pfeil
+            SectionHeader(
+                title: sectionTitle,
+                subtitle: nil,
+                tintColor: Color.Glu.bodyAccent,
+                onBack: onBack
+            )
 
             // METRIC CHIPS
             metricChips
@@ -154,8 +164,7 @@ struct BodySectionCardScaled: View {
 
                     periodPicker
 
-                    // Auswahl zwischen Bar- und Line-Chart
-                    switch chartStyle {                                   // !!! UPDATED
+                    switch chartStyle {
                     case .bar:
                         Last90DaysScaledBarChart(
                             data: filteredLast90DaysData,
@@ -223,14 +232,10 @@ struct BodySectionCardScaled: View {
 
     private var barWidthForSelectedPeriod: CGFloat {
         switch selectedPeriod {
-        case .days7:
-            return 16
-        case .days14:
-            return 12
-        case .days30:
-            return 8
-        case .days90:
-            return 4
+        case .days7:  return 16
+        case .days14: return 12
+        case .days30: return 8
+        case .days90: return 4
         }
     }
 }
@@ -240,40 +245,59 @@ struct BodySectionCardScaled: View {
 private extension BodySectionCardScaled {
 
     var metricChips: some View {
+        // Erste Zeile: alle außer "Resting Heart Rate"
+        let firstRowMetrics  = metrics.filter { $0 != "Resting Heart Rate" }
+        // Zweite Zeile: nur "Resting Heart Rate"
+        let secondRowMetrics = metrics.filter { $0 == "Resting Heart Rate" }
 
-        ScrollView(.horizontal, showsIndicators: false) {
+        return VStack(alignment: .leading, spacing: 6) {
+
+            // ROW 1 – Weight, Sleep, BMI, Body Fat (LINKSBÜNDIG)
             HStack(spacing: 8) {
-                ForEach(metrics, id: \.self) { metric in
-                    let active = (metric == title)
-
-                    Text(metric)
-                        .font(.caption2.weight(.medium))
-                        .padding(.vertical, 5)
-                        .padding(.horizontal, 9)
-                        .background(
-                            Capsule().fill(
-                                active ? color : Color.Glu.backgroundSurface
-                            )
-                        )
-                        .overlay(
-                            Capsule().stroke(
-                                active ? Color.clear : color.opacity(0.8),
-                                lineWidth: active ? 0 : 1
-                            )
-                        )
-                        .foregroundStyle(
-                            active
-                                ? Color.Glu.primaryBlue
-                                : Color.Glu.primaryBlue.opacity(0.85)
-                        )
-                        .onTapGesture {
-                            onMetricSelected(metric)
-                        }
+                ForEach(firstRowMetrics, id: \.self) { metric in
+                    metricChip(for: metric)
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+
+            // ROW 2 – Resting Heart Rate (LINKSBÜNDIG)
+            if !secondRowMetrics.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(secondRowMetrics, id: \.self) { metric in
+                        metricChip(for: metric)
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
         }
+    }
+
+    // EINHEITLICHER CHIP
+    @ViewBuilder
+    private func metricChip(for metric: String) -> some View {
+        let active = (metric == title)
+
+        Text(metric)
+            .font(.caption2.weight(.medium))
+            .padding(.vertical, 5)
+            .padding(.horizontal, 9)
+            .background(
+                Capsule().fill(active ? color : Color.Glu.backgroundSurface)
+            )
+            .overlay(
+                Capsule().stroke(
+                    active ? Color.clear : color.opacity(0.8),
+                    lineWidth: active ? 0 : 1
+                )
+            )
+            .foregroundStyle(
+                active
+                    ? Color.Glu.primaryBlue
+                    : Color.Glu.primaryBlue.opacity(0.85)
+            )
+            .onTapGesture {
+                onMetricSelected(metric)
+            }
     }
 }
 
@@ -438,10 +462,11 @@ private extension BodySectionCardScaled {
         ),
         goalValue: 80,
         onMetricSelected: { _ in },
-        metrics: ["Sleep", "Weight"],
+        metrics: ["Weight", "Sleep"],
         showMonthlyChart: false,
-        scaleType: .weightKg
-        // chartStyle nutzt hier den Default .bar
+        scaleType: .weightKg,
+        chartStyle: .bar,
+        onBack: nil
     )
     .padding()
     .background(Color.Glu.backgroundSurface)

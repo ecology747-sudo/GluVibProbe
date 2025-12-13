@@ -6,7 +6,7 @@
 //
 //  Verwendet von:
 //  - Nutrition (Carbs, Protein, Fat, Nutrition Energy)
-//  - Activity (Steps, Activity Energy)
+//  - Activity (Steps, Activity Energy, Exercise Minutes)          // !!! NEW
 //  - Body (Weight, Sleep, Resting HR, BMI/Body Fat via generische Skalen)
 //
 
@@ -31,7 +31,8 @@ struct MetricScaleHelper {
         case steps              // Steps
         case weightKg           // Weight (kg oder lbs, aber gleiche Skala)
         case sleepMinutes       // Sleep in Minuten (Achse zeigt Stunden)
-        case heartRateBpm       // !!! NEW – Resting Heart Rate (bpm)
+        case heartRateBpm       // Resting Heart Rate (bpm)
+        case exerciseMinutes    // !!! NEW – Exercise Minutes (min)
     }
 
     // MARK: - Zentrale Factory
@@ -63,8 +64,11 @@ struct MetricScaleHelper {
         case .sleepMinutes:
             return sleepScale(values: cleaned)
 
-        case .heartRateBpm:                               // !!! NEW
-            return heartRateScale(values: cleaned)        // !!! NEW
+        case .heartRateBpm:
+            return heartRateScale(values: cleaned)
+
+        case .exerciseMinutes:                                  // !!! NEW
+            return exerciseMinutesScale(values: cleaned)        // !!! NEW
         }
     }
 
@@ -308,52 +312,99 @@ struct MetricScaleHelper {
         )
     }
 
-    // MARK: - NEW: Heart Rate – Resting HR (bpm)                    // !!! NEW
+    // MARK: - Heart Rate – Resting HR (bpm)
 
     /// Skala für Herzfrequenz in bpm.
-    /// Typische Resting HR: ~40–100 bpm, aber robust auch für höhere Werte. // !!! NEW
-    private static func heartRateScale(values: [Double]) -> MetricScaleResult { // !!! NEW
-        guard let maxValue = values.max(), maxValue > 0 else {        // !!! NEW
-            // Fallback – sinnvoller Bereich für Ruhepuls              // !!! NEW
-            let ticks: [Double] = [40, 60, 80, 100, 120]              // !!! NEW
-            return MetricScaleResult(                                 // !!! NEW
-                yAxisTicks: ticks,                                    // !!! NEW
-                yMax: 120,                                            // !!! NEW
-                valueLabel: { v in "\(Int(v.rounded())) bpm" }        // !!! NEW
-            )                                                         // !!! NEW
-        }                                                             // !!! NEW
+    /// Typische Resting HR: ~40–100 bpm, aber robust auch für höhere Werte.
+    private static func heartRateScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            // Fallback – sinnvoller Bereich für Ruhepuls
+            let ticks: [Double] = [40, 60, 80, 100, 120]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 120,
+                valueLabel: { v in "\(Int(v.rounded())) bpm" }
+            )
+        }
 
-        let upper: Double                                             // !!! NEW
-        let step: Double                                              // !!! NEW
+        let upper: Double
+        let step: Double
 
-        switch maxValue {                                             // !!! NEW
-        case 0..<60:                                                  // sehr niedriger Bereich
-            upper = 80                                                // !!! NEW
-            step  = 10                                                // 40,50,60,70,80 // !!! NEW
-        case 60..<100:                                                // typischer Ruhebereich
-            upper = 100                                               // !!! NEW
-            step  = 10                                                // 40,50,60,70,80,90,100 // !!! NEW
-        case 100..<140:                                               // leicht erhöht
-            upper = 140                                               // !!! NEW
-            step  = 10                                                // !!! NEW
-        case 140..<200:                                               // deutlich erhöht / Training
-            upper = 200                                               // !!! NEW
-            step  = 20                                                // 0,20,...,200 // !!! NEW
-        default:                                                      // extreme Outlier
-            step  = 20                                                // !!! NEW
-            upper = ceil(maxValue / step) * step                      // !!! NEW
-        }                                                             // !!! NEW
+        switch maxValue {
+        case 0..<60:                  // sehr niedriger Bereich
+            upper = 80
+            step  = 10                // 40,50,60,70,80
+        case 60..<100:                // typischer Ruhebereich
+            upper = 100
+            step  = 10
+        case 100..<140:               // leicht erhöht
+            upper = 140
+            step  = 10
+        case 140..<200:               // deutlich erhöht / Training
+            upper = 200
+            step  = 20                // 0,20,...,200
+        default:                      // extreme Outlier
+            step  = 20
+            upper = ceil(maxValue / step) * step
+        }
 
-        let start = max(0, upper - 160)                               // Chart beginnt nicht zu tief // !!! NEW
-        let ticks = stride(from: start, through: upper, by: step)     // !!! NEW
-            .map { $0 }                                               // !!! NEW
+        let start = max(0, upper - 160)   // Chart beginnt nicht zu tief
+        let ticks = stride(from: start, through: upper, by: step)
+            .map { $0 }
 
-        return MetricScaleResult(                                     // !!! NEW
-            yAxisTicks: ticks,                                        // !!! NEW
-            yMax: upper,                                              // !!! NEW
-            valueLabel: { v in "\(Int(v.rounded())) bpm" }            // !!! NEW
-        )                                                             // !!! NEW
-    }                                                                 // !!! NEW
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in "\(Int(v.rounded())) bpm" }
+        )
+    }
+
+    // MARK: - NEW: Exercise Minutes (min)                           // !!! NEW
+
+    /// Skala für Exercise Minutes (Minuten).
+    /// Typische Bereiche: 0–30, 0–60, 0–90, 0–150+ Minuten.       // !!! NEW
+    private static func exerciseMinutesScale(values: [Double]) -> MetricScaleResult { // !!! NEW
+        guard let maxValue = values.max(), maxValue > 0 else {      // !!! NEW
+            // Fallback – typischer Tagesbereich 0–60 min           // !!! NEW
+            let ticks: [Double] = [0, 15, 30, 45, 60]               // !!! NEW
+            return MetricScaleResult(                               // !!! NEW
+                yAxisTicks: ticks,                                  // !!! NEW
+                yMax: 60,                                           // !!! NEW
+                valueLabel: { v in "\(Int(v.rounded()))" }          // !!! NEW
+            )                                                       // !!! NEW
+        }                                                           // !!! NEW
+
+        let maxAbs = maxValue                                       // !!! NEW
+        let upper: Double                                           // !!! NEW
+        let step: Double                                            // !!! NEW
+
+        switch maxAbs {                                             // !!! NEW
+        case 0..<30:                                                // kurze Einheiten
+            upper = 30                                              // !!! NEW
+            step  = 5                                               // 0,5,10,...,30 // !!! NEW
+        case 30..<60:
+            upper = 60                                              // !!! NEW
+            step  = 10                                              // 0,10,20,...,60 // !!! NEW
+        case 60..<90:
+            upper = 90                                              // !!! NEW
+            step  = 15                                              // !!! NEW
+        case 90..<150:
+            upper = 150                                             // !!! NEW
+            step  = 15                                              // !!! NEW
+        default:
+            step  = 30                                              // !!! NEW
+            upper = ceil(maxAbs / step) * step                      // !!! NEW
+        }                                                           // !!! NEW
+
+        let ticks = stride(from: 0.0, through: upper, by: step)     // !!! NEW
+            .map { $0 }                                             // !!! NEW
+
+        return MetricScaleResult(                                   // !!! NEW
+            yAxisTicks: ticks,                                      // !!! NEW
+            yMax: upper,                                            // !!! NEW
+            valueLabel: { v in "\(Int(v.rounded()))" }              // !!! NEW
+        )                                                           // !!! NEW
+    }                                                               // !!! NEW
 }
 
 // MARK: - Globaler Alias (für ältere Stellen)

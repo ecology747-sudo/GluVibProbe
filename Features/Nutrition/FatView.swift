@@ -9,15 +9,24 @@ import SwiftUI
 
 struct FatView: View {
 
+    // MARK: - ViewModel
+
     @StateObject private var viewModel: FatViewModel
 
+    // MARK: - Callbacks
+
     let onMetricSelected: (String) -> Void
+    let onBack: () -> Void          // Back-Callback (nicht optional, mit Default)
+
+    // MARK: - Init
 
     init(
         viewModel: FatViewModel? = nil,
-        onMetricSelected: @escaping (String) -> Void = { _ in }
+        onMetricSelected: @escaping (String) -> Void = { _ in },
+        onBack: @escaping () -> Void = {}              // Default-Closure
     ) {
         self.onMetricSelected = onMetricSelected
+        self.onBack = onBack
 
         if let viewModel {
             _viewModel = StateObject(wrappedValue: viewModel)
@@ -26,38 +35,55 @@ struct FatView: View {
         }
     }
 
+    // MARK: - Body
+
     var body: some View {
         ZStack {
+            // Domain-Hintergrund
             Color.Glu.nutritionAccent.opacity(0.18)
                 .ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+            VStack(spacing: 0) {   // Sticky-Header + ScrollView
 
-                    NutritionSectionCardScaled(
-                        sectionTitle: "Nutrition",
-                        title: "Fat",
-                        kpiTitle: "Fat Today",
-                        kpiTargetText: viewModel.formattedTargetFat,
-                        kpiCurrentText: viewModel.formattedTodayFat,
-                        kpiDeltaText: viewModel.formattedDeltaFat,
-                        hasTarget: true,
-                        last90DaysData: viewModel.last90DaysDataForChart,
-                        periodAverages: viewModel.periodAverages,
-                        monthlyData: viewModel.monthlyFatData,
-                        dailyScale: viewModel.dailyScale,
-                        periodScale: viewModel.periodScale,
-                        monthlyScale: viewModel.monthlyScale,
-                        goalValue: viewModel.goalValueForChart,
-                        onMetricSelected: onMetricSelected,
-                        metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"]
-                    )
-                    .padding(.horizontal)
+                // 🔝 Sticky-Header für Fat-Metric
+                SectionHeader(
+                    title: "Nutrition",
+                    subtitle: "Fat",
+                    tintColor: Color.Glu.nutritionAccent,
+                    onBack: onBack
+                )
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+
+                        // Helper-basierte Nutrition-Section-Card OHNE eigenen Header
+                        NutritionSectionCardScaled(
+                            sectionTitle: "Nutrition",
+                            title: "Fat",
+                            kpiTitle: "Fat Today",
+                            kpiTargetText: viewModel.formattedTargetFat,
+                            kpiCurrentText: viewModel.formattedTodayFat,
+                            kpiDeltaText: viewModel.formattedDeltaFat,
+                            hasTarget: true,
+                            last90DaysData: viewModel.last90DaysDataForChart,
+                            periodAverages: viewModel.periodAverages,
+                            monthlyData: viewModel.monthlyFatData,
+                            dailyScale: viewModel.dailyScale,
+                            periodScale: viewModel.periodScale,
+                            monthlyScale: viewModel.monthlyScale,
+                            goalValue: viewModel.goalValueForChart,
+                            onMetricSelected: onMetricSelected,
+                            onBack: onBack,
+                            metrics: ["Carbs", "Protein", "Fat", "Nutrition Energy"],
+                            showHeader: false          // Header in Card AUS
+                        )
+                        .padding(.horizontal)
+                    }
+                    .padding(.top, 8)
                 }
-                .padding(.top, 16)
-            }
-            .refreshable {
-                viewModel.refresh()
+                .refreshable {
+                    viewModel.refresh()
+                }
             }
         }
         .onAppear {
@@ -75,7 +101,8 @@ struct FatView: View {
 
     return FatView(
         viewModel: viewModel,
-        onMetricSelected: { _ in }
+        onMetricSelected: { _ in },
+        onBack: { appState.currentStatsScreen = .nutritionOverview }
     )
     .environmentObject(appState)
     .environmentObject(healthStore)

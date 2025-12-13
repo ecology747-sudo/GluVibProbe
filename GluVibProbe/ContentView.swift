@@ -26,7 +26,7 @@ struct ContentView: View {
                 switch selectedTab {
 
                 case .activity:
-                    activityRootView          // 👈 Activity: Overview ODER Dashboard
+                    activityRootView          // 👈 Activity: Overview ODER Dashboard  // !!! NEW
 
                 case .body:
                     bodyRootView              // 👈 Body: Overview ODER Dashboard
@@ -75,13 +75,16 @@ struct ContentView: View {
     private var activityRootView: some View {
         switch appState.currentStatsScreen {
 
-        case .steps, .activityEnergy:
-            // 👉 Detail-Screen (Steps/Activity Energy)
-            ActivityDashboardView()
+        case .steps,
+             .activityEnergy,
+             .activityExerciseMinutes,   // !!! NEW – Exercise Minutes als Detail
+             .movementSplit:             // !!! NEW – Movement Split als Detail
+            // 👉 Detail-Screen (Steps / Activity Energy / Exercise Minutes / Movement Split)
+            ActivityDashboardView()      // !!! NEW
 
         default:
             // 👉 Einstieg: Activity Overview
-            ActivityOverviewView()
+            ActivityOverviewView()       // !!! NEW
         }
     }
 
@@ -150,11 +153,8 @@ struct ContentView: View {
             appState.currentStatsScreen = .nutritionOverview
 
         case .activity:
-            // 🔹 ÄNDERUNG:
-            // Bisher: appState.currentStatsScreen = .steps
-            // → hat direkt das Activity-Dashboard geöffnet.
-            // Jetzt: Activity startet wie Body/Nutrition mit Overview.
-            appState.currentStatsScreen = .none
+            // Activity startet wie Body/Nutrition mit Overview.          // !!! NEW
+            appState.currentStatsScreen = .none                           // !!! NEW
 
         case .body:
             // 👉 Immer mit Overview starten (jede andere Case ⇒ Overview)

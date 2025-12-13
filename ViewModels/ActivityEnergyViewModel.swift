@@ -132,7 +132,8 @@ final class ActivityEnergyViewModel: ObservableObject {
     ///   - heutiger Tag wird ausgeschlossen
     ///   - Tage ohne Eintrag (activeEnergy <= 0) werden NICHT gewertet
     ///   - geteilt wird durch die Anzahl der Tage mit Eintrag, nicht durch `days`
-    private func averageActiveEnergy(last days: Int) -> Int {
+    //private func averageActiveEnergy(last days: Int) -> Int {
+    func averageActiveEnergy(last days: Int) -> Int {
         guard !dailyActiveEnergy365.isEmpty else { return 0 }
 
         let calendar = Calendar.current
@@ -156,6 +157,26 @@ final class ActivityEnergyViewModel: ObservableObject {
         return sum / filtered.count
     }
 
+    // MARK: - Overview-Helper (für ActivityOverview)            // !!! NEW
+
+    /// Active Energy heute (kcal) – basierend auf dailyActiveEnergy365.
+    var todayActiveEnergyKcal: Int {                             // !!! NEW
+        guard !dailyActiveEnergy365.isEmpty else { return 0 }
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        return dailyActiveEnergy365.first(where: { entry in
+            calendar.isDate(entry.date, inSameDayAs: today)
+        })?.activeEnergy ?? 0
+    }
+
+    /// 7-Tage-Durchschnitt der Active Energy (kcal),
+    /// gleiche Logik wie im AveragePeriods-BarChart.
+    var sevenDayAverageActiveEnergyKcal: Int {                   // !!! NEW
+        averageActiveEnergy(last: 7)
+    }
+    
     // MARK: - Unit Conversion & Formatting (kcal <-> kJ)
 
     /// Basis ist immer kcal, Settings steuern nur Anzeige-Einheit
