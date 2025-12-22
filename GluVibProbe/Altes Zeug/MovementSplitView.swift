@@ -14,10 +14,9 @@ import SwiftUI
 struct MovementSplitView: View {
 
     // MARK: - Environment
-    @EnvironmentObject var appState: AppState                      // !!! NEW
+    @EnvironmentObject var appState: AppState
 
     // MARK: - ViewModel
-
     @StateObject private var viewModel: MovementSplitViewModel
 
     // Callback aus dem Dashboard (für Metric-Chips)
@@ -52,51 +51,48 @@ struct MovementSplitView: View {
     // MARK: - Body
 
     var body: some View {
-        ZStack {
-            Color.Glu.activityAccent.opacity(0.18)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-
-                // DOMAIN-HEADER „Activity“ + Back-Pfeil
-                SectionHeader(
-                    title: "Activity",
-                    subtitle: nil,
-                    tintColor: Color.Glu.activityDomain,
-                    onBack: {
-                        appState.currentStatsScreen = .none       // zurück zur Activity Overview
-                    }
+        MetricDetailScaffold(
+            headerTitle: "Activity",
+            headerTint: Color.Glu.activityDomain,
+            onBack: {
+                appState.currentStatsScreen = .none
+            },
+            onRefresh: {
+                viewModel.refresh()
+            },
+            background: {                                     // CHANGED: Gradient statt Color
+                LinearGradient(
+                    colors: [
+                        .white,
+                        Color.Glu.activityDomain.opacity(0.55)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
+            }
+        ) {
+            VStack(alignment: .leading, spacing: 16) {
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                // METRIC CHIPS
+                metricChips
 
-                        // METRIC CHIPS
-                        metricChips
+                // KPI-ZEILE
+                kpiHeader
 
-                        // KPI-ZEILE
-                        kpiHeader
-
-                        // EINZIGE SECTION CARD: Movement Split Chart
-                        SingleChartSectionCard(
-                            title: "",
-                            borderColor: color,
-                            backgroundColor: Color.Glu.backgroundSurface
-                        ) {
-                            MovementSplit30DayChart(
-                                data: viewModel.dailyMovementSplits
-                            )
-                            .frame(height: 325)
-                        }
-                    }
-                    .padding(.top, 8)                // rückt Chips/KPIs näher an den Header
-                    .padding(.horizontal, 16)        // Alignment mit SectionHeader & Cards
-                    .padding(.bottom, 16)
-                }
-                .refreshable {
-                    viewModel.refresh()
+                // EINZIGE SECTION CARD: Movement Split Chart
+                SingleChartSectionCard(
+                    title: "",
+                    borderColor: color,
+                    backgroundColor: Color.Glu.backgroundSurface
+                ) {
+                    MovementSplit30DayChart(
+                        data: viewModel.dailyMovementSplits
+                    )
+                    .frame(height: 325)
                 }
             }
+            .padding(.top, 8)
+            .padding(.bottom, 16)
         }
         .onAppear {
             viewModel.onAppear()
@@ -125,8 +121,7 @@ private extension MovementSplitView {
                 }
             }
         }
-        .padding(.top, 4)           // !!! UPDATED: kein extra horizontal padding mehr,
-        // damit Chips exakt mit 16pt-Content fluchten
+        .padding(.top, 4)
     }
 
     private func metricChip(_ metric: String) -> some View {
@@ -142,7 +137,7 @@ private extension MovementSplitView {
                 Capsule()
                     .fill(
                         active
-                        ? LinearGradient(                      // !!! NEW – wie PeriodPicker
+                        ? LinearGradient(
                             colors: [
                                 color.opacity(0.95),
                                 color.opacity(0.75)
@@ -177,7 +172,7 @@ private extension MovementSplitView {
             )
             .foregroundStyle(
                 active
-                ? Color.white                           // !!! NEW – aktive Metric weiß
+                ? Color.white
                 : Color.Glu.primaryBlue.opacity(0.95)
             )
             .scaleEffect(active ? 1.05 : 1.0)

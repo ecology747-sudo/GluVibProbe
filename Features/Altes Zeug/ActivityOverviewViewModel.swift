@@ -17,7 +17,7 @@ final class ActivityOverviewViewModel: ObservableObject {
     private let healthStore: HealthStore
     private let settings: SettingsModel
 
-    private let stepsViewModel: StepsViewModel
+    private let stepsViewModel: StepsViewModelV1
     private let exerciseViewModel: ExerciseMinutesViewModel
     private let activeEnergyViewModel: ActivityEnergyViewModel
     private let movementSplitViewModel: MovementSplitViewModel
@@ -98,7 +98,7 @@ final class ActivityOverviewViewModel: ObservableObject {
         self.settings = settings
 
         // Child-ViewModels wie in den Detail-Views
-        self.stepsViewModel = StepsViewModel(
+        self.stepsViewModel = StepsViewModelV1(
             healthStore: healthStore,
             settings: settings
         )
@@ -263,20 +263,23 @@ final class ActivityOverviewViewModel: ObservableObject {
         )
 
         // ============================================================
-        // 2) EXERCISE & ACTIVE ENERGY (über HealthStore-Helper)
+        // 2) EXERCISE & ACTIVE ENERGY (CACHE-ONLY via HealthStore helpers)
         // ============================================================
 
-        let exerciseForDay = healthStore.exerciseMinutes(for: date)
-        let activeEnergyForDay = healthStore.activeEnergyKcal(for: date)
+        let exerciseForDay = (selectedDayOffset == 0)
+            ? healthStore.todayExerciseMinutes
+            : healthStore.exerciseMinutes(for: date)
+
+        let activeEnergyForDay = (selectedDayOffset == 0)
+            ? healthStore.todayActiveEnergy
+            : healthStore.activeEnergyKcal(for: date)
 
         todayExerciseMinutes = exerciseForDay
         todayActiveEnergyKcal = activeEnergyForDay
 
-        let avgExercise = await healthStore.fetchSevenDayAverageExerciseMinutes(endingOn: date)
-        let avgActiveEnergy = await healthStore.fetchSevenDayAverageActiveEnergy(endingOn: date)
-
-        sevenDayAverageExerciseMinutes = avgExercise
-        sevenDayAverageActiveEnergyKcal = avgActiveEnergy
+        // ✅ FAST: 7-day averages from cache (no HealthKit query)
+        sevenDayAverageExerciseMinutes = healthStore.sevenDayAverageExerciseMinutesFromCache(endingOn: date)
+        sevenDayAverageActiveEnergyKcal = healthStore.sevenDayAverageActiveEnergyKcalFromCache(endingOn: date)
 
         // ============================================================
         // 3) Movement Split für gewählten Tag
@@ -646,7 +649,9 @@ final class ActivityOverviewViewModel: ObservableObject {
     @MainActor
     func refresh() async {
         // Basisdaten (History) aus den Child-VMs nachladen
-        stepsViewModel.refresh()
+        Task { @MainActor in
+            await healthStore.refreshActivity(.pullToRefresh)
+        }
         exerciseViewModel.refresh()
         activeEnergyViewModel.refresh()
         movementSplitViewModel.refresh()

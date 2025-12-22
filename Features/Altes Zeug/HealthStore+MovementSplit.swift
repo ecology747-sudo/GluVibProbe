@@ -36,8 +36,16 @@ extension HealthStore {
         last days: Int,
         completion: @escaping ([DailyMovementSplitEntry]) -> Void
     ) {
+        // ✅ FIX: harte Absicherung gegen days <= 0 (sonst Trap bei reserveCapacity/stride)
+        guard days > 0 else {
+            DispatchQueue.main.async { completion([]) }
+            return
+        }
+
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+
+        // ... ab hier bleibt dein Code unverändert
 
         // ---------------------------------------
         // PREVIEW-ZWEIG

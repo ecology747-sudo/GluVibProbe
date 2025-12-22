@@ -2,11 +2,18 @@
 //  StepsViewModel.swift
 //  GluVibProbe
 //
-//  Verantwortlich für alle Steps-Daten & KPIs (MVVM)
+//  LEGACY (nicht weiterentwickeln)
+//
+//  Hintergrund:
+//  - Enthält Fetch-Logik und Timing im ViewModel.
+//  - Wird ersetzt durch StepsViewModelV1 (derived-only) + HealthStore+Bootstrap.
 //
 
 import Foundation
 import Combine
+
+@available(*, deprecated, message: "Legacy: Use StepsViewModelV1 (derived-only) instead.")
+
 
 final class StepsViewModel: ObservableObject {
 

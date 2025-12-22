@@ -1,10 +1,8 @@
-//
+#warning("DEPRECATED: Remove ActivitySectionCardScaled after migration to ActivitySectionCardScaledV2")
+
 //  ActivitySectionCardScaled.swift
-//  GluVibProbe
-//
-//  Helper-basierte SectionCard für alle Activity-Metriken
-//  (Steps, Active Time, Activity Energy).
-//
+//  LEGACY: wird schrittweise durch ActivitySectionCardScaledV2 ersetzt.
+//  Bitte keine neuen Features mehr hier hinzufügen.
 
 import SwiftUI
 
@@ -75,7 +73,13 @@ struct ActivitySectionCardScaled: View {
             // ⛔ Kein SectionHeader hier – der liegt in StepsView / ActivityEnergyView / ExerciseMinutesView
 
             // METRIC CHIPS (zweireihig, linksbündig)
-            metricChips
+            // CHANGED: Metric Chips jetzt zentral
+            MetricChipGroup(
+                metrics: metrics,
+                selected: title,
+                accent: color,
+                onSelect: onMetricSelected
+            )
 
             // KPI-ZEILE
             kpiHeader
@@ -148,104 +152,9 @@ struct ActivitySectionCardScaled: View {
     }
 }
 
-// MARK: - Metric Chips (zweireihig)
 
-private extension ActivitySectionCardScaled {
 
-    var metricChips: some View {
-        VStack(alignment: .leading, spacing: 12) {          // !!! UPDATED: weniger Abstand zwischen den Reihen
 
-            HStack(spacing: 6) {                           // !!! UPDATED: etwas enger zusammen
-                ForEach(metrics.prefix(3), id: \.self) { metric in
-                    metricChip(metric)
-                }
-            }
-
-            HStack(spacing: 6) {                           // !!! UPDATED: identischer Abstand in Reihe 2
-                ForEach(metrics.suffix(from: 3), id: \.self) { metric in
-                    metricChip(metric)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)   // !!! bleibt: beide Reihen linksbündig
-        .padding(.vertical, 4)
-    }
-}
-
-private extension ActivitySectionCardScaled {
-
-    // MARK: - Metric Chip mit Outline im Inaktiv-Zustand
-
-    private func metricChip(_ metric: String) -> some View {
-        let isActive = (metric == title)
-
-        // !!! NEU: Farben & Linienstärken für beide Zustände
-        let strokeColor: Color = isActive
-            ? Color.white.opacity(0.90)        // aktiver Chip → weißer Rand
-            : color.opacity(0.90)              // inaktiv → rote/Activity-Farbe als Linie
-
-        let lineWidth: CGFloat = isActive ? 1.6 : 1.2
-
-        let backgroundFill: some ShapeStyle = isActive
-            ? LinearGradient(                   // aktiver Chip → kräftig gefüllt
-                colors: [
-                    color.opacity(0.95),
-                    color.opacity(0.75)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              )
-            : LinearGradient(                   // inaktiv → transparenter Look, Form bleibt durch Outline sichtbar
-                colors: [
-                    Color.clear,
-                    Color.clear
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              )
-
-        let shadowOpacity: Double = isActive ? 0.25 : 0.15
-        let shadowRadius: CGFloat = isActive ? 4 : 2.5
-        let shadowYOffset: CGFloat = isActive ? 2 : 1.5
-
-        return Button {
-            onMetricSelected(metric)            // Auswahl-Callback bleibt unverändert
-        } label: {
-            Text(metric)
-                .font(.caption.weight(.semibold))      // etwas größer, gut lesbar
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .layoutPriority(1)
-                .padding(.vertical, 5)
-                .padding(.horizontal, 14)
-                .background(
-                    Capsule()
-                        .fill(backgroundFill)          // !!! hier wird aktiv/inaktiv unterschieden
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(
-                            strokeColor,               // !!! inaktiv: rote/Activity-Linie
-                            lineWidth: lineWidth
-                        )
-                )
-                .shadow(
-                    color: Color.black.opacity(shadowOpacity),
-                    radius: shadowRadius,
-                    x: 0,
-                    y: shadowYOffset
-                )
-                .foregroundStyle(
-                    isActive
-                    ? Color.white                       // aktiver Chip → weiße Schrift
-                    : Color.Glu.primaryBlue.opacity(0.95)
-                )
-                .scaleEffect(isActive ? 1.05 : 1.0)     // „Hover“-Effekt beim aktiven Chip
-                .animation(.easeOut(duration: 0.15), value: isActive)
-        }
-        .buttonStyle(.plain)
-    }
-}
 // MARK: - KPI Header
 
 private extension ActivitySectionCardScaled {

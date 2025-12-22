@@ -2,13 +2,13 @@
 //  ActivityOverviewViewModel.swift
 //  GluVibProbe
 //
-//  Aggregiert Steps / Exercise Minutes / Activity Energy / Movement Split
+//  Aggregiert Steps /  "Active Time", / Activity Energy / Movement Split
 //  für die ActivityOverviewView.
 //
 
 import Foundation
 import Combine
-import HealthKit                                  // !!! NEW: für HKWorkout / HKWorkoutActivityType
+import HealthKit                                  // für HKWorkout / HKWorkoutActivityType
 
 final class ActivityOverviewViewModel: ObservableObject {
 
@@ -16,30 +16,45 @@ final class ActivityOverviewViewModel: ObservableObject {
 
     private let healthStore: HealthStore
     private let settings: SettingsModel
-    private let stepsViewModel: StepsViewModel
+
+    private let stepsViewModel: StepsViewModelV1
     private let exerciseViewModel: ExerciseMinutesViewModel
     private let activeEnergyViewModel: ActivityEnergyViewModel
-    private let movementSplitViewModel: MovementSplitViewModel      // !!! NEW
+    private let movementSplitViewModel: MovementSplitViewModel
+
     private var cancellables = Set<AnyCancellable>()
     
-    // MARK: - Insight & Score Engines                               // !!! NEW
-    private let activityScoreEngine = ActivityScoreEngine()         // !!! NEW
+    // MARK: - Insight & Score Engines
+    private let activityScoreEngine = ActivityScoreEngine()
     
-    // MARK: - Intern: Letztes Workout für Insight/ScoreEngine       // !!! NEW
-    private var lastWorkoutForInsight: HKWorkout? = nil             // !!! NEW
+    // MARK: - Intern: Letztes Workout für Insight/ScoreEngine
+    private var lastWorkoutForInsight: HKWorkout? = nil
 
     // MARK: - Last Exercise Display
+
     @Published var lastExercisesDisplay: [(name: String, detail: String, date: String, time: String)] = []
     
     // MARK: - Insight output for the card
 
-    @Published var activityInsightText: String = ""       // !!! NEW
-    @Published var activityInsightCategory: ActivityInsightCategory = .neutral // !!! NEW
+    @Published var activityInsightText: String = ""
+    @Published var activityInsightCategory: ActivityInsightCategory = .neutral
 
     // MARK: - Activity Score (Overview header)
 
-    @Published var activityScore: Int = 0                 // !!! NEW
+    @Published var activityScore: Int = 0
     
+    // MARK: - Day Selection (Pager: DayBefore / Yesterday / Today)
+
+    /// 0 = Today, -1 = Yesterday, -2 = DayBeforeYesterday
+    @Published var selectedDayOffset: Int = 0                     // !!! NEW
+
+    /// Ausgewähltes Datum basierend auf selectedDayOffset
+    var selectedDate: Date {                                      // !!! NEW
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return calendar.date(byAdding: .day, value: selectedDayOffset, to: today) ?? today
+    }
+
     // MARK: - Published Output (für ActivityOverviewView)
 
     // Steps-Kachel
@@ -50,7 +65,7 @@ final class ActivityOverviewViewModel: ObservableObject {
     @Published var distanceTodayKm: Double = 0
     @Published var distanceSevenDayAverageKm: Double = 0
 
-    /// Mini-Trend für die letzten 7 Kalendertage (inkl. heute)
+    /// Mini-Trend für 7 Tage (relativ zum gewählten Datum)
     @Published var lastSevenDaysSteps: [DailyStepsEntry] = []
 
     // Exercise-Kachel
@@ -61,7 +76,7 @@ final class ActivityOverviewViewModel: ObservableObject {
     @Published var todayActiveEnergyKcal: Int = 0
     @Published var sevenDayAverageActiveEnergyKcal: Int = 0
 
-    // Movement-Split-Today (24h-Balken)
+    // Movement-Split (für ausgewählten Tag)
     @Published var movementSleepMinutesToday: Int = 0
     @Published var movementActiveMinutesToday: Int = 0
     @Published var movementSedentaryMinutesToday: Int = 0
@@ -69,7 +84,7 @@ final class ActivityOverviewViewModel: ObservableObject {
     /// Anteil des Tages, der bereits vergangen ist (0.0–1.0)
     @Published var movementSplitFillFractionOfDay: Double = 0
 
-    /// Prozent-Anteile der bisher vergangenen Tageszeit
+    /// Prozent-Anteile innerhalb der bisher vergangenen Tageszeit
     /// (sleep + move + sedentary ≈ 1.0)
     @Published var movementSplitPercentages: (sleep: Double, move: Double, sedentary: Double) = (0, 0, 0)
 
@@ -83,7 +98,7 @@ final class ActivityOverviewViewModel: ObservableObject {
         self.settings = settings
 
         // Child-ViewModels wie in den Detail-Views
-        self.stepsViewModel = StepsViewModel(
+        self.stepsViewModel = StepsViewModelV1(
             healthStore: healthStore,
             settings: settings
         )
@@ -101,7 +116,6 @@ final class ActivityOverviewViewModel: ObservableObject {
         bindChildViewModels()
     }
 
-    
     // MARK: - Binding
 
     private func bindChildViewModels() {
@@ -111,26 +125,35 @@ final class ActivityOverviewViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in
                 guard let self else { return }
-                self.todaySteps = value
-                self.updateDistanceToday()
-                self.updateLastSevenDaysSteps()
-                self.updateActivityInsight()               // !!! NEW (Insight + Score)
+                // Live-Update nur für Today – bei Yesterday/DayBefore
+                // wird alles über refreshForSelectedDay() gemappt.     // !!! UPDATED
+                if self.selectedDayOffset == 0 {
+                    self.todaySteps = value
+                    self.updateDistanceForSelectedDay()   // << richtige Helper-Funktion
+                    self.updateStepsAggregatesForSelectedDay()        // !!! NEW
+                    self.updateActivityInsight()
+                }
             }
             .store(in: &cancellables)
 
         stepsViewModel.$dailyStepsGoalInt
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in
-                self?.stepsGoal = value
-                self?.updateActivityInsight()              // !!! NEW
+                guard let self else { return }
+                self.stepsGoal = value
+                self.updateActivityInsight()
             }
             .store(in: &cancellables)
 
         stepsViewModel.$dailySteps365
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.updateStepsAggregates()
-                self?.updateActivityInsight()              // !!! NEW
+                guard let self else { return }
+                // Wenn neue History reinkommt, mappen wir erneut
+                // die Steps-Daten auf den aktuell ausgewählten Tag.   // !!! NEW
+                Task { @MainActor in
+                    await self.refreshForSelectedDay()
+                }
             }
             .store(in: &cancellables)
 
@@ -138,8 +161,12 @@ final class ActivityOverviewViewModel: ObservableObject {
         exerciseViewModel.$todayExerciseMinutes
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in
-                self?.todayExerciseMinutes = value
-                self?.updateActivityInsight()              // !!! NEW
+                guard let self else { return }
+                // Live-Update nur für Today, sonst übernimmt die Day-Logik
+                if self.selectedDayOffset == 0 {
+                    self.todayExerciseMinutes = value
+                    self.updateActivityInsight()
+                }
             }
             .store(in: &cancellables)
 
@@ -147,9 +174,10 @@ final class ActivityOverviewViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.sevenDayAverageExerciseMinutes =
-                    self.exerciseViewModel.sevenDayAverageExerciseMinutes
-                self.updateActivityInsight()               // !!! NEW
+                // Bei Änderung der History -> Day-Remapping
+                Task { @MainActor in                                  // !!! NEW
+                    await self.refreshForSelectedDay()
+                }
             }
             .store(in: &cancellables)
 
@@ -158,11 +186,20 @@ final class ActivityOverviewViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.todayActiveEnergyKcal =
-                    self.activeEnergyViewModel.todayActiveEnergyKcal
-                self.sevenDayAverageActiveEnergyKcal =
-                    self.activeEnergyViewModel.sevenDayAverageActiveEnergyKcal
-                self.updateActivityInsight()               // !!! NEW
+
+                // Nur für Today live aus dem Detail-VM übernehmen,
+                // bei Yesterday/DayBefore remappen wir separat.       // !!! UPDATED
+                if self.selectedDayOffset == 0 {
+                    self.todayActiveEnergyKcal =
+                        self.activeEnergyViewModel.todayActiveEnergyKcal
+                    self.sevenDayAverageActiveEnergyKcal =
+                        self.activeEnergyViewModel.sevenDayAverageActiveEnergyKcal
+                    self.updateActivityInsight()
+                } else {
+                    Task { @MainActor in
+                        await self.refreshForSelectedDay()
+                    }
+                }
             }
             .store(in: &cancellables)
 
@@ -170,10 +207,166 @@ final class ActivityOverviewViewModel: ObservableObject {
         movementSplitViewModel.$dailyMovementSplits
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.updateMovementSplitToday()
-                self?.updateActivityInsight()              // !!! NEW
+                guard let self else { return }
+                // Immer auf den aktuell gewählten Tag mappen          // !!! UPDATED
+                self.updateMovementSplitForSelectedDay()
+                self.updateActivityInsight()
             }
             .store(in: &cancellables)
+    }
+
+    // MARK: - Day Selection API (für Pager)
+
+    /// Wird vom Pager (ActivityOverviewView) aufgerufen,
+    /// wenn der User auf Yesterday / DayBefore / Today swiped.
+    @MainActor
+    func applySelectedDayOffset(_ offset: Int) async {
+        selectedDayOffset = offset
+        await refreshForSelectedDay()
+    }
+
+    /// Mapped alle Overview-Werte auf das aktuell gewählte Datum.
+    @MainActor
+    private func refreshForSelectedDay() async {
+
+        let date = selectedDate
+        let calendar = Calendar.current
+
+        // ============================================================
+        // 1) STEPS für gewählten Tag
+        // ============================================================
+
+        let allSteps = stepsViewModel.dailySteps365
+
+        // Tagesschritte für das ausgewählte Datum
+        let stepsForDay = allSteps.first(where: {
+            calendar.isDate($0.date, inSameDayAs: date)
+        })?.steps ?? 0
+
+        todaySteps = stepsForDay
+
+        // 7-Tage-Ø Steps relativ zum gewählten Tag
+        stepsSevenDayAverage = computeSevenDayAverageSteps(
+            allSteps: allSteps,
+            endingOn: date,
+            calendar: calendar
+        )
+
+        // Distanz aus Steps ableiten
+        updateDistanceForSelectedDay()                                 // !!! NEW
+
+        // 7-Tage-Mini-Trend relativ zum gewählten Tag
+        lastSevenDaysSteps = buildLastSevenDaysSteps(
+            allSteps: allSteps,
+            endingOn: date,
+            calendar: calendar
+        )
+
+        // ============================================================
+        // 2) EXERCISE & ACTIVE ENERGY (CACHE-ONLY via HealthStore helpers)
+        // ============================================================
+
+        let exerciseForDay = (selectedDayOffset == 0)
+            ? healthStore.todayExerciseMinutes
+            : healthStore.exerciseMinutes(for: date)
+
+        let activeEnergyForDay = (selectedDayOffset == 0)
+            ? healthStore.todayActiveEnergy
+            : healthStore.activeEnergyKcal(for: date)
+
+        todayExerciseMinutes = exerciseForDay
+        todayActiveEnergyKcal = activeEnergyForDay
+
+        // ✅ FAST: 7-day averages from cache (no HealthKit query)
+        sevenDayAverageExerciseMinutes = healthStore.sevenDayAverageExerciseMinutesFromCache(endingOn: date)
+        sevenDayAverageActiveEnergyKcal = healthStore.sevenDayAverageActiveEnergyKcalFromCache(endingOn: date)
+
+        // ============================================================
+        // 3) Movement Split für gewählten Tag
+        // ============================================================
+
+        updateMovementSplitForSelectedDay()                             // !!! NEW
+
+        // ============================================================
+        // 4) Insight & Score
+        // ============================================================
+
+        updateActivityInsight()
+    }
+
+    // MARK: - Steps-Hilfen (für beliebiges Datum)                     // !!! NEW
+
+    /// 7-Tage-Ø Steps relativ zu einem Datum (inkl. dieses Tages).
+    private func computeSevenDayAverageSteps(
+        allSteps: [DailyStepsEntry],
+        endingOn endDate: Date,
+        calendar: Calendar
+    ) -> Int {
+        let endDay = calendar.startOfDay(for: endDate)
+        guard let startDay = calendar.date(byAdding: .day, value: -6, to: endDay) else {
+            return 0
+        }
+
+        let window = allSteps.filter { entry in
+            let day = calendar.startOfDay(for: entry.date)
+            return day >= startDay && day <= endDay
+        }
+
+        guard !window.isEmpty else { return 0 }
+
+        let sum = window.reduce(0) { $0 + $1.steps }
+        return sum / window.count
+    }
+
+    /// Baut 7 Einträge (endingOn endDate) für den Mini-Trend.
+    private func buildLastSevenDaysSteps(
+        allSteps: [DailyStepsEntry],
+        endingOn endDate: Date,
+        calendar: Calendar
+    ) -> [DailyStepsEntry] {
+        let endDay = calendar.startOfDay(for: endDate)
+
+        var result: [DailyStepsEntry] = []
+        // sieben Tage: endDay - 6 ... endDay
+        for offset in (0..<7).reversed() {            // −6 ... 0
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: endDay) else {
+                continue
+            }
+
+            let steps = allSteps.first(where: {
+                calendar.isDate($0.date, inSameDayAs: date)
+            })?.steps ?? 0
+
+            result.append(DailyStepsEntry(date: date, steps: steps))
+        }
+        return result
+    }
+
+    /// Distanz HEUTE (für den gewählten Tag, basierend auf todaySteps).
+    private func updateDistanceForSelectedDay() {
+        let kmPerStep: Double = 0.0008    // ~0,8 m pro Schritt
+        distanceTodayKm = Double(todaySteps) * kmPerStep
+
+        // Distance-7d-Ø aus stepsSevenDayAverage ableiten
+        distanceSevenDayAverageKm = Double(stepsSevenDayAverage) * kmPerStep
+    }
+
+    /// Hilfsfunktion für Live-Update Today (wenn selectedDayOffset == 0)
+    private func updateStepsAggregatesForSelectedDay() {               // !!! NEW
+        let calendar = Calendar.current
+        let all = stepsViewModel.dailySteps365
+        let date = selectedDate
+        stepsSevenDayAverage = computeSevenDayAverageSteps(
+            allSteps: all,
+            endingOn: date,
+            calendar: calendar
+        )
+        lastSevenDaysSteps = buildLastSevenDaysSteps(
+            allSteps: all,
+            endingOn: date,
+            calendar: calendar
+        )
+        updateDistanceForSelectedDay()
     }
 
     // MARK: - Last Exercises Mapping
@@ -184,7 +377,7 @@ final class ActivityOverviewViewModel: ObservableObject {
         let workouts = await healthStore.fetchRecentWorkouts(limit: 3)
 
         // erstes Workout für Insight/ScoreEngine merken
-        lastWorkoutForInsight = workouts.first              // !!! NEW
+        lastWorkoutForInsight = workouts.first
 
         let calendar = Calendar.current
 
@@ -246,69 +439,22 @@ final class ActivityOverviewViewModel: ObservableObject {
         self.lastExercisesDisplay = mapped
 
         // Insight & Score after workouts loaded
-        updateActivityInsight()                                      // !!! NEW
+        updateActivityInsight()
     }
 
-    // MARK: - Aggregations-Updates
+    // MARK: - Movement Split für ausgewählten Tag                     // !!! UPDATED / NEW
 
-    /// Wird aufgerufen, wenn dailySteps365 aktualisiert wurde.
-    private func updateStepsAggregates() {
-        // 7-Tage-Durchschnitt direkt aus StepsViewModel
-        stepsSevenDayAverage = stepsViewModel.avgStepsLast7Days
-
-        updateDistanceSevenDayAverage()
-        updateLastSevenDaysSteps()
-    }
-
-    /// Distanz HEUTE (km) – einfacher Approx. aus Steps.
-    private func updateDistanceToday() {
-        let kmPerStep: Double = 0.0008    // ~0,8 m pro Schritt
-        distanceTodayKm = Double(todaySteps) * kmPerStep
-    }
-
-    /// Distanz 7-Tage-Durchschnitt (km) – gleicher Faktor.
-    private func updateDistanceSevenDayAverage() {
-        let kmPerStep: Double = 0.0008
-        distanceSevenDayAverageKm = Double(stepsSevenDayAverage) * kmPerStep
-    }
-
-    /// Baut ein 7-Tage-Array für den Mini-Trend (inkl. heute).
-    private func updateLastSevenDaysSteps() {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let all = stepsViewModel.dailySteps365
-
-        var result: [DailyStepsEntry] = []
-
-        // letzte 7 Kalendertage: heute, gestern, ...
-        for offset in (0..<7).reversed() {           // −6 ... 0
-            guard let date = calendar.date(
-                byAdding: .day,
-                value: -offset,
-                to: today
-            ) else { continue }
-
-            let steps = all.first(where: {
-                calendar.isDate($0.date, inSameDayAs: date)
-            })?.steps ?? 0
-
-            result.append(DailyStepsEntry(date: date, steps: steps))
-        }
-
-        lastSevenDaysSteps = result
-    }
-
-    /// Movement Split HEUTE: Sleep / Active / Sedentary
-    /// - nutzt die täglichen Einträge aus MovementSplitViewModel
-    /// - berücksichtigt nur die Zeit bis jetzt (Fill-Fraction des Tages)
-    private func updateMovementSplitToday() {
+    /// Mapped MovementSplitViewModel.dailyMovementSplits
+    /// auf das ausgewählte Datum (Today / Yesterday / DayBefore).
+    private func updateMovementSplitForSelectedDay() {                 // !!! NEW
         let calendar = Calendar.current
         let now = Date()
-        let todayStart = calendar.startOfDay(for: now)
+        let selected = selectedDate
+        let selectedStart = calendar.startOfDay(for: selected)
 
-        // passenden Eintrag für heute finden
+        // passenden Eintrag für den gewählten Tag finden
         guard let entry = movementSplitViewModel.dailyMovementSplits.first(where: {
-            calendar.isDate($0.date, inSameDayAs: todayStart)
+            calendar.isDate($0.date, inSameDayAs: selectedStart)
         }) else {
             movementSleepMinutesToday = 0
             movementActiveMinutesToday = 0
@@ -318,42 +464,64 @@ final class ActivityOverviewViewModel: ObservableObject {
             return
         }
 
-        let minutesSinceMidnight = max(
-            0,
-            Int(now.timeIntervalSince(todayStart) / 60.0)
-        )
+        let totalSleep = entry.sleepMorningMinutes + entry.sleepEveningMinutes
+        let totalActive = entry.activeMinutes
 
-        // Sleep & Active kommen direkt aus den Tageswerten (HealthKit fragt nur bis jetzt)
-        let sleepMinutes = entry.sleepMorningMinutes + entry.sleepEveningMinutes
-        let activeMinutes = entry.activeMinutes
+        if calendar.isDateInToday(selected) {
+            // HEUTE → nur bis jetzt, wie bisherige Logik
+            let minutesSinceMidnight = max(
+                0,
+                Int(now.timeIntervalSince(selectedStart) / 60.0)
+            )
 
-        // Sedentary = "Zeit seit 0:00" − Sleep − Active
-        let sedentaryMinutes = max(
-            0,
-            minutesSinceMidnight - sleepMinutes - activeMinutes
-        )
+            let sedentaryMinutes = max(
+                0,
+                minutesSinceMidnight - totalSleep - totalActive
+            )
 
-        movementSleepMinutesToday = max(0, sleepMinutes)
-        movementActiveMinutesToday = max(0, activeMinutes)
-        movementSedentaryMinutesToday = sedentaryMinutes
+            movementSleepMinutesToday = max(0, totalSleep)
+            movementActiveMinutesToday = max(0, totalActive)
+            movementSedentaryMinutesToday = sedentaryMinutes
 
-        // Anteil des Tages, der bereits vergangen ist (für 24h-Balken)
-        let elapsed = max(0, sleepMinutes + activeMinutes + sedentaryMinutes)
-        let totalMinutesPerDay = 1440.0
-        movementSplitFillFractionOfDay = min(
-            1.0,
-            Double(elapsed) / totalMinutesPerDay
-        )
+            let elapsed = max(0, totalSleep + totalActive + sedentaryMinutes)
+            let totalMinutesPerDay = 1440.0
+            movementSplitFillFractionOfDay = min(
+                1.0,
+                Double(elapsed) / totalMinutesPerDay
+            )
 
-        // Prozent-Anteile innerhalb der bereits vergangenen Zeit
-        if elapsed > 0 {
-            let total = Double(elapsed)
-            let sleepPct = Double(movementSleepMinutesToday) / total
-            let movePct = Double(movementActiveMinutesToday) / total
-            let sedPct = Double(movementSedentaryMinutesToday) / total
-            movementSplitPercentages = (sleepPct, movePct, sedPct)
+            if elapsed > 0 {
+                let total = Double(elapsed)
+                let sleepPct = Double(movementSleepMinutesToday) / total
+                let movePct = Double(movementActiveMinutesToday) / total
+                let sedPct = Double(movementSedentaryMinutesToday) / total
+                movementSplitPercentages = (sleepPct, movePct, sedPct)
+            } else {
+                movementSplitPercentages = (0, 0, 0)
+            }
         } else {
-            movementSplitPercentages = (0, 0, 0)
+            // GESTERN / VORGESTERN → kompletter Tag, 24h-Fenster
+            let sedentaryMinutes = max(
+                0,
+                1440 - totalSleep - totalActive
+            )
+
+            movementSleepMinutesToday = max(0, totalSleep)
+            movementActiveMinutesToday = max(0, totalActive)
+            movementSedentaryMinutesToday = sedentaryMinutes
+
+            movementSplitFillFractionOfDay = 1.0
+
+            let elapsed = max(0, totalSleep + totalActive + sedentaryMinutes)
+            if elapsed > 0 {
+                let total = Double(elapsed)
+                let sleepPct = Double(movementSleepMinutesToday) / total
+                let movePct = Double(movementActiveMinutesToday) / total
+                let sedPct = Double(movementSedentaryMinutesToday) / total
+                movementSplitPercentages = (sleepPct, movePct, sedPct)
+            } else {
+                movementSplitPercentages = (0, 0, 0)
+            }
         }
     }
     
@@ -416,11 +584,11 @@ final class ActivityOverviewViewModel: ObservableObject {
         activityInsightText = output.primaryText
         activityInsightCategory = output.category
 
-        // Score should always follow the same updated state
-        updateActivityScore(now: now, calendar: calendar)      // !!! NEW
+        // Score should always follow den gleichen Zustand
+        updateActivityScore(now: now, calendar: calendar)
     }
 
-    // MARK: - Activity Score Engine binding                         // !!! NEW
+    // MARK: - Activity Score Engine binding
 
     private func updateActivityScore(
         now: Date = Date(),
@@ -480,12 +648,18 @@ final class ActivityOverviewViewModel: ObservableObject {
     /// Wird von ActivityOverviewView in `.task {}` und `.refreshable {}` benutzt.
     @MainActor
     func refresh() async {
-        stepsViewModel.refresh()
+        // Basisdaten (History) aus den Child-VMs nachladen
+        Task { @MainActor in
+            await healthStore.refreshActivity(.pullToRefresh)
+        }
         exerciseViewModel.refresh()
         activeEnergyViewModel.refresh()
         movementSplitViewModel.refresh()
         await loadLastExercises()
-        updateActivityInsight()     // Insight + Score
+
+        // Danach die passenden Werte für den aktuell
+        // ausgewählten Tag in die Overview-Outputs mappen.
+        await refreshForSelectedDay()
     }
 }
 
