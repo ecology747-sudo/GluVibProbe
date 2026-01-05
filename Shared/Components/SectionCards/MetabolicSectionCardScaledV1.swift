@@ -33,6 +33,9 @@ struct MetabolicSectionCardScaledV1: View {
     let dailyScale: MetricScaleResult
     let periodScale: MetricScaleResult
 
+    // Target (optional)
+    let goalValue: Double?                             // NEW
+
     // Navigation
     let onMetricSelected: (String) -> Void
     let metrics: [String]
@@ -119,7 +122,7 @@ struct MetabolicSectionCardScaledV1: View {
                         yMax: dailyScaleForSelectedPeriod.yMax,
                         valueLabel: dailyScaleForSelectedPeriod.valueLabel,
                         barColor: color,
-                        goalValue: nil,
+                        goalValue: goalValue,               // NEW
                         barWidth: barWidth,
                         xValue: { $0.date },
                         yValue: { Double($0.steps) }
@@ -136,7 +139,7 @@ struct MetabolicSectionCardScaledV1: View {
                     data: periodAverages,
                     metricLabel: title,
                     barColor: color,
-                    goalValue: nil,
+                    goalValue: goalValue,                   // NEW
                     yAxisTicks: periodScale.yAxisTicks,
                     yMax: periodScale.yMax,
                     valueLabel: periodScale.valueLabel
@@ -182,12 +185,12 @@ private extension MetabolicSectionCardScaledV1 {
         let isActive = (metric == title)
 
         let backgroundFill: some ShapeStyle = isActive
-            ? LinearGradient(                                                  // !!! UPDATED: same type on both sides
+            ? LinearGradient(
                 colors: [color.opacity(0.95), color.opacity(0.75)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            : LinearGradient(                                                  // !!! UPDATED
+            : LinearGradient(
                 colors: [Color.clear, Color.clear],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -248,7 +251,7 @@ private extension MetabolicSectionCardScaledV1 {
         HStack(spacing: 12) {
             Spacer()
 
-            ForEach(Last90DaysPeriod.allCases, id: \.self) { period in          // !!! UPDATED: id added (fixes Range<Int> inference)
+            ForEach(Last90DaysPeriod.allCases, id: \.self) { period in
                 let active = (period == selectedPeriod)
 
                 let bg: some ShapeStyle = active
@@ -257,7 +260,7 @@ private extension MetabolicSectionCardScaledV1 {
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
-                    : LinearGradient(                                          // !!! UPDATED: same type (no Color vs LinearGradient)
+                    : LinearGradient(
                         colors: [Color.white.opacity(0.10), color.opacity(0.22)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing

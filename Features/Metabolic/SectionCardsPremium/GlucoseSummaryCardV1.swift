@@ -17,12 +17,13 @@ struct GlucoseSummaryCardV1: View {
 
     @EnvironmentObject private var healthStore: HealthStore
     @EnvironmentObject private var settings: SettingsModel
+    @EnvironmentObject private var appState: AppState                     // !!! NEW (Tap → navigate to TIR)
 
     // ============================================================
     // MARK: - Layout Controls (as in your Design)
     // ============================================================
 
-    private var tirThreshold: Double {                               // !!! UPDATED
+    private var tirThreshold: Double {                                     // !!! UPDATED
         Double(settings.tirTargetPercent) / 100.0
     }
     private let cardPadding: CGFloat = 16
@@ -34,13 +35,12 @@ struct GlucoseSummaryCardV1: View {
     private let gapBadgesToTir: CGFloat = 14
 
     private let gapTirValueToBar: CGFloat = 3
-    
-    
+
     // ============================================================
     // MARK: - Chart Scale (Settings-driven)  // !!! NEW (Step 2)
     // ============================================================
 
-    private var chartMaxGlucoseMgdl: Double {                            // !!! NEW
+    private var chartMaxGlucoseMgdl: Double {                              // !!! NEW
         // mindestens 300; sonst veryHigh + Puffer
         let padded = Double(settings.veryHighLimit) + 20
         return max(300, padded)
@@ -104,8 +104,8 @@ struct GlucoseSummaryCardV1: View {
             glucoseSection
             Gap(gapBadgesToTir)          // ✅ statt gapGlucoseToBadges (Badges sind ja nicht mehr dazwischen)
 
-            tirSection
-            Gap(gapGlucoseToBadges)      // ✅ Abstand zwischen TIR-Chart und Tiles (du kannst dafür auch eine eigene Gap-Konstante nehmen, muss aber nicht)
+            tirSectionTappable           // !!! NEW (TIR tap → TimeInRangeViewV1)
+            Gap(gapGlucoseToBadges)      // ✅ Abstand zwischen TIR-Chart und Tiles
 
             sdGmiCvSection               // ✅ jetzt ganz unten
         }
@@ -119,44 +119,43 @@ struct GlucoseSummaryCardV1: View {
 // ============================================================
 
 private extension GlucoseSummaryCardV1 {
-    
+
     var header: some View {
         HStack(alignment: .lastTextBaseline, spacing: 4) {
             Text("Ø")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundColor(Color.Glu.primaryBlue)
-            
+
             Text("Glucose")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(Color.Glu.primaryBlue.opacity(0.90))
-            
+
             Text("(24h)")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Color.Glu.primaryBlue.opacity(0.70))
-            
+
             Spacer()
-            
+
             // Messungen / Max (immer sichtbar, rechtsbündig)
             let coverage = max(0, healthStore.last24hTIRCoverageMinutes)          // Minuten mit Daten (0..1440)
             let samples = Int((Double(coverage) / 5.0).rounded())                 // 5-Minuten Raster -> 0..288
             let maxSamples = 288
-            
+
             Text("CGM \(samples) / \(maxSamples)")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.65))
         }
     }
-    
+
     // ====================================================
     // Ø Glucose
     // ====================================================
-    
+
     var glucoseSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            
-            // !!! UPDATED: Ø/Wert/Einheit wandern jetzt über dem Marker mit.
+
             Gap(gapGlucoseValueToBar)
-            
+
             GlucoseFiveZoneBar(
                 valueMgdl: healthStore.last24hGlucoseMeanMgdl ?? 0,
                 maxMgdl: chartMaxGlucoseMgdl,                                // !!! UPDATED (Step 2)
@@ -165,24 +164,24 @@ private extension GlucoseSummaryCardV1 {
             )
         }
     }
-    
+
     // ====================================================
     // SD + GMI(90) + CV (uniform tiles)
     // ====================================================
-    
+
     var sdGmiCvSection: some View {
         HStack(spacing: 12) {
-            
+
             UniformMiniMetricTile(
                 title: "SD",
                 value: sdDisplayText
             )
-            
+
             UniformMiniMetricTile(
                 title: "GMI (90)",
                 value: gmi90Text
             )
-            
+
             UniformMiniMetricTile(
                 title: "CV",
                 value: cvDisplayText,
@@ -190,15 +189,26 @@ private extension GlucoseSummaryCardV1 {
             )
         }
     }
-    
+
     private var gmi90Text: String {
         guard let gmi = gmi90dPercent else { return "–" }
         return String(format: "%.1f%%", gmi)
     }
-    
+
     // ====================================================
-    // Ø TIR
+    // Ø TIR (tappable)
     // ====================================================
+
+    var tirSectionTappable: some View {                                     // !!! NEW
+        Button {
+            appState.currentStatsScreen = .timeInRange
+        } label: {
+            tirSection
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open Time in Range")
+    }
 
     var tirSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -218,7 +228,7 @@ private extension GlucoseSummaryCardV1 {
 
             Gap(gapTirValueToBar)
 
-            // 2) TIR-Bar (jetzt im Five-Zone-Style: Badge + Triangle + Bar + Label)
+            // 2) TIR-Bar
             TIRBar(
                 percent: Double(avgTirPercentInt) / 100.0,
                 threshold: tirThreshold
@@ -427,11 +437,11 @@ private struct GlucoseFiveZoneBar: View {
             // ============================================================
 
             let zoneColor: Color = {
-                if valueMgdl <= veryLow { return Color.Glu.acidCGMRed }             // very low
-                if valueMgdl <  tMin    { return Color.yellow.opacity(0.80) }       // low
-                if valueMgdl <= tMax    { return Color.Glu.metabolicDomain }        // target
-                if valueMgdl <  veryHigh { return Color.yellow.opacity(0.80) }      // high
-                return Color.Glu.acidCGMRed                                        // very high
+                if valueMgdl <= veryLow { return Color.Glu.acidCGMRed }
+                if valueMgdl <  tMin    { return Color.yellow.opacity(0.80) }
+                if valueMgdl <= tMax    { return Color.Glu.metabolicDomain }
+                if valueMgdl <  veryHigh { return Color.yellow.opacity(0.80) }
+                return Color.Glu.acidCGMRed
             }()
 
             // Labels (display-only via SettingsUnits)
@@ -477,11 +487,11 @@ private struct GlucoseFiveZoneBar: View {
                         measuredBadgeW = w
                     }
                     .offset(
-                        x: badgeCenterX - badgeHalf,     // ✅ FIX: echte Center-Position, geclamped
+                        x: badgeCenterX - badgeHalf,
                         y: badgeOffsetY
                     )
 
-                    // Triangle marker – bleibt wie gehabt (markerX ist geclamped)
+                    // Triangle marker
                     TriangleMarker()
                         .fill(zoneColor)
                         .overlay(
@@ -563,8 +573,6 @@ private struct GlucoseFiveZoneBar: View {
     }
 }
 
-
-
 // ============================================================
 // MARK: - TIR Bar (Five-Zone-Style + Badge + Marker + Threshold Label)
 // ============================================================
@@ -575,10 +583,6 @@ private struct TIRBar: View {
 
     let percent: Double          // 0...1 (CURRENT)
     let threshold: Double        // 0...1 (TARGET)
-
-    // ============================================================
-    // MARK: - STELLSCHRAUBEN (wie Five-Zone) ✅
-    // ============================================================
 
     // Bar
     private let barH: CGFloat = 10
@@ -595,33 +599,25 @@ private struct TIRBar: View {
     private let badgeTextValueSize: CGFloat = 20
     private let badgeTextUnitSize: CGFloat = 13
     private let badgeCornerLineW: CGFloat = 1.6
-
-    private let badgeOffsetY: CGFloat = -20     // ✅ negativer = höher
-
-    // Triangle vertical alignment
-    private let triangleOffsetY: CGFloat = 17   // ✅ kleiner = höher / größer = tiefer
+    private let badgeOffsetY: CGFloat = -20
+    private let triangleOffsetY: CGFloat = 17
 
     // Label
     private let labelsGap: CGFloat = 4
     private let labelsH: CGFloat = 12
     private let clampInset: CGFloat = 12
 
-    // Stroke style (wie Five-Zone-Bar)
+    // Stroke style
     private let strokeColor: Color = Color.Glu.primaryBlue.opacity(0.75)
     private let strokeWidth: CGFloat = 0.7
     private let backgroundFill: Color = Color.Glu.primaryBlue.opacity(0.06)
 
-    // Target Marker (roter Strich)
+    // Target Marker
     private let markerLineColor: Color = Color.Glu.acidCGMRed
     private let markerLineWidth: CGFloat = 3
     private let markerOverhang: CGFloat = 6
 
-    // !!! NEW: grobe Badge-Breite zum sicheren Clamp (damit niemals off-screen)
     private let badgeApproxW: CGFloat = 60
-
-    // ============================================================
-    // MARK: - FIXED HEIGHT ✅
-    // ============================================================
 
     private var markerLaneH: CGFloat {
         (badgeVPad * 2) + CGFloat(badgeTextValueSize) + 6 + markerH + markerGap
@@ -635,25 +631,17 @@ private struct TIRBar: View {
         GeometryReader { geo in
             let width = geo.size.width
 
-            // ------------------------------------------------------------
-            // Values
-            // ------------------------------------------------------------
-            let p = clamp(percent, min: 0, max: 1)      // CURRENT
-            let t = clamp(threshold, min: 0, max: 1)    // TARGET
+            let p = clamp(percent, min: 0, max: 1)
+            let t = clamp(threshold, min: 0, max: 1)
 
             let fillW = width * CGFloat(p)
 
-            // !!! UPDATED: X für CURRENT (Badge + Triangle)
             let currentXRaw = width * CGFloat(p)
             let currentX = clamp(CGFloat(currentXRaw), min: clampInset, max: width - clampInset)
 
-            // X für TARGET (rote Linie + Target Label)
             let targetXRaw = width * CGFloat(t)
             let targetX = clamp(CGFloat(targetXRaw), min: clampInset, max: width - clampInset)
 
-            // ------------------------------------------------------------
-            // Color Mode (Target ±10%) ✅
-            // ------------------------------------------------------------
             let warn = max(0, t - 0.10)
 
             let zoneColor: Color = {
@@ -662,22 +650,16 @@ private struct TIRBar: View {
                 return Color.Glu.metabolicDomain
             }()
 
-            // Badge text
             let percentInt = Int((p * 100.0).rounded())
             let targetInt  = Int((t * 100.0).rounded())
 
-            // !!! NEW: Badge X clamp (Badge darf NIE aus dem Screen)
             let badgeXRaw = currentX - (badgeApproxW / 2)
             let badgeX = clamp(badgeXRaw, min: clampInset, max: width - clampInset - badgeApproxW)
 
             VStack(alignment: .leading, spacing: 0) {
 
-                // =========================
-                // 1) Marker lane (Badge + Triangle)
-                // =========================
                 ZStack(alignment: .leading) {
 
-                    // Badge -> CURRENT (nicht Target)
                     HStack(alignment: .lastTextBaseline, spacing: 5) {
 
                         Text("\(percentInt)")
@@ -698,12 +680,8 @@ private struct TIRBar: View {
                             .stroke(zoneColor.opacity(0.95), lineWidth: badgeCornerLineW)
                     )
                     .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
-                    .offset(
-                        x: badgeX,            // !!! UPDATED: geclampter CURRENT-X
-                        y: badgeOffsetY
-                    )
+                    .offset(x: badgeX, y: badgeOffsetY)
 
-                    // Triangle -> CURRENT (nicht Target)
                     TriangleMarker()
                         .fill(zoneColor)
                         .overlay(
@@ -711,13 +689,10 @@ private struct TIRBar: View {
                                 .stroke(Color.Glu.primaryBlue, lineWidth: 0.5)
                         )
                         .frame(width: markerW, height: markerH)
-                        .offset(x: currentX - (markerW / 2), y: triangleOffsetY)   // !!! UPDATED
+                        .offset(x: currentX - (markerW / 2), y: triangleOffsetY)
                 }
                 .frame(height: markerLaneH)
 
-                // =========================
-                // 2) Bar
-                // =========================
                 ZStack(alignment: .leading) {
 
                     RoundedRectangle(cornerRadius: r)
@@ -739,7 +714,6 @@ private struct TIRBar: View {
                         .stroke(strokeColor, lineWidth: strokeWidth)
                         .frame(height: barH)
 
-                    // Target Marker Line -> TARGET (bleibt korrekt)
                     Rectangle()
                         .fill(markerLineColor)
                         .frame(width: markerLineWidth, height: barH + markerOverhang)
@@ -749,11 +723,7 @@ private struct TIRBar: View {
                 }
                 .frame(height: barH)
 
-                // =========================
-                // 3) Target Label unten -> TARGET (bleibt korrekt)
-                // =========================
                 ZStack(alignment: .topLeading) {
-
                     Text("\(targetInt)")
                         .font(.caption2.weight(.semibold))
                         .foregroundColor(Color.green)
@@ -766,14 +736,10 @@ private struct TIRBar: View {
         .frame(height: totalFixedHeight)
     }
 
-    // MARK: - Helpers
-
     private func clamp<T: Comparable>(_ x: T, min: T, max: T) -> T {
         Swift.min(Swift.max(x, min), max)
     }
 }
-
-
 
 // ============================================================
 // MARK: - Triangle Marker Shape
@@ -790,31 +756,34 @@ private struct TriangleMarker: Shape {
     }
 }
 
-    // ============================================================
-    // MARK: - GMI Helper (mg/dL → %)
-    // ============================================================
+// ============================================================
+// MARK: - GMI Helper (mg/dL → %)
+// ============================================================
 
-    private extension GlucoseSummaryCardV1 {
-        func computeGmiPercent(fromMeanMgdl mean: Double) -> Double {
-            return 3.31 + 0.02392 * mean
-        }
+private extension GlucoseSummaryCardV1 {
+    func computeGmiPercent(fromMeanMgdl mean: Double) -> Double {
+        return 3.31 + 0.02392 * mean
     }
+}
 
-    // ============================================================
-    // MARK: - Preview (minimal)
-    // ============================================================
+// ============================================================
+// MARK: - Preview (minimal)
+// ============================================================
 
-    #Preview("Glucose Summary Card V1") {
-        let store = HealthStore.preview()
-        store.last24hGlucoseMeanMgdl = 136
-        store.last24hGlucoseSdMgdl = 42
-        store.last24hGlucoseCvPercent = 31
-        store.last24hTIRInRangeMinutes = 900
-        store.last24hTIRCoverageMinutes = 1200
-        store.glucoseMean90dMgdl = 145
+#Preview("Glucose Summary Card V1") {
+    let store = HealthStore.preview()
+    store.last24hGlucoseMeanMgdl = 136
+    store.last24hGlucoseSdMgdl = 42
+    store.last24hGlucoseCvPercent = 31
+    store.last24hTIRInRangeMinutes = 900
+    store.last24hTIRCoverageMinutes = 1200
+    store.glucoseMean90dMgdl = 145
 
-        return GlucoseSummaryCardV1()
-            .environmentObject(store)
-            .environmentObject(SettingsModel.shared)
-            .padding(16)
-    }
+    let state = AppState()                                                // !!! NEW
+
+    return GlucoseSummaryCardV1()
+        .environmentObject(store)
+        .environmentObject(SettingsModel.shared)
+        .environmentObject(state)                                         // !!! NEW
+        .padding(16)
+}

@@ -29,10 +29,7 @@ struct BolusViewV1: View {
 
     var body: some View {
 
-        // ============================================================
         // Local Adapter: DailyBolusEntry → DailyStepsEntry (für Charts)
-        // ============================================================
-
         let last90StepsLike: [DailyStepsEntry] = viewModel.last90DaysData.map {
             DailyStepsEntry(
                 date: $0.date,
@@ -44,20 +41,15 @@ struct BolusViewV1: View {
             headerTitle: "Metabolic",
             headerTint: Color.Glu.metabolicDomain,
 
-            onBack: {
-                appState.currentStatsScreen = .none
-            },
+            onBack: { appState.currentStatsScreen = .none },
 
             onRefresh: {
-                await healthStore.refreshMetabolic(.pullToRefresh)  // !!! UPDATED
+                await healthStore.refreshMetabolic(.pullToRefresh)
             },
 
             background: {
                 LinearGradient(
-                    colors: [
-                        .white,
-                        Color.Glu.metabolicDomain.opacity(0.55)
-                    ],
+                    colors: [.white, Color.Glu.metabolicDomain.opacity(0.55)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -65,40 +57,36 @@ struct BolusViewV1: View {
         ) {
             VStack(alignment: .leading, spacing: 16) {
 
-                // ============================================================
-                // ✅ SectionCard V1 (Metabolic)
-                // - KPI nur "Bolus Today"
-                // - Charts: 7/14/30/90 + Last90Days mit Picker
-                // - ScaleType: insulinUnitsDaily
-                // ============================================================
-
                 MetabolicSectionCardScaledV1(
                     title: "Bolus",
 
                     // KPI
                     kpiTitle: "Bolus Today",
                     kpiCurrentText: viewModel.formattedTodayBolus,
-                    kpiSecondaryText: nil,                          // !!! UPDATED: kein Ø/Delta
+                    kpiSecondaryText: nil,
 
                     // Charts
                     last90DaysData: last90StepsLike,
                     periodAverages: viewModel.periodAverages,
 
                     // Scales
-                    dailyScale: viewModel.dailyScale,               // !!! UPDATED (SSoT: VM)
-                    periodScale: viewModel.periodScale,             // !!! UPDATED (SSoT: VM)
+                    dailyScale: viewModel.dailyScale,
+                    periodScale: viewModel.periodScale,
+
+                    // !!! NEW: Target support (none for Bolus)
+                    goalValue: nil,
 
                     // Navigation
                     onMetricSelected: onMetricSelected,
                     metrics: AppState.metabolicVisibleMetrics,
 
-                    // Scale Type (period-adaptiv in der SectionCard)
-                    dailyScaleType: .insulinUnitsDaily              // !!! UPDATED
+                    // Scale Type
+                    dailyScaleType: .insulinUnitsDaily
                 )
             }
         }
         .task {
-            await healthStore.refreshMetabolic(.navigation)         // !!! UPDATED
+            await healthStore.refreshMetabolic(.navigation)
         }
     }
 }

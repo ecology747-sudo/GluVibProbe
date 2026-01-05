@@ -3,27 +3,16 @@
 //  GluVibProbe
 //
 //  Zentrale Bootstrap/Refresh-Orchestrierung
-//  ------------------------------------------------------------
-//  - Einheitliches Verhalten bei:
-//    (1) App-Start
-//    (2) Pull-to-Refresh
-//    (3) Navigation (Overview <-> Metric)
+//  - Einheitliches Verhalten bei App-Start / Pull-to-Refresh / Navigation
 //  - Keine neuen Published Properties
-//  - WICHTIG: In dieser Datei werden KEINE Metric-Fetch-Funktionen definiert,
-//             nur orchestriert (sonst: "Invalid redeclaration").
+//  - Keine Metric-Fetch-Definitionen hier, nur Orchestrierung
 //
 
 import Foundation
 
-// ============================================================
-// MARK: - HealthStore Bootstrap / Refresh Orchestrator
-// ============================================================
-
 extension HealthStore {
 
-    // ============================================================
     // MARK: - Types
-    // ============================================================
 
     enum RefreshContext: String {
         case appLaunch
@@ -32,9 +21,7 @@ extension HealthStore {
         case periodic
     }
 
-    // ============================================================
     // MARK: - Public API (Entry Points)
-    // ============================================================
 
     @MainActor
     func refreshAll(_ context: RefreshContext = .pullToRefresh) async {
@@ -43,10 +30,7 @@ extension HealthStore {
         if context == .navigation {
             await refreshTodaysKPIs()
             await refreshChartsAndHistory()
-
-            // !!! NEW: Metabolic (Navigation)
             await refreshMetabolicChartsAndHistory(context)
-
             return
         }
 
@@ -54,7 +38,6 @@ extension HealthStore {
         await refreshChartsAndHistory()
         await refreshSecondaryData()
 
-        // !!! NEW: Metabolic (Full)
         await refreshMetabolicTodaysKPIs(context)
         await refreshMetabolicChartsAndHistory(context)
         await refreshMetabolicSecondary(context)
@@ -91,146 +74,123 @@ extension HealthStore {
     }
 
     @MainActor
-    func refreshNutrition(_ context: RefreshContext = .pullToRefresh) async {            // !!! NEW
-        if isPreview { return }                                                          // !!! NEW
+    func refreshNutrition(_ context: RefreshContext = .pullToRefresh) async {
+        if isPreview { return }
 
-        if context == .navigation {                                                      // !!! NEW
-            await refreshNutritionTodaysKPIs()                                            // !!! NEW
-            await refreshNutritionChartsAndHistory()                                      // !!! NEW
-            return                                                                        // !!! NEW
-        }                                                                                 // !!! NEW
+        if context == .navigation {
+            await refreshNutritionTodaysKPIs()
+            await refreshNutritionChartsAndHistory()
+            return
+        }
 
-        await refreshNutritionTodaysKPIs()                                                // !!! NEW
-        await refreshNutritionChartsAndHistory()                                          // !!! NEW
-        await refreshNutritionSecondary()                                                 // !!! NEW
-    }                                                                                     // !!! NEW
+        await refreshNutritionTodaysKPIs()
+        await refreshNutritionChartsAndHistory()
+        await refreshNutritionSecondary()
+    }
 
-    // ============================================================
-    // MARK: - !!! NEW: Public Orchestration (Metabolic-only)
-    // ============================================================
+    // MARK: - Public API (Metabolic-only)
 
     @MainActor
-    func refreshMetabolic(_ context: RefreshContext = .pullToRefresh) async {            // !!! NEW
-        if isPreview { return }                                                          // !!! NEW
+    func refreshMetabolic(_ context: RefreshContext = .pullToRefresh) async {
+        if isPreview { return }
 
-        if context == .navigation {                                                      // !!! NEW
-            await refreshMetabolicTodaysKPIs(context)                                     // !!! NEW
-            await refreshMetabolicChartsAndHistory(context)                               // !!! NEW
-            return                                                                        // !!! NEW
-        }                                                                                 // !!! NEW
+        if context == .navigation {
+            await refreshMetabolicTodaysKPIs(context)
+            await refreshMetabolicChartsAndHistory(context)
+            return
+        }
 
-        await refreshMetabolicTodaysKPIs(context)                                         // !!! NEW
-        await refreshMetabolicChartsAndHistory(context)                                   // !!! NEW
-        await refreshMetabolicSecondary(context)                                          // !!! NEW
-    }                                                                                     // !!! NEW
+        await refreshMetabolicTodaysKPIs(context)
+        await refreshMetabolicChartsAndHistory(context)
+        await refreshMetabolicSecondary(context)
+    }
 
-    // ============================================================
+    // MARK: - Private Orchestration (Metabolic-only)
+
+    @MainActor
+    private func refreshMetabolicTodaysKPIs(_ context: RefreshContext) async {
+        await refreshMetabolicDailyStats90V1FromContext(context)
+        fetchCarbsTodayV1()
+    }
+
+    @MainActor
+    private func refreshMetabolicChartsAndHistory(_ context: RefreshContext) async {
+        // Raw3Days (triggert CGM RAW + MainChart Cache Rebuild + Quick KPIs intern)
+        await refreshMetabolicTodayRaw3DaysV1(refreshSource: "bootstrap-\(context.rawValue)")
+
+        // DailyStats90 (Bolus/Basal/Carbs + Derived Ratios)
+        await refreshMetabolicDailyStats90V1FromContext(context)
+
+        // Wichtig:
+        // KEIN recomputeCGMPeriodKPIsHybridV1() hier, weil CGM Period-KPIs aktuell
+        // asynchron innerhalb von fetchCGMSamples3DaysV1() aktualisiert werden und
+        // sonst Period-Summaries nondeterministisch überschrieben werden könnten.
+    }
+
+    @MainActor
+    private func refreshMetabolicSecondary(_ context: RefreshContext) async {
+        fetchCarbsDaily365V1()
+    }
+
+    @MainActor
+    private func refreshMetabolicDailyStats90V1FromContext(_ context: RefreshContext) async {
+        await refreshMetabolicDailyStats90V1(refreshSource: "bootstrap-\(context.rawValue)")
+    }
+
     // MARK: - Private Orchestration (All Domains)
-    // ============================================================
-
-    // ------------------------------------------------------------
-    // MARK: 1) Today KPIs (alle Domains)
-    // ------------------------------------------------------------
 
     @MainActor
     private func refreshTodaysKPIs() async {
-
-        // ----------------------------------------------------
-        // STEPS
-        // ----------------------------------------------------
         fetchStepsTodayV1()
 
-        // ----------------------------------------------------
-        // ACTIVITY
-        // ----------------------------------------------------
         fetchActiveEnergyTodayV1()
-        fetchRestingEnergyTodayV1()                                                       // !!! UPDATED (Resting Energy TODAY)
-
+        fetchRestingEnergyTodayV1()
         await refreshExerciseMinutesTodayFromExerciseTimeV1Async()
 
-        // ----------------------------------------------------
-        // SLEEP
-        // ----------------------------------------------------
         fetchSleepTodayV1()
-
-        // ----------------------------------------------------
-        // MOVEMENT SPLIT
-        // ----------------------------------------------------
         await fetchMovementSplitFastSliceAsync(last: 3)
 
-        // ----------------------------------------------------
-        // BODY
-        // ----------------------------------------------------
         fetchWeightTodayV1()
         fetchRestingHeartRateTodayV1()
-        fetchBodyFatTodayV1()                                                             // !!! UPDATED (war fetchFatTodayV1)
+        fetchBodyFatTodayV1()
         fetchBMITodayV1()
 
-        // ----------------------------------------------------
-        // NUTRITION
-        // ----------------------------------------------------
         fetchNutritionEnergyTodayV1()
         fetchCarbsTodayV1()
         fetchProteinTodayV1()
-        fetchFatTodayV1()                                                                 // !!! UPDATED (NUTRITION FAT bleibt hier)
+        fetchFatTodayV1()
     }
-
-    // ------------------------------------------------------------
-    // MARK: 2) Charts/History (alle Domains)
-    // ------------------------------------------------------------
 
     @MainActor
     private func refreshChartsAndHistory() async {
-
-        // ----------------------------------------------------
-        // STEPS
-        // ----------------------------------------------------
         fetchStepsDaily365V1()
 
-        // ----------------------------------------------------
-        // ACTIVITY
-        // ----------------------------------------------------
         fetchLast90DaysActiveEnergyV1()
         fetchMonthlyActiveEnergyV1()
 
-        // !!! NEW: Resting Energy History (needed for Yesterday/DayBefore in Nutrition Overview)
-        fetchLast90DaysRestingEnergyV1()                                                   // !!! NEW
-        fetchMonthlyRestingEnergyV1()                                                      // !!! NEW
+        fetchLast90DaysRestingEnergyV1()
+        fetchMonthlyRestingEnergyV1()
 
         await refreshExerciseMinutesHistoryFromExerciseTimeV1Async()
 
-        // ----------------------------------------------------
-        // SLEEP
-        // ----------------------------------------------------
         fetchLast90DaysSleepV1()
         fetchMonthlySleepV1()
-        fetchSleepDaily365V1()                                                             // !!! UPDATED: needed as base-series for charts
+        fetchSleepDaily365V1()
 
-        // ----------------------------------------------------
-        // BODY
-        // ----------------------------------------------------
-        // WEIGHT (V1)
         fetchWeightDaily365RawV1()
 
-        // RESTING HEART RATE (V1)
         fetchLast90DaysRestingHeartRateV1()
         fetchMonthlyRestingHeartRateV1()
 
-        // BODY FAT (V1)
-        fetchLast90DaysBodyFatV1()                                                        // !!! UPDATED
-        fetchMonthlyBodyFatV1()                                                           // !!! UPDATED
+        fetchLast90DaysBodyFatV1()
+        fetchMonthlyBodyFatV1()
 
-        // BMI (V1)
         fetchLast90DaysBMIV1()
         fetchMonthlyBMIV1()
 
-        // ✅ REQUIRED: Overview Past Days need Daily365 caches too (BMI/BodyFat were missing)
-        fetchBMIDaily365V1()                                                              // !!! NEW
-        fetchBodyFatDaily365V1()                                                          // !!! NEW
+        fetchBMIDaily365V1()
+        fetchBodyFatDaily365V1()
 
-        // ----------------------------------------------------
-        // NUTRITION (V1 only)
-        // ----------------------------------------------------
         fetchLast90DaysNutritionEnergyV1()
         fetchMonthlyNutritionEnergyV1()
 
@@ -244,41 +204,25 @@ extension HealthStore {
         fetchMonthlyFatV1()
     }
 
-    // ------------------------------------------------------------
-    // MARK: 3) Secondary (optional / heavy)
-    // ------------------------------------------------------------
-
     @MainActor
     private func refreshSecondaryData() async {
+        fetchRestingEnergyDaily365V1()
 
-        // ----------------------------------------------------
-        // RESTING ENERGY Secondary
-        // ----------------------------------------------------
-        fetchRestingEnergyDaily365V1()                                                     // !!! NEW
-
-        // ----------------------------------------------------
-        // NUTRITION Secondary (V1 only)
-        // ----------------------------------------------------
         fetchNutritionEnergyDaily365V1()
         fetchCarbsDaily365V1()
         fetchProteinDaily365V1()
         fetchFatDaily365V1()
 
-        // ----------------------------------------------------
-        // SLEEP Secondary
-        // ----------------------------------------------------
-        fetchSleepDaily365V1()                                                             // !!! UPDATED: keep single call
+        fetchSleepDaily365V1()
     }
 
-    // ============================================================
     // MARK: - Private Orchestration (Activity-only)
-    // ============================================================
 
     @MainActor
     private func refreshActivityTodaysKPIs() async {
         fetchStepsTodayV1()
         fetchActiveEnergyTodayV1()
-        fetchRestingEnergyTodayV1()                                                       // !!! UPDATED
+        fetchRestingEnergyTodayV1()
         await refreshExerciseMinutesTodayFromExerciseTimeV1Async()
         fetchSleepTodayV1()
 
@@ -290,15 +234,13 @@ extension HealthStore {
 
     @MainActor
     private func refreshActivityChartsAndHistory() async {
-
         fetchStepsDaily365V1()
 
         fetchLast90DaysActiveEnergyV1()
         fetchMonthlyActiveEnergyV1()
 
-        // !!! NEW: Resting Energy History (keine UI-Pflicht in Activity, aber konsistent verfügbar)
-        fetchLast90DaysRestingEnergyV1()                                                   // !!! NEW
-        fetchMonthlyRestingEnergyV1()                                                      // !!! NEW
+        fetchLast90DaysRestingEnergyV1()
+        fetchMonthlyRestingEnergyV1()
 
         await refreshExerciseMinutesHistoryFromExerciseTimeV1Async()
 
@@ -310,12 +252,9 @@ extension HealthStore {
         fetchMonthlyMoveTimeV1()
         fetchMoveTimeDaily365V1()
 
-        // ----------------------------------------------------
-        // SLEEP: Session-Series for Charts (ending that day)
-        // ----------------------------------------------------
-        fetchLast90DaysSleepV1()                                                           // !!! NEW
-        fetchMonthlySleepV1()                                                              // !!! UPDATED: keep consistent
-        fetchSleepDaily365V1()                                                             // !!! UPDATED: required for detail charts
+        fetchLast90DaysSleepV1()
+        fetchMonthlySleepV1()
+        fetchSleepDaily365V1()
 
         await fetchMovementSplitFastSliceAsync(last: 90)
     }
@@ -327,67 +266,42 @@ extension HealthStore {
         fetchExerciseTimeDaily365V1()
         fetchMovementSplitDaily365V1(last: 365)
         fetchMoveTimeDaily365V1()
-
-        // ----------------------------------------------------
-        // SLEEP Secondary
-        // ----------------------------------------------------
-        fetchSleepDaily365V1()                                                             // !!! UPDATED: keep single call
-
-        // !!! NEW
-        fetchRestingEnergyDaily365V1()                                                     // !!! NEW
+        fetchSleepDaily365V1()
+        fetchRestingEnergyDaily365V1()
     }
 
-    // ============================================================
     // MARK: - Private Orchestration (Body-only)
-    // ============================================================
 
     @MainActor
     private func refreshBodyTodaysKPIs() async {
-
-        // SLEEP (V1)
         fetchSleepTodayV1()
-
-        // WEIGHT (V1)
-        fetchWeightTodayV1()                                                               // !!! UPDATED (war fetchWeightDaily365RawV1)
-
-        // RESTING HEART RATE (V1)
+        fetchWeightTodayV1()
         fetchRestingHeartRateTodayV1()
-
-        // BODY FAT (V1)
         fetchBodyFatTodayV1()
-
-        // BMI (V1)
         fetchBMITodayV1()
     }
 
     @MainActor
     private func refreshBodyChartsAndHistory() async {
-
-        // SLEEP
         fetchLast90DaysSleepV1()
         fetchMonthlySleepV1()
-        fetchSleepDaily365V1()                                                             // !!! UPDATED: required for detail charts
+        fetchSleepDaily365V1()
 
-        // WEIGHT
         fetchLast90DaysWeightV1()
         fetchMonthlyWeightV1()
 
-        // RESTING HR (V1)
         fetchLast90DaysRestingHeartRateV1()
         fetchMonthlyRestingHeartRateV1()
 
-        // BODY FAT (V1)
         fetchLast90DaysBodyFatV1()
         fetchMonthlyBodyFatV1()
 
-        // BMI (V1)
         fetchLast90DaysBMIV1()
         fetchMonthlyBMIV1()
 
-        // ✅ REQUIRED for Overview Past Days (Daily365 Caches)
-        fetchWeightDaily365RawV1()                                                         // !!! NEW (required)
-        fetchBMIDaily365V1()                                                               // !!! NEW (required)
-        fetchBodyFatDaily365V1()                                                           // !!! NEW (required)
+        fetchWeightDaily365RawV1()
+        fetchBMIDaily365V1()
+        fetchBodyFatDaily365V1()
     }
 
     @MainActor
@@ -397,14 +311,10 @@ extension HealthStore {
         fetchBodyFatDaily365V1()
         fetchRestingHeartRateDaily365V1()
         fetchSleepDaily365V1()
-
-        // !!! NEW
-        fetchRestingEnergyDaily365V1()                                                     // !!! NEW
+        fetchRestingEnergyDaily365V1()
     }
 
-    // ============================================================
     // MARK: - Private Orchestration (Nutrition-only)
-    // ============================================================
 
     @MainActor
     private func refreshNutritionTodaysKPIs() async {
@@ -412,8 +322,7 @@ extension HealthStore {
         fetchCarbsTodayV1()
         fetchProteinTodayV1()
         fetchFatTodayV1()
-
-        fetchRestingEnergyTodayV1()                                                        // !!! UPDATED (Resting Energy TODAY for Nutrition Overview)
+        fetchRestingEnergyTodayV1()
     }
 
     @MainActor
@@ -430,9 +339,8 @@ extension HealthStore {
         fetchLast90DaysFatV1()
         fetchMonthlyFatV1()
 
-        // !!! NEW: Resting Energy History (needed for Yesterday/DayBefore)
-        fetchLast90DaysRestingEnergyV1()                                                   // !!! NEW
-        fetchMonthlyRestingEnergyV1()                                                      // !!! NEW
+        fetchLast90DaysRestingEnergyV1()
+        fetchMonthlyRestingEnergyV1()
     }
 
     @MainActor
@@ -441,56 +349,11 @@ extension HealthStore {
         fetchCarbsDaily365V1()
         fetchProteinDaily365V1()
         fetchFatDaily365V1()
-
-        // !!! NEW
-        fetchRestingEnergyDaily365V1()                                                     // !!! NEW
-    }
-
-    // ============================================================
-    // MARK: - !!! NEW: Private Orchestration (Metabolic-only)
-    // ============================================================
-
-    @MainActor
-    private func refreshMetabolicTodaysKPIs(_ context: RefreshContext) async {             // !!! NEW
-        // KPI kommen in den VMs aus daily*90 Serien.
-        // Daher: wir refreshen die DailyStats (90) auch für KPI-Konsistenz.
-        await refreshMetabolicDailyStats90V1FromContext(context)                           // !!! NEW
-
-        // Carbs/Bolus Ratio braucht Carbs TODAY auch (für Header/KPI optional).
-        // (harmlos, existiert bereits in Nutrition V1)
-        fetchCarbsTodayV1()                                                                // !!! NEW
-    }
-
-    @MainActor
-    private func refreshMetabolicChartsAndHistory(_ context: RefreshContext) async {      // !!! NEW
-        // Core Metabolic: Bolus/Basal + Ratio-Basis
-        await refreshMetabolicDailyStats90V1FromContext(context)                           // !!! NEW
-
-        // Carbs/Bolus Ratio braucht Carbs 90d Serie als Input
-        fetchLast90DaysCarbsV1()                                                           // !!! NEW
-
-        // (Optional, bereits vorhanden; nützlich für spätere DayProfile Overlays)
-        fetchCarbEvents3DaysV1()                                                           // !!! NEW
-    }
-
-    @MainActor
-    private func refreshMetabolicSecondary(_ context: RefreshContext) async {             // !!! NEW
-        // Metabolic V1 hat aktuell kein 365/Monthly – daher “Secondary” bewusst minimal.
-        // Wir halten hier nur Nutrition-Carbs 365 bereit, falls du später Ratio/Trends >90 brauchst.
-        fetchCarbsDaily365V1()                                                             // !!! NEW
-    }
-
-    @MainActor
-    private func refreshMetabolicDailyStats90V1FromContext(_ context: RefreshContext) async { // !!! NEW
-        // BolusView/BasalView nutzen refreshSource Strings.
-        // Wir mappen Bootstrap-Context -> refreshSource deterministisch.
-        await refreshMetabolicDailyStats90V1(refreshSource: "bootstrap-\(context.rawValue)")    // !!! NEW
+        fetchRestingEnergyDaily365V1()
     }
 }
 
-// ============================================================
-// MARK: - Async Helpers (nur Wrapper / keine neue Logik)
-// ============================================================
+// MARK: - Async Helpers (Wrapper only)
 
 private extension HealthStore {
 

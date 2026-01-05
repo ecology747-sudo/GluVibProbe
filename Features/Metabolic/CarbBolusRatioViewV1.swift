@@ -29,15 +29,11 @@ struct CarbsBolusRatioViewV1: View {
 
     var body: some View {
 
-        // ============================================================
         // Adapter: DailyRatioEntry -> DailyStepsEntry (Int*10)
-        // - Chart erwartet Int -> wir speichern ratio*10 als "steps"
-        // ============================================================
-
         let last90StepsLike: [DailyStepsEntry] = viewModel.last90DaysRatio.map {
             DailyStepsEntry(
                 date: $0.date,
-                steps: Int(($0.ratio * 10.0).rounded())             // Int*10
+                steps: Int(($0.ratio * 10.0).rounded())
             )
         }
 
@@ -45,25 +41,16 @@ struct CarbsBolusRatioViewV1: View {
             headerTitle: "Metabolic",
             headerTint: Color.Glu.metabolicDomain,
 
-            onBack: {
-                appState.currentStatsScreen = .none
-            },
+            onBack: { appState.currentStatsScreen = .none },
 
             onRefresh: {
-                // ====================================================
-                // !!! UPDATED: konsistent zum Bolus-Pattern
-                // Ratio hängt an Nutrition (Carbs) + Metabolic (Bolus)
-                // ====================================================
-                await healthStore.refreshNutrition(.pullToRefresh)   // !!! UPDATED
-                await healthStore.refreshMetabolic(.pullToRefresh)   // !!! UPDATED
+                await healthStore.refreshNutrition(.pullToRefresh)
+                await healthStore.refreshMetabolic(.pullToRefresh)
             },
 
             background: {
                 LinearGradient(
-                    colors: [
-                        .white,
-                        Color.Glu.metabolicDomain.opacity(0.55)
-                    ],
+                    colors: [.white, Color.Glu.metabolicDomain.opacity(0.55)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -87,21 +74,21 @@ struct CarbsBolusRatioViewV1: View {
                     dailyScale: viewModel.dailyScale,
                     periodScale: viewModel.periodScale,
 
+                    // !!! NEW: Target support (none for Ratio)
+                    goalValue: nil,
+
                     // Navigation
                     onMetricSelected: onMetricSelected,
                     metrics: AppState.metabolicVisibleMetrics,
 
                     // Scale Type (Int*10, 1 decimal Label)
-                    dailyScaleType: .ratioInt10                       // !!! UPDATED (ohne Prefix)
+                    dailyScaleType: .ratioInt10
                 )
             }
         }
         .task {
-            // ========================================================
-            // !!! UPDATED: konsistent zum Bolus-Pattern (navigation)
-            // ========================================================
-            await healthStore.refreshNutrition(.navigation)          // !!! UPDATED
-            await healthStore.refreshMetabolic(.navigation)          // !!! UPDATED
+            await healthStore.refreshNutrition(.navigation)
+            await healthStore.refreshMetabolic(.navigation)
         }
     }
 }

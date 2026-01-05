@@ -2,14 +2,10 @@
 //  MetricScaleHelper.swift
 //  GluVibProbe
 //
-//  !!! UPDATED: Step B — Ratio Scale (Int*10) ergänzt
-//
 
 import Foundation
 
 struct MetricScaleHelper {
-
-    // MARK: - Öffentlicher Ergebnistyp
 
     struct MetricScaleResult {
         let yAxisTicks: [Double]
@@ -17,15 +13,13 @@ struct MetricScaleHelper {
         let valueLabel: (Double) -> String
     }
 
-    // MARK: - Skalen-Typen für alle Domains
-
     enum MetricScaleType {
         case energyDaily
         case energyMonthly
 
         case gramsDaily
         case gramsMonthly
-        case grams               // (Legacy Alias → gramsDaily)
+        case grams
 
         case steps
         case weightKg
@@ -34,14 +28,13 @@ struct MetricScaleHelper {
         case exerciseMinutes
         case moveMinutes
 
-        case percentInt10        // (BodyFat: values sind Int*10, Labels zeigen 1 decimal)
+        case percentInt10
 
-        case insulinUnitsDaily   // (Metabolic: Bolus/Basal in IE)
+        case insulinUnitsDaily
+        case ratioInt10
 
-        case ratioInt10          // !!! NEW (Metabolic Ratios: z.B. 1.2 -> 12, Label: 1.2)
+        case percent0to100                                   // NEW
     }
-
-    // MARK: - Zentrale Factory
 
     static func scale(
         _ values: [Double],
@@ -90,10 +83,26 @@ struct MetricScaleHelper {
         case .insulinUnitsDaily:
             return insulinUnitsDailyScale(values: cleaned)
 
-        case .ratioInt10:                                               // !!! NEW
-            return ratioInt10Scale(values: cleaned)                      // !!! NEW
+        case .ratioInt10:
+            return ratioInt10Scale(values: cleaned)
+
+        case .percent0to100:                                 // NEW
+            return percent0to100Scale()                       // NEW
         }
     }
+
+    // ============================================================
+    // MARK: - FIXED PERCENT 0...100 (TIR)
+    // ============================================================
+
+    private static func percent0to100Scale() -> MetricScaleResult {            // NEW
+        let ticks: [Double] = [0, 25, 50, 75, 100]
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: 100,
+            valueLabel: { v in "\(Int(v.rounded()))" }
+        )
+    }  
 
     // MARK: - Profile
 

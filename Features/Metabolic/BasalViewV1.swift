@@ -29,10 +29,7 @@ struct BasalViewV1: View {
 
     var body: some View {
 
-        // ============================================================
         // Local Adapter: DailyBasalEntry → DailyStepsEntry (für Charts)
-        // ============================================================
-
         let last90StepsLike: [DailyStepsEntry] = viewModel.last90DaysData.map {
             DailyStepsEntry(
                 date: $0.date,
@@ -44,20 +41,15 @@ struct BasalViewV1: View {
             headerTitle: "Metabolic",
             headerTint: Color.Glu.metabolicDomain,
 
-            onBack: {
-                appState.currentStatsScreen = .none
-            },
+            onBack: { appState.currentStatsScreen = .none },
 
             onRefresh: {
-                await healthStore.refreshMetabolic(.pullToRefresh)               // !!! UPDATED (konsistent wie Bolus)
+                await healthStore.refreshMetabolic(.pullToRefresh)
             },
 
             background: {
                 LinearGradient(
-                    colors: [
-                        .white,
-                        Color.Glu.metabolicDomain.opacity(0.55)
-                    ],
+                    colors: [.white, Color.Glu.metabolicDomain.opacity(0.55)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -68,30 +60,33 @@ struct BasalViewV1: View {
                 MetabolicSectionCardScaledV1(
                     title: "Basal",
 
-                    // KPI: nur "Basal Today"
+                    // KPI
                     kpiTitle: "Basal Today",
                     kpiCurrentText: viewModel.formattedTodayBasal,
-                    kpiSecondaryText: nil,                                         // !!! IMPORTANT
+                    kpiSecondaryText: nil,
 
                     // Charts
                     last90DaysData: last90StepsLike,
                     periodAverages: viewModel.periodAverages,
 
-                    // Scales (SSoT: VM)
-                    dailyScale: viewModel.dailyScale,                              // !!! UPDATED
-                    periodScale: viewModel.periodScale,                            // !!! UPDATED
+                    // Scales
+                    dailyScale: viewModel.dailyScale,
+                    periodScale: viewModel.periodScale,
+
+                    // !!! NEW: Target support (none for Basal)
+                    goalValue: nil,
 
                     // Navigation
                     onMetricSelected: onMetricSelected,
                     metrics: AppState.metabolicVisibleMetrics,
 
-                    // Scale Type (period-adaptiv via SectionCard)
-                    dailyScaleType: .insulinUnitsDaily                             // !!! IMPORTANT
+                    // Scale Type
+                    dailyScaleType: .insulinUnitsDaily
                 )
             }
         }
         .task {
-            await healthStore.refreshMetabolic(.navigation)                        // !!! UPDATED (konsistent wie Bolus)
+            await healthStore.refreshMetabolic(.navigation)
         }
     }
 }

@@ -8,6 +8,8 @@ import SwiftUI
 struct ContentView: View {
 
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var healthStore: HealthStore
+
     @State private var selectedTab: GluTab
 
     private let settings = SettingsModel.shared
@@ -37,7 +39,6 @@ struct ContentView: View {
         // ============================================================
         if shouldShowMainChartLandscape {
 
-            // ✅ FIX: keine Argumente (MainChartLandscapeViewV1 nutzt EnvironmentObjects)
             MainChartLandscapeViewV1()
                 .environmentObject(settings)
                 .tint(Color.Glu.primaryBlue)
@@ -53,11 +54,14 @@ struct ContentView: View {
                     // ---------------------------------------------------------
                     switch appState.currentStatsScreen {
 
+                    // !!! UPDATED: include .timeInRange + .gmi
                     case .metabolicOverview,
                          .bolus,
                          .basal,
                          .bolusBasalRatio,
-                         .carbsBolusRatio:
+                         .carbsBolusRatio,
+                         .timeInRange,
+                         .gmi:
                         MetabolicDashboardView()
 
                     default:
@@ -116,11 +120,14 @@ struct ContentView: View {
             ActivityDashboardView()
 
         // Metabolic States ignorieren (compile-safe)
+        // !!! UPDATED: include .timeInRange + .gmi
         case .metabolicOverview,
              .bolus,
              .basal,
              .bolusBasalRatio,
-             .carbsBolusRatio:
+             .carbsBolusRatio,
+             .timeInRange,
+             .gmi:
             ActivityOverviewViewV1()
 
         default:
@@ -142,11 +149,14 @@ struct ContentView: View {
             BodyDashboardView()
 
         // Metabolic States ignorieren (compile-safe)
+        // !!! UPDATED: include .timeInRange + .gmi
         case .metabolicOverview,
              .bolus,
              .basal,
              .bolusBasalRatio,
-             .carbsBolusRatio:
+             .carbsBolusRatio,
+             .timeInRange,
+             .gmi:
             BodyOverviewViewV1()
 
         default:
@@ -167,11 +177,14 @@ struct ContentView: View {
             NutritionDashboardView()
 
         // Metabolic States ignorieren (compile-safe)
+        // !!! UPDATED: include .timeInRange + .gmi
         case .metabolicOverview,
              .bolus,
              .basal,
              .bolusBasalRatio,
-             .carbsBolusRatio:
+             .carbsBolusRatio,
+             .timeInRange,
+             .gmi:
             NutritionOverviewViewV1()
 
         default:

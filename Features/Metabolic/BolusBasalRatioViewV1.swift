@@ -35,7 +35,6 @@ struct BolusBasalRatioViewV1: View {
             onBack: { appState.currentStatsScreen = .none },
 
             onRefresh: {
-                // !!! UPDATED: konsistent mit BolusViewV1 (Bootstrap-Orchestrator)
                 await healthStore.refreshMetabolic(.pullToRefresh)
             },
 
@@ -65,17 +64,19 @@ struct BolusBasalRatioViewV1: View {
                     dailyScale: viewModel.dailyScale,
                     periodScale: viewModel.periodScale,
 
+                    // !!! NEW: Target support (none for Ratio)
+                    goalValue: nil,
+
                     // Navigation
                     onMetricSelected: onMetricSelected,
                     metrics: AppState.metabolicVisibleMetrics,
 
                     // Scale Type (period-adaptiv in der SectionCard)
-                    dailyScaleType: .ratioInt10                                    // !!! IMPORTANT
+                    dailyScaleType: .ratioInt10
                 )
             }
         }
         .task {
-            // !!! UPDATED: konsistent mit BolusViewV1 (Navigation Refresh)
             await healthStore.refreshMetabolic(.navigation)
         }
     }
