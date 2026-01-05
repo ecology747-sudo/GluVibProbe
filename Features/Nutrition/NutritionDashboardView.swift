@@ -19,52 +19,48 @@ struct NutritionDashboardView: View {
         // -----------------------------------------------------
         case .none,
              .nutritionOverview:
-            EmptyView()
+            NutritionOverviewViewV1()
 
         // -----------------------------------------------------
-        // Nutrition-Metriken
+        // Nutrition-Metriken (V1)
         // -----------------------------------------------------
         case .carbs:
-            CarbsView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .nutritionOverview }
-            )
+            CarbsViewV1(onMetricSelected: handleMetricSelection)
 
         case .protein:
-            ProteinView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .nutritionOverview }
-            )
+            ProteinViewV1(onMetricSelected: handleMetricSelection)
 
         case .fat:
-            FatView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .nutritionOverview }
-            )
+            FatViewV1(onMetricSelected: handleMetricSelection)
 
         case .calories:
-            NutritionEnergyView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .nutritionOverview }
-            )
+            NutritionEnergyViewV1(onMetricSelected: handleMetricSelection)
 
         // -----------------------------------------------------
-        // Andere Domains – Fallback (sollten hier eigentlich
-        // nicht landen, aber für Vollständigkeit)
+        // Andere Domains → gehören NICHT hierher
         // -----------------------------------------------------
         case .steps,
              .activityEnergy,
              .activityExerciseMinutes,
              .movementSplit,
+             .moveTime,
+             .workoutMinutes,
+
              .weight,
              .sleep,
              .bmi,
              .bodyFat,
-             .restingHeartRate:
-            CarbsView(
-                onMetricSelected: handleMetricSelection
-                // onBack wird hier NICHT übergeben → Default {} greift
-            )
+             .restingHeartRate,
+
+             .metabolicOverview,
+             .bolus,
+             .basal,
+             .bolusBasalRatio,
+             .carbsBolusRatio,
+
+             .timeInRange,                 // !!! NEW (AppState)
+             .gmi:                         // !!! NEW (AppState)
+            NutritionOverviewViewV1()
         }
     }
 
@@ -78,7 +74,7 @@ struct NutritionDashboardView: View {
             appState.currentStatsScreen = .protein
         case "Fat":
             appState.currentStatsScreen = .fat
-        case "Nutrition Energy":
+        case "Calories":
             appState.currentStatsScreen = .calories
         default:
             break
@@ -86,11 +82,16 @@ struct NutritionDashboardView: View {
     }
 }
 
-#Preview("NutritionDashboardView") {                          // !!! NEW
-    let previewStore = HealthStore.preview()                  // !!! NEW
-    let previewState = AppState()                             // !!! NEW
+// MARK: - Preview
 
-    return NutritionDashboardView()                           // !!! NEW
-        .environmentObject(previewStore)                      // !!! NEW
-        .environmentObject(previewState)                      // !!! NEW
+#Preview("Nutrition Dashboard") {
+    let previewStore = HealthStore.preview()
+    let previewState = AppState()
+
+    previewState.currentStatsScreen = .nutritionOverview
+
+    return NutritionDashboardView()
+        .environmentObject(previewStore)
+        .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

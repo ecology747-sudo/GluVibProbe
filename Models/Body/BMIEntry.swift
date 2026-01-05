@@ -1,17 +1,24 @@
-import Foundation                                   // !!! NEW
-import SwiftUI                                      // !!! NEW
+//
+//  BMIEntry.swift
+//  GluVibProbe
+//
 
-// MARK: - BMI Entry                                // !!! NEW
+import Foundation
 
-struct BMIEntry: Identifiable {                     // !!! NEW
-    let id = UUID()                                 // !!! NEW
-    let date: Date                                  // !!! NEW
-    let bmi: Double                                 // !!! NEW   // z.B. 24.3
-}                                                   // !!! NEW
+/// Tages-Eintrag für BMI (Body Domain, V1)
+struct BMIEntry: Identifiable {
 
-// MARK: - Preview                                  // !!! NEW
+    /// Stabile ID = Tag (00:00 lokale Zeit)
+    var id: Date { dayStart }                     // !!! UPDATED
 
-#Preview("BMIEntry – Preview") {                    // !!! NEW
-    Text("BMIEntry Preview")                        // !!! NEW
-        .padding()                                  // !!! NEW
-}                                                   // !!! NEW
+    /// Datum des Messwerts (kann Uhrzeit enthalten)
+    let date: Date
+
+    /// BMI (dimensionslos, z.B. 24.3)
+    let bmi: Double
+
+    /// Normalisiert auf Tagesstart (00:00 lokale Zeit)
+    var dayStart: Date {                          // !!! NEW
+        Calendar.current.startOfDay(for: date)
+    }
+}

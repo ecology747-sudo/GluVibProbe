@@ -28,21 +28,10 @@ struct NutritionSettingsSection: View {
 
     // MARK: - Label-Helper
 
-    private func carbsLabel(_ grams: Int) -> String {
-        "\(grams) g"
-    }
-
-    private func proteinLabel(_ grams: Int) -> String {
-        "\(grams) g"
-    }
-
-    private func fatLabel(_ grams: Int) -> String {
-        "\(grams) g"
-    }
-
-    private func caloriesLabel(_ kcal: Int) -> String {
-        "\(kcal) kcal"
-    }
+    private func carbsLabel(_ grams: Int) -> String { "\(grams) g" }
+    private func proteinLabel(_ grams: Int) -> String { "\(grams) g" }
+    private func fatLabel(_ grams: Int) -> String { "\(grams) g" }
+    private func caloriesLabel(_ kcal: Int) -> String { "\(kcal) kcal" }
 
     // MARK: - GluVibe Done-Button (gleich wie in BodySettingsSection)
 
@@ -69,23 +58,20 @@ struct NutritionSettingsSection: View {
 
     var body: some View {
         Section {
-            ZStack {
-                // Hintergrundkarte
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.Glu.nutritionAccent.opacity(0.06))
-
-                // Rahmen in Nutrition-Farbe (Aqua)
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.Glu.nutritionAccent.opacity(0.7), lineWidth: 1)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    carbsRow
-                    proteinRow
-                    fatRow
-                    caloriesRow
-                }
-                .padding(16)
+            VStack(alignment: .leading, spacing: 16) {
+                carbsRow
+                proteinRow
+                fatRow
+                caloriesRow
             }
+            .padding(16)
+            // !!! UPDATED: Domain-tinted Innenfläche bleibt (wie vorher Fill), aber ohne eigenen Stroke
+            .background( // !!! UPDATED
+                RoundedRectangle(cornerRadius: GluVibCardStyle.cornerRadius, style: .continuous) // !!! UPDATED
+                    .fill(Color.Glu.nutritionAccent.opacity(0.06))                                // !!! UPDATED
+            )
+            // !!! UPDATED: zentraler Card-Style (Stroke-Dicke + Highlight + Shadow)
+            .gluVibCardFrame(domainColor: Color.Glu.nutritionAccent)                              // !!! UPDATED
             .padding(.horizontal, 8)
         }
         .listRowBackground(Color.clear)
@@ -94,7 +80,6 @@ struct NutritionSettingsSection: View {
 
     // MARK: - Rows
 
-    // 🔹 Daily Carbohydrates – einzeilig + Sheet
     private var carbsRow: some View {
         Button { showCarbsSheet = true } label: {
             HStack {
@@ -114,12 +99,9 @@ struct NutritionSettingsSection: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showCarbsSheet) {
-            carbsSheet
-        }
+        .sheet(isPresented: $showCarbsSheet) { carbsSheet }
     }
 
-    // 🔹 Daily Protein – einzeilig + Sheet
     private var proteinRow: some View {
         Button { showProteinSheet = true } label: {
             HStack {
@@ -139,12 +121,9 @@ struct NutritionSettingsSection: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showProteinSheet) {
-            proteinSheet
-        }
+        .sheet(isPresented: $showProteinSheet) { proteinSheet }
     }
 
-    // 🔹 Daily Fat – einzeilig + Sheet
     private var fatRow: some View {
         Button { showFatSheet = true } label: {
             HStack {
@@ -164,12 +143,9 @@ struct NutritionSettingsSection: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showFatSheet) {
-            fatSheet
-        }
+        .sheet(isPresented: $showFatSheet) { fatSheet }
     }
 
-    // 🔹 Daily Calories – einzeilig + Sheet
     private var caloriesRow: some View {
         Button { showCaloriesSheet = true } label: {
             HStack {
@@ -189,9 +165,7 @@ struct NutritionSettingsSection: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showCaloriesSheet) {
-            caloriesSheet
-        }
+        .sheet(isPresented: $showCaloriesSheet) { caloriesSheet }
     }
 
     // MARK: - Sheets
@@ -203,7 +177,6 @@ struct NutritionSettingsSection: View {
                 .foregroundColor(Color.Glu.primaryBlue)
 
             Picker("", selection: $dailyCarbs) {
-                // 10-g-Schritte, 50–3000 g
                 ForEach(Array(stride(from: 50, through: 3000, by: 10)), id: \.self) { grams in
                     Text(carbsLabel(grams))
                         .font(.title2)
@@ -227,7 +200,6 @@ struct NutritionSettingsSection: View {
                 .foregroundColor(Color.Glu.primaryBlue)
 
             Picker("", selection: $dailyProtein) {
-                // 10-g-Schritte, 40–400 g
                 ForEach(Array(stride(from: 40, through: 400, by: 10)), id: \.self) { grams in
                     Text(proteinLabel(grams))
                         .font(.title2)
@@ -251,7 +223,6 @@ struct NutritionSettingsSection: View {
                 .foregroundColor(Color.Glu.primaryBlue)
 
             Picker("", selection: $dailyFat) {
-                // 10-g-Schritte, 20–250 g
                 ForEach(Array(stride(from: 20, through: 250, by: 10)), id: \.self) { grams in
                     Text(fatLabel(grams))
                         .font(.title2)
@@ -275,7 +246,6 @@ struct NutritionSettingsSection: View {
                 .foregroundColor(Color.Glu.primaryBlue)
 
             Picker("", selection: $dailyCalories) {
-                // 50-kcal-Schritte, 1000–10 000 kcal
                 ForEach(Array(stride(from: 1000, through: 10_000, by: 50)), id: \.self) { kcal in
                     Text(caloriesLabel(kcal))
                         .font(.title2)

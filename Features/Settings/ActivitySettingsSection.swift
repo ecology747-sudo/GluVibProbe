@@ -49,20 +49,17 @@ struct ActivitySettingsSection: View {
 
     var body: some View {
         Section {
-            ZStack {
-                // Hintergrundkarte
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.Glu.activityAccent.opacity(0.06))
-
-                // Rahmen in Activity-Farbe
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.Glu.activityAccent.opacity(0.7), lineWidth: 1)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    dailyStepTargetRow
-                }
-                .padding(16)
+            VStack(alignment: .leading, spacing: 16) {
+                dailyStepTargetRow
             }
+            .padding(16)
+            // !!! UPDATED: Domain-tinted Innenfläche bleibt (wie vorher Fill), aber ohne eigenen Stroke
+            .background( // !!! UPDATED
+                RoundedRectangle(cornerRadius: GluVibCardStyle.cornerRadius, style: .continuous) // !!! UPDATED
+                    .fill(Color.Glu.activityAccent.opacity(0.06))                                // !!! UPDATED
+            )
+            // !!! UPDATED: zentraler Card-Style (Stroke-Dicke + Highlight + Shadow)
+            .gluVibCardFrame(domainColor: Color.Glu.activityAccent)                               // !!! UPDATED
             .padding(.horizontal, 8)
         }
         .listRowBackground(Color.clear)

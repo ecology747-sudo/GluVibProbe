@@ -28,19 +28,6 @@ struct KPICard: View {
         self.domain = domain
     }
 
-    private var borderColor: Color { domain.accentColor }
-
-    private var backgroundFill: some ShapeStyle {        // CHANGED: neutral, wie vorher (Lesbarkeit)
-        Color.Glu.backgroundSurface
-    }
-
-    private var highlightStroke: Color { Color.white.opacity(0.35) }
-    private var domainStroke: Color { borderColor.opacity(0.55) }
-    private let strokeWidth: CGFloat = 1.6
-    private let shadowOpacity: Double = 0.12
-    private let shadowRadius: CGFloat = 8
-    private let shadowYOffset: CGFloat = 4
-
     var body: some View {
         VStack(alignment: .center, spacing: 4) {
 
@@ -68,24 +55,7 @@ struct KPICard: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(backgroundFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(highlightStroke, lineWidth: strokeWidth)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(domainStroke, lineWidth: strokeWidth)
-                )
-                .shadow(
-                    color: .black.opacity(shadowOpacity),
-                    radius: shadowRadius,
-                    x: 0,
-                    y: shadowYOffset
-                )
-        )
+        .gluVibCardFrame(domainColor: domain.accentColor)          // !!! UPDATED (zentraler Kachelrahmen)
     }
 }
 

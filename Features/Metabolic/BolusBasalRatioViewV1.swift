@@ -2,7 +2,93 @@
 //  BolusBasalRatioViewV1.swift
 //  GluVibProbe
 //
-//  Created by MacBookAir on 28.12.25.
-//
 
-import Foundation
+import SwiftUI
+
+struct BolusBasalRatioViewV1: View {
+
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var healthStore: HealthStore
+
+    @StateObject private var viewModel: BolusBasalRatioViewModelV1
+
+    let onMetricSelected: (String) -> Void
+
+    init(
+        viewModel: BolusBasalRatioViewModelV1? = nil,
+        onMetricSelected: @escaping (String) -> Void = { _ in }
+    ) {
+        self.onMetricSelected = onMetricSelected
+
+        if let viewModel {
+            _viewModel = StateObject(wrappedValue: viewModel)
+        } else {
+            _viewModel = StateObject(wrappedValue: BolusBasalRatioViewModelV1())
+        }
+    }
+
+    var body: some View {
+        MetricDetailScaffold(
+            headerTitle: "Metabolic",
+            headerTint: Color.Glu.metabolicDomain,
+
+            onBack: { appState.currentStatsScreen = .none },
+
+            onRefresh: {
+                // !!! UPDATED: konsistent mit BolusViewV1 (Bootstrap-Orchestrator)
+                await healthStore.refreshMetabolic(.pullToRefresh)
+            },
+
+            background: {
+                LinearGradient(
+                    colors: [.white, Color.Glu.metabolicDomain.opacity(0.55)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        ) {
+            VStack(alignment: .leading, spacing: 16) {
+
+                MetabolicSectionCardScaledV1(
+                    title: "Bolus/Basal",
+
+                    // KPI
+                    kpiTitle: "Bolus/Basal Today",
+                    kpiCurrentText: viewModel.formattedTodayRatio,
+                    kpiSecondaryText: nil,
+
+                    // Charts
+                    last90DaysData: viewModel.last90DaysRatioInt10,
+                    periodAverages: viewModel.periodAverages,
+
+                    // Scales (SSoT: VM)
+                    dailyScale: viewModel.dailyScale,
+                    periodScale: viewModel.periodScale,
+
+                    // Navigation
+                    onMetricSelected: onMetricSelected,
+                    metrics: AppState.metabolicVisibleMetrics,
+
+                    // Scale Type (period-adaptiv in der SectionCard)
+                    dailyScaleType: .ratioInt10                                    // !!! IMPORTANT
+                )
+            }
+        }
+        .task {
+            // !!! UPDATED: konsistent mit BolusViewV1 (Navigation Refresh)
+            await healthStore.refreshMetabolic(.navigation)
+        }
+    }
+}
+
+#Preview("BolusBasalRatioViewV1 – Metabolic") {
+    let previewStore = HealthStore.preview()
+    let previewVM = BolusBasalRatioViewModelV1(healthStore: previewStore)
+    let previewState = AppState()
+    previewState.currentStatsScreen = .bolusBasalRatio
+
+    return BolusBasalRatioViewV1(viewModel: previewVM)
+        .environmentObject(previewStore)
+        .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
+}

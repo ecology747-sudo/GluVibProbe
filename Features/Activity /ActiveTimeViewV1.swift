@@ -61,6 +61,7 @@ struct ActiveTimeViewV1: View {
                     kpiTargetText: "–",
                     kpiCurrentText: viewModel.formattedTodayActiveTime,
                     kpiDeltaText: "–",
+                    kpiDeltaColor: nil,              // ✅ FIX
                     hasTarget: false,
                     last90DaysData: viewModel.last90DaysChartData,
                     periodAverages: viewModel.periodAverages,
@@ -70,15 +71,13 @@ struct ActiveTimeViewV1: View {
                     monthlyScale: viewModel.monthlyScale,
                     goalValue: nil,
                     onMetricSelected: onMetricSelected,
-                    metrics: [
-                        "Steps",
-                        "Active Time",
-                        "Activity Energy",
-                        "Movement Split"
-                    ],
+                    metrics: AppState.activityVisibleMetrics,
                     showsDailyChart: true,
                     showsPeriodChart: true,
-                    showsMonthlyChart: true
+                    showsMonthlyChart: true,
+                    customKpiContent: nil,           // ✅ FIX
+                    customChartContent: nil,         // ✅ FIX
+                    dailyScaleType: .exerciseMinutes
                 )
             }
         }

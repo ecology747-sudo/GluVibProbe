@@ -1,17 +1,24 @@
-import Foundation                                   // !!! NEW
-import SwiftUI                                      // !!! NEW
+//
+//  RestingHeartRateEntry.swift
+//  GluVibProbe
+//
 
-// MARK: - Resting Heart Rate Entry                 // !!! NEW
+import Foundation
 
-struct RestingHeartRateEntry: Identifiable {        // !!! NEW
-    let id = UUID()                                 // !!! NEW
-    let date: Date                                  // !!! NEW
-    let restingHeartRate: Int                       // !!! NEW   // bpm
-}                                                   // !!! NEW
+/// Tages-Eintrag für Ruhepuls (Body Domain, V1)
+struct RestingHeartRateEntry: Identifiable {
 
-// MARK: - Preview                                  // !!! NEW
+    /// Stabile ID = Tag (00:00 lokale Zeit)
+    var id: Date { dayStart }                         // !!! UPDATED
 
-#Preview("RestingHeartRateEntry – Preview") {       // !!! NEW
-    Text("RestingHeartRateEntry Preview")           // !!! NEW
-        .padding()                                  // !!! NEW
-}                                                   // !!! NEW
+    /// Datum (kann Uhrzeit enthalten, z.B. stats.startDate)
+    let date: Date
+
+    /// Ruhepuls in bpm (Name bleibt wie in deinen Call-Sites)
+    let restingHeartRate: Int                         // !!! UPDATED
+
+    /// Normalisiert auf Tagesstart (00:00 lokale Zeit)
+    var dayStart: Date {                              // !!! NEW
+        Calendar.current.startOfDay(for: date)
+    }
+}

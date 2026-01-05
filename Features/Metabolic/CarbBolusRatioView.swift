@@ -1,43 +1,27 @@
 //
-//  GMIViewV1.swift
+//  CarbsBolusRatioViewV1.swift
 //  GluVibProbe
 //
 
 import SwiftUI
 
-struct GMIViewV1: View {
+struct CarbsBolusRatioViewV1: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
 
-    @StateObject private var viewModel: GMIViewModelV1
-
     let onMetricSelected: (String) -> Void
 
-    init(
-        viewModel: GMIViewModelV1? = nil,
-        onMetricSelected: @escaping (String) -> Void = { _ in }
-    ) {
+    init(onMetricSelected: @escaping (String) -> Void = { _ in }) {
         self.onMetricSelected = onMetricSelected
-
-        if let viewModel {
-            _viewModel = StateObject(wrappedValue: viewModel)
-        } else {
-            _viewModel = StateObject(wrappedValue: GMIViewModelV1())
-        }
     }
 
     var body: some View {
         MetricDetailScaffold(
             headerTitle: "Metabolic",
             headerTint: Color.Glu.metabolicDomain,
-
             onBack: { appState.currentStatsScreen = .none },
-
-            onRefresh: {
-                await healthStore.refreshMetabolic(.pullToRefresh)               // !!! UPDATED (Bolus-Pattern)
-            },
-
+            onRefresh: { /* später */ },
             background: {
                 LinearGradient(
                     colors: [.white, Color.Glu.metabolicDomain.opacity(0.55)],
@@ -47,30 +31,21 @@ struct GMIViewV1: View {
             }
         ) {
             VStack(alignment: .leading, spacing: 16) {
-
-                // !!! Scaffold only
-                Text(viewModel.placeholderText)
+                Text("Carbs/Bolus Ratio (V1) — TODO")
                     .font(.headline)
                     .foregroundColor(Color.Glu.primaryBlue)
-
-                // Später: MetabolicSectionCardScaledV1 + KPI/Charts
             }
-        }
-        .task {
-            await healthStore.refreshMetabolic(.navigation)                     // !!! UPDATED (Bolus-Pattern)
+            .padding(.horizontal, 8)
         }
     }
 }
 
-// MARK: - Preview
-
-#Preview("GMIViewV1 – Metabolic") {
+#Preview("CarbsBolusRatioViewV1 – Metabolic") {
     let previewStore = HealthStore.preview()
-    let previewVM = GMIViewModelV1(healthStore: previewStore)
     let previewState = AppState()
-    previewState.currentStatsScreen = .gmi
+    previewState.currentStatsScreen = .carbsBolusRatio
 
-    return GMIViewV1(viewModel: previewVM)
+    return CarbsBolusRatioViewV1()
         .environmentObject(previewStore)
         .environmentObject(previewState)
         .environmentObject(SettingsModel.shared)

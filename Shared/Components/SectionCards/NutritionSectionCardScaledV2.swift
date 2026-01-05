@@ -6,9 +6,9 @@
 //  (Carbs, Protein, Fat, Nutrition Energy).
 //
 //  - PeriodPicker + adaptive Daily-Scale wie ActivitySectionCardScaledV2
-//  - Chips Layout wie Activity (2 Reihen, linksbündig)                     // !!! UPDATED
-//  - Slots (Daily/Period/Monthly) wie Activity V2                          // !!! NEW
-//  - Optional custom KPI / custom Chart / custom Daily Builder             // !!! NEW
+//  - Chips Layout wie Activity (2 Reihen, linksbündig)
+//  - Slots (Daily/Period/Monthly) wie Activity V2
+//  - Optional custom KPI / custom Chart / custom Daily Builder
 //
 
 import SwiftUI
@@ -27,10 +27,10 @@ struct NutritionSectionCardScaledV2: View {
     let kpiTargetText: String
     let kpiCurrentText: String
     let kpiDeltaText: String
-    let kpiDeltaColor: Color?                                   // !!! NEW
+    let kpiDeltaColor: Color?
     let hasTarget: Bool
 
-    // Daten (typed: DailyStepsEntry wie Chart-Komponenten)        // !!! IMPORTANT
+    // Daten (typed: DailyStepsEntry wie Chart-Komponenten)
     let last90DaysData: [DailyStepsEntry]
     let periodAverages: [PeriodAverageEntry]
     let monthlyData: [MonthlyMetricEntry]
@@ -48,25 +48,25 @@ struct NutritionSectionCardScaledV2: View {
     let metrics: [String]
 
     // Slots (V2)
-    let showsDailyChart: Bool                                   // !!! NEW
-    let showsPeriodChart: Bool                                  // !!! NEW
-    let showsMonthlyChart: Bool                                 // !!! NEW
+    let showsDailyChart: Bool
+    let showsPeriodChart: Bool
+    let showsMonthlyChart: Bool
 
     // Optionaler KPI-Block (z.B. 3 KPIs statt Target/Current/Delta)
-    let customKpiContent: AnyView?                              // !!! NEW
+    let customKpiContent: AnyView?
 
     // Optionaler Custom-Chart-Block (Legacy: ohne Period Picker)
-    let customChartContent: AnyView?                            // !!! NEW
+    let customChartContent: AnyView?
 
     // Optionaler Custom Daily Chart Builder (MIT Period Picker)
-    let customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)? // !!! NEW
+    let customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)?
 
     // Skala-Typ für adaptive Y-Achse je nach Periodenwahl
-    let dailyScaleType: MetricScaleHelper.MetricScaleType?      // !!! NEW
+    let dailyScaleType: MetricScaleHelper.MetricScaleType?
 
     // Header optional (wie alt)
-    let showHeader: Bool                                        // !!! UPDATED
-    let onBack: (() -> Void)?                                   // !!! NEW (optional)
+    let showHeader: Bool
+    let onBack: (() -> Void)?
 
     // Domain-Farbe
     private let color = Color.Glu.nutritionAccent
@@ -84,7 +84,7 @@ struct NutritionSectionCardScaledV2: View {
         kpiTargetText: String,
         kpiCurrentText: String,
         kpiDeltaText: String,
-        kpiDeltaColor: SwiftUI.Color? = nil,                    // !!! NEW
+        kpiDeltaColor: SwiftUI.Color? = nil,
         hasTarget: Swift.Bool,
         last90DaysData: [GluVibProbe.DailyStepsEntry],
         periodAverages: [GluVibProbe.PeriodAverageEntry],
@@ -95,15 +95,15 @@ struct NutritionSectionCardScaledV2: View {
         goalValue: Swift.Int?,
         onMetricSelected: @escaping (Swift.String) -> Void,
         metrics: [Swift.String],
-        showsDailyChart: Swift.Bool = true,                     // !!! NEW
-        showsPeriodChart: Swift.Bool = true,                    // !!! NEW
-        showsMonthlyChart: Swift.Bool = true,                   // !!! NEW
-        customKpiContent: SwiftUI.AnyView? = nil,               // !!! NEW
-        customChartContent: SwiftUI.AnyView? = nil,             // !!! NEW
-        customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)? = nil, // !!! NEW
-        dailyScaleType: GluVibProbe.MetricScaleHelper.MetricScaleType? = nil,              // !!! NEW
-        showHeader: Swift.Bool = false,                         // !!! UPDATED
-        onBack: (() -> Void)? = nil                             // !!! NEW
+        showsDailyChart: Swift.Bool = true,
+        showsPeriodChart: Swift.Bool = true,
+        showsMonthlyChart: Swift.Bool = true,
+        customKpiContent: SwiftUI.AnyView? = nil,
+        customChartContent: SwiftUI.AnyView? = nil,
+        customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)? = nil,
+        dailyScaleType: GluVibProbe.MetricScaleHelper.MetricScaleType? = nil,
+        showHeader: Swift.Bool = false,
+        onBack: (() -> Void)? = nil
     ) {
         self.sectionTitle = sectionTitle
         self.title = title
@@ -145,17 +145,27 @@ struct NutritionSectionCardScaledV2: View {
     // ============================================================
 
     private var filteredLast90DaysData: [DailyStepsEntry] {
-        guard let maxDate = last90DaysData.map(\.date).max() else { return [] }
+
+        guard !last90DaysData.isEmpty else { return [] }
+
         let calendar = Calendar.current
 
-        let startDate = calendar.date(
+        // !!! UPDATED: robustes Period-Fenster (startOfDay), damit 7T wirklich 7 Tage ist
+        let todayStart = calendar.startOfDay(for: Date())                                  // !!! UPDATED
+        let maxDataDate = last90DaysData.map(\.date).max() ?? todayStart                   // !!! UPDATED
+        let endDay = min(calendar.startOfDay(for: maxDataDate), todayStart)                // !!! UPDATED
+
+        let startDay = calendar.date(
             byAdding: .day,
-            value: -selectedPeriod.days + 1,
-            to: maxDate
-        ) ?? maxDate
+            value: -(selectedPeriod.days - 1),
+            to: endDay
+        ) ?? endDay                                                                         // !!! UPDATED
 
         return last90DaysData
-            .filter { $0.date >= startDate && $0.date <= maxDate }
+            .filter { entry in
+                let d = calendar.startOfDay(for: entry.date)                               // !!! UPDATED
+                return d >= startDay && d <= endDay
+            }
             .sorted { $0.date < $1.date }
     }
 
@@ -169,7 +179,11 @@ struct NutritionSectionCardScaledV2: View {
     }
 
     private var dailyScaleForSelectedPeriod: MetricScaleResult {
-        let values = filteredLast90DaysData.map { Double($0.steps) }
+
+        // !!! UPDATED: nur echte >0 Werte für Skalierung
+        let values = filteredLast90DaysData
+            .map { Double($0.steps) }
+            .filter { $0 > 0 }                                                             // !!! UPDATED
 
         guard !values.isEmpty else { return dailyScale }
         guard let dailyScaleType else { return dailyScale }
@@ -184,7 +198,6 @@ struct NutritionSectionCardScaledV2: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
 
-            // Optionaler Section Header (wie alt)                     // !!! UPDATED
             if showHeader {
                 SectionHeader(
                     title: sectionTitle,
@@ -202,7 +215,6 @@ struct NutritionSectionCardScaledV2: View {
                 kpiHeader
             }
 
-            // Legacy Custom Chart Slot (ohne Period Picker)           // !!! NEW
             if let customChartContent {
                 ChartCard(borderColor: color) {
                     customChartContent
@@ -212,9 +224,10 @@ struct NutritionSectionCardScaledV2: View {
             if showsDailyChart {
                 ChartCard(borderColor: color) {
                     VStack(spacing: 8) {
+
                         periodPicker
 
-                        if let customDailyChartBuilder {                              // !!! NEW
+                        if let customDailyChartBuilder {
                             customDailyChartBuilder(selectedPeriod, filteredLast90DaysData)
                         } else {
                             Last90DaysScaledBarChart(
@@ -305,12 +318,12 @@ private extension NutritionSectionCardScaledV2 {
                 colors: [color.opacity(0.95), color.opacity(0.75)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
-              )
+            )
             : LinearGradient(
                 colors: [Color.clear, Color.clear],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
-              )
+            )
 
         let shadowOpacity: Double = isActive ? 0.25 : 0.15
         let shadowRadius: CGFloat = isActive ? 4 : 2.5
@@ -350,7 +363,7 @@ private extension NutritionSectionCardScaledV2 {
                     title: "Delta",
                     valueText: kpiDeltaText,
                     unit: nil,
-                    valueColor: kpiDeltaColor ?? deltaColorFallback,   // !!! UPDATED
+                    valueColor: kpiDeltaColor ?? deltaColorFallback,
                     domain: .nutrition
                 )
             } else {
@@ -360,7 +373,6 @@ private extension NutritionSectionCardScaledV2 {
         .padding(.bottom, 10)
     }
 
-    // Fallback wie alt (falls kein kpiDeltaColor vom VM kommt)
     var deltaColorFallback: Color {
         let current = extractNumber(from: kpiCurrentText)
         let target  = extractNumber(from: kpiTargetText)
@@ -399,12 +411,12 @@ private extension NutritionSectionCardScaledV2 {
                                     colors: [color.opacity(0.95), color.opacity(0.75)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
-                                  )
+                                )
                                 : LinearGradient(
                                     colors: [Color.white.opacity(0.10), color.opacity(0.22)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
-                                  )
+                                )
                             )
                         )
                         .overlay(

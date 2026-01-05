@@ -5,7 +5,7 @@
 
 import Foundation
 
-/// Täglicher Protein-Wert in Gramm (g)
+/// Nutrition: Protein pro Tag (in Gramm)
 struct DailyProteinEntry: Identifiable, Hashable {
     let date: Date
     let grams: Int

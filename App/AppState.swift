@@ -10,31 +10,78 @@ import Combine
 final class AppState: ObservableObject {
 
     enum StatsScreen {
-        // 🔹 Kein Detail-Screen aktiv → Overview anzeigen
+
         case none
 
-        // 🔹 Nutrition Overview (Einstiegsseite im Nutrition-Tab)
+        // Nutrition
         case nutritionOverview
-
-        // 🔹 Nutrition-Metriken (Detail-Screens)
         case carbs
         case protein
         case fat
-        case calories     // Nutrition Energy
+        case calories
 
-        // 🔹 Activity-Domain
+        // Activity
         case steps
         case activityEnergy
         case activityExerciseMinutes
-        case movementSplit        // !!! NEW
-        // 🔹 Body-Domain (bisher + neu)
+        case movementSplit
+        case moveTime
+        case workoutMinutes
+
+        // Body
         case weight
         case sleep
-        case bmi               // BMI Detail-Screen
-        case bodyFat           // Body-Fat Detail-Screen
-        case restingHeartRate  // Resting-Heart-Rate Detail-Screen
+        case bmi
+        case bodyFat
+        case restingHeartRate
+
+        // Metabolic (V1)
+        case metabolicOverview                                   // Entry (noch ohne View)
+        case bolus
+        case basal
+        case bolusBasalRatio
+        case carbsBolusRatio
+
+        // !!! NEW (CGM / Derived)
+        case timeInRange                                         // !!! NEW
+        case gmi                                                 // !!! NEW
     }
 
-    // Beim Start steht kein Detail-Screen fest
+    static let activityVisibleMetrics: [String] = [
+        "Steps",
+        "Workout Minutes",
+        "Activity Energy",
+        "Movement Split"
+    ]
+
+    static let nutritionVisibleMetrics: [String] = [
+        "Carbs",
+        "Protein",
+        "Fat",
+        "Calories"
+    ]
+
+    static let bodyVisibleMetrics: [String] = [
+        "Weight",
+        "Sleep",
+        "BMI",
+        "Body Fat",
+        "Resting Heart Rate"
+    ]
+
+    // ============================================================
+    // MARK: - Metabolic Visible Metrics (V1)
+    // ============================================================
+
+    static let metabolicVisibleMetrics: [String] = [
+        "Bolus",
+        "Basal",
+        "Bolus/Basal",
+        "Carbs/Bolus",
+
+        "TIR",                                                   // !!! NEW
+        "GMI"                                                    // !!! NEW
+    ]
+
     @Published var currentStatsScreen: StatsScreen = .none
 }

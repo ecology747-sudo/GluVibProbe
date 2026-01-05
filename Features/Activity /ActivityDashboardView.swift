@@ -5,13 +5,6 @@
 
 import SwiftUI
 
-/// Dashboard für die Activity-Domain:
-/// - Steps
-/// - Activity Energy
-/// - Exercise Minutes
-/// - Movement Split                                      // !!! NEW
-///
-/// Sleep & Weight gehören zur Body-Domain und werden hier nicht dargestellt.
 struct ActivityDashboardView: View {
 
     @EnvironmentObject var appState: AppState
@@ -22,43 +15,63 @@ struct ActivityDashboardView: View {
         switch appState.currentStatsScreen {
 
         // -----------------------------------------------------
-        // NEUE FÄLLE → gehören NICHT ins Activity-Dashboard
+        // NICHT-ACTIVITY → gehört NICHT ins Activity-Dashboard
         // -----------------------------------------------------
         case .none,
-             .nutritionOverview:
-            EmptyView()     // Fallback, damit Switch vollständig ist
+
+             // Nutrition
+             .nutritionOverview,
+
+             // ✅ Metabolic (V1)
+             .metabolicOverview,
+             .bolus,
+             .basal,
+             .bolusBasalRatio,
+             .carbsBolusRatio,
+             .timeInRange,                 // !!! NEW
+             .gmi:                         // !!! NEW
+            EmptyView()
 
         // -----------------------------------------------------
         // Activity Screens
         // -----------------------------------------------------
         case .steps:
-            StepsView(onMetricSelected: handleMetricSelection)
+            StepsViewV1(onMetricSelected: handleMetricSelection)
 
         case .activityEnergy:
-            ActivityEnergyView(onMetricSelected: handleMetricSelection)
+            ActivityEnergyViewV1(onMetricSelected: handleMetricSelection)
 
         case .activityExerciseMinutes:
-            ExerciseMinutesView(onMetricSelected: handleMetricSelection)
+            ActiveTimeViewV1(onMetricSelected: handleMetricSelection)
 
-        case .movementSplit:                                 // !!! NEW
-            MovementSplitView(onMetricSelected: handleMetricSelection) // !!! NEW
+        case .movementSplit:
+            MovementSplitViewV1(onMetricSelected: handleMetricSelection)
+
+        case .moveTime:
+            MoveTimeViewV1(onMetricSelected: handleMetricSelection)
+
+        case .workoutMinutes:
+            WorkoutMinutesViewV1(onMetricSelected: handleMetricSelection)
 
         // -----------------------------------------------------
         // Nutrition-Screens → im Activity-Dashboard wegparken
-        // (sollten hier nicht vorkommen)
+        // (dein bisheriges Verhalten: fallback auf Steps)
         // -----------------------------------------------------
-        case .carbs, .protein, .fat, .calories:
-            StepsView(onMetricSelected: handleMetricSelection)
+        case .carbs,
+             .protein,
+             .fat,
+             .calories:
+            StepsViewV1(onMetricSelected: handleMetricSelection)
 
         // -----------------------------------------------------
-        // Body-Screens → ebenfalls wegparken
+        // Body-Screens → ebenfalls wegparken (fallback auf Steps)
         // -----------------------------------------------------
         case .sleep,
              .weight,
              .bmi,
              .bodyFat,
              .restingHeartRate:
-            StepsView(onMetricSelected: handleMetricSelection)
+            StepsViewV1(onMetricSelected: handleMetricSelection)
         }
     }
 
@@ -66,6 +79,7 @@ struct ActivityDashboardView: View {
 
     private func handleMetricSelection(_ metric: String) {
         switch metric {
+
         case "Steps":
             appState.currentStatsScreen = .steps
 
@@ -75,9 +89,16 @@ struct ActivityDashboardView: View {
         case "Activity Energy":
             appState.currentStatsScreen = .activityEnergy
 
-        case "Movement Split":                                // !!! NEW
-            appState.currentStatsScreen = .movementSplit      // !!! NEW
+        case "Movement Split":
+            appState.currentStatsScreen = .movementSplit
 
+        case "Move Time", "MoveTime", "Move Minutes", "Move", "moveTime":
+            appState.currentStatsScreen = .moveTime
+
+        case "Workout Minutes":
+            appState.currentStatsScreen = .workoutMinutes
+
+        // (Body) — bleibt wie gehabt
         case "Weight":
             appState.currentStatsScreen = .weight
 
@@ -90,11 +111,14 @@ struct ActivityDashboardView: View {
     }
 }
 
-#Preview("ActivityDashboardView") {
+#Preview("Activity Dashboard") {
     let previewStore = HealthStore.preview()
     let previewState = AppState()
+
+    previewState.currentStatsScreen = .steps
 
     return ActivityDashboardView()
         .environmentObject(previewStore)
         .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

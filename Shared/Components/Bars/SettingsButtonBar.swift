@@ -53,6 +53,11 @@ struct SettingsButtonBar: View {
     private func actionLabel(title: String, isPrimary: Bool) -> some View {
         let color = Color.Glu.primaryBlue
 
+        // !!! NEW: Shadow-Tokens (an Metric-Chips angelehnt, aber ruhig)
+        let shadowOpacity: Double = isPrimary ? 0.22 : 0.12   // !!! NEW
+        let shadowRadius: CGFloat = isPrimary ? 6 : 3          // !!! NEW
+        let shadowYOffset: CGFloat = isPrimary ? 3 : 2         // !!! NEW
+
         return Text(title)
             .font(.body.weight(.semibold))    // ⬆️ etwas größere, klare Schrift
             .lineLimit(1)
@@ -73,6 +78,13 @@ struct SettingsButtonBar: View {
                         color.opacity(isPrimary ? 1.0 : 0.7),
                         lineWidth: 1
                     )
+            )
+            // !!! NEW: 3D-Shadow wie bei Metric-Pickern
+            .shadow(                                                   // !!! NEW
+                color: Color.black.opacity(shadowOpacity),             // !!! NEW
+                radius: shadowRadius,                                  // !!! NEW
+                x: 0,                                                  // !!! NEW
+                y: shadowYOffset                                       // !!! NEW
             )
             .foregroundColor(color)
     }

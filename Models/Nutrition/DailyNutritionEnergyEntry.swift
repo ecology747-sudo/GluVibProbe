@@ -7,8 +7,11 @@
 
 import Foundation
 
+/// Täglicher Nutrition-Energy-Wert in kcal
 struct DailyNutritionEnergyEntry: Identifiable, Hashable {
-    let id = UUID()
     let date: Date
     let energyKcal: Int
+
+    // Für Charts meist eindeutig genug
+    var id: Date { date }                   // !!! UPDATED (statt UUID → Date, wie Protein/Carbs-Pattern)
 }

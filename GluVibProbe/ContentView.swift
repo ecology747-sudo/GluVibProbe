@@ -13,84 +13,123 @@ struct ContentView: View {
     private let settings = SettingsModel.shared
     @State private var showUnsavedAlert: Bool = false
 
-    // Standard-Init
+    // Orientation detection am Root (iOS 16 safe)
+    @Environment(\.verticalSizeClass) private var vSizeClass
+    private var isLandscape: Bool { vSizeClass == .compact }
+
+    // Root rule – wann darf MainChart-Landscape übernehmen?
+    // - Nur im Home-Tab
+    // - Nur wenn kein Metabolic Router Screen aktiv ist
+    private var shouldShowMainChartLandscape: Bool {
+        isLandscape && selectedTab == .home && appState.currentStatsScreen == .none
+    }
+
+    // MARK: - Init
     init(startTab: GluTab = .home) {
         _selectedTab = State(initialValue: startTab)
     }
 
+    // MARK: - Body
     var body: some View {
-        VStack(spacing: 0) {
 
-            // Oberer Inhaltsbereich
-            ZStack {
-                switch selectedTab {
+        // ============================================================
+        // Root Landscape takeover (TabBar wird NICHT gerendert)
+        // ============================================================
+        if shouldShowMainChartLandscape {
 
-                case .activity:
-                    activityRootView          // 👈 Activity: Overview ODER Dashboard  // !!! NEW
+            // ✅ FIX: keine Argumente (MainChartLandscapeViewV1 nutzt EnvironmentObjects)
+            MainChartLandscapeViewV1()
+                .environmentObject(settings)
+                .tint(Color.Glu.primaryBlue)
 
-                case .body:
-                    bodyRootView              // 👈 Body: Overview ODER Dashboard
+        } else {
 
-                case .nutrition:
-                    nutritionRootView         // 👈 Nutrition: Overview ODER Dashboard
+            VStack(spacing: 0) {
 
-                case .home:
-                    HomeView()
+                ZStack {
 
-                case .history:
-                    HistoryView()
+                    // ---------------------------------------------------------
+                    // Global Router by StatsScreen (Metabolic entry)
+                    // ---------------------------------------------------------
+                    switch appState.currentStatsScreen {
 
-                case .settings:
-                    SettingsView()
+                    case .metabolicOverview,
+                         .bolus,
+                         .basal,
+                         .bolusBasalRatio,
+                         .carbsBolusRatio:
+                        MetabolicDashboardView()
+
+                    default:
+                        // -----------------------------------------------------
+                        // Existing Tab Content
+                        // -----------------------------------------------------
+                        switch selectedTab {
+                        case .activity:  activityRootView
+                        case .body:      bodyRootView
+                        case .nutrition: nutritionRootView
+                        case .home:      HomeView()
+                        case .history:   HistoryView()
+                        case .settings:  SettingsView(startDomain: .units)
+                        }
+                    }
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Untere Tab-Bar
-            GluBottomTabBar(
-                selectedTab: Binding(
-                    get: { selectedTab },
-                    set: { newValue in handleTabSelection(newValue) }
+                // ---------------------------------------------------------
+                // BottomTabBar nur im "normal mode"
+                // ---------------------------------------------------------
+                GluBottomTabBar(
+                    selectedTab: Binding(
+                        get: { selectedTab },
+                        set: { newValue in handleTabSelection(newValue) }
+                    )
                 )
-            )
+            }
+            .alert(
+                "Unsaved Settings",
+                isPresented: $showUnsavedAlert
+            ) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("""
+                You have unsaved changes.
+                Please tap “Save Settings” before leaving this screen.
+                """)
+            }
+            .tint(Color.Glu.primaryBlue)
         }
-        .alert(
-            "Unsaved Settings",
-            isPresented: $showUnsavedAlert
-        ) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("""
-            You have unsaved changes.
-            Please tap “Save Settings” before leaving this screen.
-            """)
-        }
-        .tint(Color.Glu.primaryBlue)
     }
 
-    // MARK: - Activity Root Handling
+    // MARK: - Activity Root
 
-    /// Steuert, ob im Activity-Tab die Overview oder das Dashboard angezeigt wird
     @ViewBuilder
     private var activityRootView: some View {
         switch appState.currentStatsScreen {
 
         case .steps,
              .activityEnergy,
-             .activityExerciseMinutes,   // !!! NEW – Exercise Minutes als Detail
-             .movementSplit:             // !!! NEW – Movement Split als Detail
-            // 👉 Detail-Screen (Steps / Activity Energy / Exercise Minutes / Movement Split)
-            ActivityDashboardView()      // !!! NEW
+             .activityExerciseMinutes,
+             .movementSplit,
+             .moveTime,
+             .workoutMinutes:
+            ActivityDashboardView()
+
+        // Metabolic States ignorieren (compile-safe)
+        case .metabolicOverview,
+             .bolus,
+             .basal,
+             .bolusBasalRatio,
+             .carbsBolusRatio:
+            ActivityOverviewViewV1()
 
         default:
-            // 👉 Einstieg: Activity Overview
-            ActivityOverviewView()       // !!! NEW
+            ActivityOverviewViewV1()
         }
     }
 
-    // MARK: - Body Root Handling
+    // MARK: - Body Root
 
-    /// Steuert, ob im Body-Tab die Overview oder das Dashboard angezeigt wird
     @ViewBuilder
     private var bodyRootView: some View {
         switch appState.currentStatsScreen {
@@ -100,33 +139,43 @@ struct ContentView: View {
              .bmi,
              .bodyFat,
              .restingHeartRate:
-            // 👉 Alle Body-Detail-Screens (5 Metriken)
             BodyDashboardView()
 
+        // Metabolic States ignorieren (compile-safe)
+        case .metabolicOverview,
+             .bolus,
+             .basal,
+             .bolusBasalRatio,
+             .carbsBolusRatio:
+            BodyOverviewViewV1()
+
         default:
-            // 👉 Einstieg: Body Overview
-            BodyOverviewView()
+            BodyOverviewViewV1()
         }
     }
 
-    // MARK: - Nutrition Root Handling
+    // MARK: - Nutrition Root
 
-    /// Steuert, ob im Nutrition-Tab die Overview oder das Nutrition-Dashboard angezeigt wird
     @ViewBuilder
     private var nutritionRootView: some View {
         switch appState.currentStatsScreen {
 
         case .nutritionOverview, .none:
-            // 👉 Overview
-            NutritionOverviewView()
+            NutritionOverviewViewV1()
 
         case .carbs, .protein, .fat, .calories:
-            // 👉 Detail-Dashboard mit SectionCardScaled etc.
             NutritionDashboardView()
 
+        // Metabolic States ignorieren (compile-safe)
+        case .metabolicOverview,
+             .bolus,
+             .basal,
+             .bolusBasalRatio,
+             .carbsBolusRatio:
+            NutritionOverviewViewV1()
+
         default:
-            // Fallback – sicherheitshalber Overview
-            NutritionOverviewView()
+            NutritionOverviewViewV1()
         }
     }
 
@@ -134,7 +183,7 @@ struct ContentView: View {
 
     private func handleTabSelection(_ newTab: GluTab) {
 
-        // Block: Settings mit unsaved changes verlassen?
+        // Block leaving Settings with unsaved changes
         if selectedTab == .settings,
            newTab != .settings,
            settings.hasUnsavedChanges {
@@ -142,25 +191,27 @@ struct ContentView: View {
             return
         }
 
-        // Tab wechseln
         selectedTab = newTab
 
-        // Domain-spezifische "Start-Screens" setzen
+        // Domain start screens
         switch newTab {
 
         case .nutrition:
-            // 👉 Immer mit Overview starten
             appState.currentStatsScreen = .nutritionOverview
 
         case .activity:
-            // Activity startet wie Body/Nutrition mit Overview.          // !!! NEW
-            appState.currentStatsScreen = .none                           // !!! NEW
-
-        case .body:
-            // 👉 Immer mit Overview starten (jede andere Case ⇒ Overview)
             appState.currentStatsScreen = .none
 
-        default:
+        case .body:
+            appState.currentStatsScreen = .none
+
+        case .home:
+            appState.currentStatsScreen = .none
+
+        case .history:
+            appState.currentStatsScreen = .none
+
+        case .settings:
             break
         }
     }
@@ -175,4 +226,5 @@ struct ContentView: View {
     ContentView(startTab: .home)
         .environmentObject(previewStore)
         .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

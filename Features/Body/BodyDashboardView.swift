@@ -14,44 +14,44 @@ struct BodyDashboardView: View {
 
         switch appState.currentStatsScreen {
 
-        // 🔸 Alle nicht-Body-Fälle → hier nur wegparken
+        // -----------------------------------------------------
+        // Nicht-Body-Fälle → hier nur wegparken
+        // -----------------------------------------------------
         case .none,
+
+             // Nutrition
              .nutritionOverview,
              .carbs, .protein, .fat, .calories,
-             .steps, .activityEnergy, .movementSplit,
-             .activityExerciseMinutes:                      // !!! NEW
+
+             // Activity
+             .steps, .activityEnergy, .activityExerciseMinutes,
+             .movementSplit, .moveTime, .workoutMinutes,
+
+             // Metabolic
+             .metabolicOverview,
+             .bolus, .basal,
+             .bolusBasalRatio, .carbsBolusRatio,
+             .timeInRange,                       // !!! NEW
+             .gmi:                               // !!! NEW
             EmptyView()
 
-        // 🟠 BODY-DOMAIN
+        // -----------------------------------------------------
+        // BODY-DOMAIN (V1)
+        // -----------------------------------------------------
         case .sleep:
-            SleepView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .none }   // zurück zur BodyOverview
-            )
+            SleepViewV1(onMetricSelected: handleMetricSelection)
 
         case .weight:
-            WeightView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .none }   // zurück zur BodyOverview
-            )
+            WeightViewV1(onMetricSelected: handleMetricSelection)
 
         case .bmi:
-            BMIView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .none }   // zurück zur BodyOverview
-            )
+            BMIViewV1(onMetricSelected: handleMetricSelection)
 
         case .bodyFat:
-            BodyFatView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .none }   // 🔙 zurück zur BodyOverview
-            )
+            BodyFatViewV1(onMetricSelected: handleMetricSelection)
 
         case .restingHeartRate:
-            RestingHeartRateView(
-                onMetricSelected: handleMetricSelection,
-                onBack: { appState.currentStatsScreen = .none }
-            )
+            RestingHeartRateViewV1(onMetricSelected: handleMetricSelection)
         }
     }
 
@@ -75,11 +75,14 @@ struct BodyDashboardView: View {
     }
 }
 
-#Preview("BodyDashboardView") {                               // !!! NEW
-    let previewStore = HealthStore.preview()                  // !!! NEW
-    let previewState = AppState()                             // !!! NEW
+#Preview("Body Dashboard") {
+    let previewStore = HealthStore.preview()
+    let previewState = AppState()
 
-    return BodyDashboardView()                                // !!! NEW
-        .environmentObject(previewStore)                      // !!! NEW
-        .environmentObject(previewState)                      // !!! NEW
+    previewState.currentStatsScreen = .weight
+
+    return BodyDashboardView()
+        .environmentObject(previewStore)
+        .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

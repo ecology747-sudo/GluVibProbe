@@ -1,146 +1,116 @@
 //
-//  MovementSplit30DayChart.swift
+//  MovementSplitDailyChart.swift
 //  GluVibProbe
 //
-//  30-Tage-Stacked-Bar-Chart für Movement Split:
-//  - Sleep Morning (unten)
-//  - Active (direkt darüber)
-//  - Sedentary
-//  - Sleep Evening (oben)
-//  - Y-Achse 0–24 h
+//  ✅ UPDATED → generisch für 7/14/30/90
+//  - Sleep Morning + Sleep Evening = gleiche Farbe (wie Morning)
+//  - Legende zeigt nur: Sleep / Active / Rest
+//  - Bars sind eckig (keine cornerRadius mehr)
+//  - Legendengröße = X-Achsen-Beschriftung
 //
 
 import SwiftUI
 import Charts
 
-struct MovementSplit30DayChart: View {
+struct MovementSplitDailyChart: View {
 
     let data: [DailyMovementSplitEntry]
+    let barWidth: CGFloat
 
-    // Farben
-    private let sleepMorningColor = Color.Glu.bodyAccent
-    private let sleepEveningColor = Color.Glu.bodyAccent.opacity(0.30)
-    private let sedentaryColor    = Color.gray.opacity(0.35)
-    private let activeColor       = Color.Glu.activityAccent
+    private let sleepColor     = Color.Glu.bodyAccent
+    private let sedentaryColor = Color.gray.opacity(0.35)
+    private let activeColor    = Color.Glu.activityAccent
 
     var body: some View {
         VStack(spacing: 8) {
+
             Chart {
                 ForEach(data) { entry in
 
-                    // Reihenfolge (von unten nach oben):
-                    // 1) Sleep Morning
-                    // 2) Active
-                    // 3) Sedentary
-                    // 4) Sleep Evening
+                    let morningEnd   = Double(entry.sleepMorningMinutes)
+                    let activeEnd    = morningEnd + Double(entry.activeMinutes)
+                    let sedentaryEnd = activeEnd + Double(entry.sedentaryMinutes)
+                    let totalEnd     = sedentaryEnd + Double(entry.sleepEveningMinutes)
 
-                    let morningEnd    = Double(entry.sleepMorningMinutes)
-                    let activeEnd     = morningEnd + Double(entry.activeMinutes)
-                    let sedentaryEnd  = activeEnd + Double(entry.sedentaryMinutes)
-                    let totalEnd      = sedentaryEnd + Double(entry.sleepEveningMinutes)
-
-                    // SLEEP MORNING (unten)
+                    // SLEEP (unten)
                     BarMark(
                         x: .value("Date", entry.date, unit: .day),
                         yStart: .value("Minutes", 0),
                         yEnd: .value("Minutes", morningEnd),
-                        width: .fixed(10)
+                        width: .fixed(barWidth)
                     )
                     .foregroundStyle(
                         .linearGradient(
                             Gradient(colors: [
-                                sleepMorningColor.opacity(0.45),
-                                sleepMorningColor.opacity(0.95)
+                                sleepColor.opacity(0.45),
+                                sleepColor.opacity(0.95)
                             ]),
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
-                    .cornerRadius(5)
-                    .shadow(
-                        color: sleepMorningColor.opacity(0.16),
-                        radius: 2.5,
-                        x: 0,
-                        y: 1.5
-                    )
+                    .shadow(color: sleepColor.opacity(0.16), radius: 2.5, x: 0, y: 1.5)
 
-                    // ACTIVE (direkt über Morning-Sleep)
+                    // ACTIVE
                     BarMark(
                         x: .value("Date", entry.date, unit: .day),
                         yStart: .value("Minutes", morningEnd),
                         yEnd: .value("Minutes", activeEnd),
-                        width: .fixed(10)
+                        width: .fixed(barWidth)
                     )
                     .foregroundStyle(
                         .linearGradient(
                             Gradient(colors: [
-                                activeColor.opacity(0.45),
+                                activeColor.opacity(0.65),
                                 activeColor.opacity(0.95)
                             ]),
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
-                    .cornerRadius(5)
-                    .shadow(
-                        color: activeColor.opacity(0.16),
-                        radius: 2.5,
-                        x: 0,
-                        y: 1.5
-                    )
+                    .shadow(color: activeColor.opacity(0.16), radius: 2.5, x: 0, y: 1.5)
 
-                    // SEDENTARY
+                    // REST
                     BarMark(
                         x: .value("Date", entry.date, unit: .day),
                         yStart: .value("Minutes", activeEnd),
                         yEnd: .value("Minutes", sedentaryEnd),
-                        width: .fixed(10)
+                        width: .fixed(barWidth)
                     )
                     .foregroundStyle(
                         .linearGradient(
                             Gradient(colors: [
-                                sedentaryColor.opacity(0.45),
+                                sedentaryColor.opacity(0.65),
                                 sedentaryColor.opacity(0.95)
                             ]),
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
-                    .cornerRadius(5)
-                    .shadow(
-                        color: sedentaryColor.opacity(0.16),
-                        radius: 2.5,
-                        x: 0,
-                        y: 1.5
-                    )
+                    .shadow(color: sedentaryColor.opacity(0.16), radius: 2.5, x: 0, y: 1.5)
 
-                    // SLEEP EVENING (oben)
+                    // SLEEP (oben, gleiche Farbe)
                     BarMark(
                         x: .value("Date", entry.date, unit: .day),
                         yStart: .value("Minutes", sedentaryEnd),
                         yEnd: .value("Minutes", totalEnd),
-                        width: .fixed(10)
+                        width: .fixed(barWidth)
                     )
                     .foregroundStyle(
                         .linearGradient(
                             Gradient(colors: [
-                                sleepEveningColor.opacity(0.45),
-                                sleepEveningColor.opacity(0.95)
+                                sleepColor.opacity(0.7),
+                                sleepColor.opacity(0.95)
                             ]),
-                            startPoint: .top,
-                            endPoint: .bottom
+                            startPoint: .bottom,
+                            endPoint: .top
                         )
                     )
-                    .cornerRadius(5)
-                    .shadow(
-                        color: sleepEveningColor.opacity(0.16),
-                        radius: 2.5,
-                        x: 0,
-                        y: 1.5
-                    )
+                    .shadow(color: sleepColor.opacity(0.16), radius: 2.5, x: 0, y: 1.5)
                 }
             }
-            // 🔹 Plot-Hintergrund im „Liquid-Glas“-Stil
+
+            // Plot-Hintergrund
             .chartPlotStyle { plot in
                 plot
                     .background(
@@ -151,100 +121,85 @@ struct MovementSplit30DayChart: View {
             }
             .chartXScale(range: .plotDimension(padding: 16))
 
-            // 🔹 Y-Achse (0–24 h) – etwas größer + fett + Primary Blue
+            // Y-Achse (0–24 h)
+            .chartYScale(domain: 0...1440)
             .chartYAxis {
                 AxisMarks(values: .stride(by: 240)) { value in
-                    AxisGridLine()
-                        .foregroundStyle(Color.gray.opacity(0.22))
+                    AxisGridLine().foregroundStyle(Color.gray.opacity(0.22))
                     AxisTick()
                     AxisValueLabel {
                         if let minutes = value.as(Int.self) {
-                            let hours = minutes / 60
-                            Text("\(hours) h")
+                            Text("\(minutes / 60) h")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(
-                                    Color.Glu.primaryBlue.opacity(0.95)
-                                )
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
                         }
                     }
                 }
             }
-            .chartYScale(domain: 0...1440)
 
-            // 🔹 X-Achse – nur Tage, etwas größer + fett + Primary Blue
+            // X-Achse (Tage)
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 6)) { value in
-                    AxisGridLine()
-                        .foregroundStyle(Color.gray.opacity(0.22))
+                    AxisGridLine().foregroundStyle(Color.gray.opacity(0.22))
                     AxisTick()
                     AxisValueLabel {
                         if let date = value.as(Date.self) {
-                            Text(date, format: .dateTime.day())           // !!! UPDATED – nur Tag
-                                .font(.system(size: 14, weight: .bold))  // wie gewünscht
-                                .foregroundStyle(
-                                    Color.Glu.primaryBlue.opacity(0.95)
-                                )
+                            Text(date, format: .dateTime.day())
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
                         }
                     }
                 }
             }
 
-            // Legende
-            HStack(spacing: 16) {
-                legendDot(color: sleepMorningColor, label: "Sleep (Morning)")
-                legendDot(color: sleepEveningColor, label: "Sleep (Evening)")
-                legendDot(color: activeColor,       label: "Active")
-                legendDot(color: sedentaryColor,    label: "Rest")
+            // ✅ Legend – jetzt gleiche Größe wie X-Achse
+            HStack(spacing: 18) {
+                legendDot(color: sleepColor,     label: "Sleep")
+                legendDot(color: activeColor,    label: "Active")
+                legendDot(color: sedentaryColor, label: "Not Active")
             }
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 14, weight: .bold))          // ⭐ MATCH X-AXIS
             .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
-            .padding(.top, 4)
+            .padding(.top, 6)
         }
     }
 
     // MARK: - Legend Helper
 
     private func legendDot(color: Color, label: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             Circle()
                 .fill(color)
-                .frame(width: 8, height: 8)
+                .frame(width: 10, height: 10)                // ⭐ leicht größer
             Text(label)
         }
     }
 }
 
-// MARK: - Preview
-
-#Preview("Movement Split – 30 Days") {
+#Preview("Movement Split – Daily Chart") {
     let calendar = Calendar.current
     let today = calendar.startOfDay(for: Date())
 
-    var demo: [DailyMovementSplitEntry] = []
-    for offset in 0..<30 {
-        let date = calendar.date(byAdding: .day, value: -offset, to: today)!
+    let demo: [DailyMovementSplitEntry] = (0..<30).compactMap { offset in
+        guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
 
-        let morningSleep = Int.random(in: 240...420)             // 4–7 h
-        let eveningSleep = Int.random(in: 0...120)               // 0–2 h
+        let morningSleep = Int.random(in: 240...420)
+        let eveningSleep = Int.random(in: 0...120)
         let active       = Int.random(in: 30...150)
-        let totalSleep   = morningSleep + eveningSleep
-        let sedentary    = max(0, 1440 - totalSleep - active)
+        let sedentary    = max(0, 1440 - (morningSleep + eveningSleep) - active)
 
-        demo.append(
-            DailyMovementSplitEntry(
-                date: date,
-                sleepMorningMinutes: morningSleep,
-                sleepEveningMinutes: eveningSleep,
-                sedentaryMinutes: sedentary,
-                activeMinutes: active
-            )
+        return DailyMovementSplitEntry(
+            date: date,
+            sleepMorningMinutes: morningSleep,
+            sleepEveningMinutes: eveningSleep,
+            sedentaryMinutes: sedentary,
+            activeMinutes: active
         )
     }
+    .sorted { $0.date < $1.date }
 
-    let sortedDemo = demo.sorted { $0.date < $1.date }
-
-    return MovementSplit30DayChart(data: sortedDemo)
-        .frame(height: 325)                              // !!! UPDATED – 260 → 325
+    return MovementSplitDailyChart(data: demo, barWidth: 10)
+        .frame(height: 260)
         .padding()
-        .previewDisplayName("Movement Split 30 Day Chart")
+        .background(Color.Glu.backgroundSurface)
 }

@@ -3,14 +3,14 @@
 //  GluVibProbe
 //
 //  Pure logic for the Activity Insight card on the Activity Overview.
+//  TODAY ONLY.
 //  Uses only already aggregated metrics from the ActivityOverviewViewModel.
 //
 
-import Foundation   // !!! NEW
+import Foundation
 
 // MARK: - Insight categories
 
-// !!! NEW
 enum ActivityInsightCategory: String {
     case neutral
     case steps
@@ -22,7 +22,6 @@ enum ActivityInsightCategory: String {
 
 // MARK: - Last workout model
 
-// !!! NEW
 struct ActivityLastWorkoutInfo {
     let name: String
     let minutes: Int
@@ -31,9 +30,8 @@ struct ActivityLastWorkoutInfo {
     let startDate: Date
 }
 
-// MARK: - Input model for the engine
+// MARK: - Input model for the engine (TODAY ONLY)
 
-// !!! NEW
 struct ActivityInsightInput {
 
     // Time context
@@ -57,15 +55,13 @@ struct ActivityInsightInput {
     let activeEnergyTodayKcal: Int
     let activeEnergy7DayAverageKcal: Int?
 
-    // Movement Split (minutes since midnight for the current calendar day)
+    // Movement Split
     let sleepMinutesToday: Int
     let activeMinutesTodayFromSplit: Int
     let sedentaryMinutesToday: Int
 
     // Last workout (optional)
     let lastWorkout: ActivityLastWorkoutInfo?
-
-    // MARK: - Init with default calendar
 
     init(
         now: Date = Date(),
@@ -104,35 +100,29 @@ struct ActivityInsightInput {
 
 // MARK: - Output model
 
-// !!! NEW
 struct ActivityInsightOutput {
     let primaryText: String
     let category: ActivityInsightCategory
 }
 
-// MARK: - Internal day-time context
+// MARK: - Internal day-time context (TODAY only)
 
-// !!! NEW
 private enum ActivityDayPart {
     case morning
     case afternoon
     case evening
 }
 
-// !!! NEW
 private struct ActivityDayContext {
     let dayPart: ActivityDayPart
-    let dayProgressFraction: Double   // 0.0 = start of day, 1.0 = end of day (24h)
-    let minutesElapsed: Int           // minutes since midnight (max 1440)
+    let dayProgressFraction: Double   // 0.0 ... 1.0
+    let minutesElapsed: Int           // 0 ... 1440
 }
 
-// MARK: - Engine
+// MARK: - Engine (TODAY ONLY)
 
-// !!! NEW
 struct ActivityInsightEngine {
 
-    // Main API
-    // Called from ActivityOverviewViewModel
     static func generateInsight(from input: ActivityInsightInput) -> ActivityInsightOutput {
 
         let context = makeDayContext(now: input.now, calendar: input.calendar)
@@ -162,14 +152,13 @@ struct ActivityInsightEngine {
             return early
         }
 
-        // 6) Neutral fallback
-        return neutralInsight(input: input, context: context)
+        // 6) Neutral fallback (TODAY wording, unchanged)
+        return neutralInsightTodayOnly(input: input, context: context)
     }
 }
 
-// MARK: - Day context helper
+// MARK: - Shared helpers
 
-// !!! NEW
 private extension ActivityInsightEngine {
 
     static func makeDayContext(now: Date, calendar: Calendar) -> ActivityDayContext {
@@ -201,16 +190,10 @@ private extension ActivityInsightEngine {
         guard let avg = average, avg > 0 else { return nil }
         return Double(value) / Double(avg)
     }
-
-    static func percentage(_ value: Int, of total: Int) -> Double? {
-        guard total > 0 else { return nil }
-        return Double(value) / Double(total)
-    }
 }
 
 // MARK: - Rule 1: Sedentary pattern (a lot of sitting)
 
-// !!! NEW
 private extension ActivityInsightEngine {
 
     static func sedentaryInsightIfNeeded(
@@ -256,7 +239,6 @@ private extension ActivityInsightEngine {
 
 // MARK: - Rule 2: Strong workout / high activity day
 
-// !!! NEW
 private extension ActivityInsightEngine {
 
     static func strongWorkoutInsightIfNeeded(
@@ -283,7 +265,6 @@ private extension ActivityInsightEngine {
 
 // MARK: - Rule 3: Solid everyday movement, little focused training
 
-// !!! NEW
 private extension ActivityInsightEngine {
 
     static func everydayMovementInsightIfNeeded(
@@ -313,7 +294,6 @@ private extension ActivityInsightEngine {
 
 // MARK: - Rule 4: Last workout was several days ago
 
-// !!! NEW
 private extension ActivityInsightEngine {
 
     static func lastWorkoutReminderInsightIfNeeded(
@@ -358,7 +338,6 @@ private extension ActivityInsightEngine {
 
 // MARK: - Rule 5: Early in the day, low activity (no judgment)
 
-// !!! NEW
 private extension ActivityInsightEngine {
 
     static func earlyDayLowActivityInsightIfNeeded(
@@ -384,12 +363,11 @@ private extension ActivityInsightEngine {
     }
 }
 
-// MARK: - Rule 6: Neutral fallback
+// MARK: - Rule 6: Neutral fallback (TODAY wording, unchanged)
 
-// !!! NEW
 private extension ActivityInsightEngine {
 
-    static func neutralInsight(
+    static func neutralInsightTodayOnly(
         input: ActivityInsightInput,
         context: ActivityDayContext
     ) -> ActivityInsightOutput {

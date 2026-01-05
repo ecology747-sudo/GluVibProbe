@@ -84,9 +84,9 @@ struct AveragePeriodsScaledBarChart: View {
                     x: 0,
                     y: 1.5
                 )
-                // 🔹 Wert direkt über dem Balken – nur Zahl, keine Einheit
+                // 🔹 Wert direkt über dem Balken – formatiert über valueLabel (BMI: 261 -> 26,1)
                 .annotation(position: .top, alignment: .center) {
-                    Text("\(Int(doubleValue.rounded()))")
+                    Text(valueLabel(doubleValue))                           // !!! FIX
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
                         .padding(.bottom, 2)

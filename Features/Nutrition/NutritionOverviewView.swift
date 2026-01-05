@@ -1,17 +1,7 @@
-//
-//  NutritionOverviewView.swift
-//  GluVibProbe
-//
-//  Nutrition Overview (Landing Page der Nutrition-Domain)
-//  - Sticky-Header (OverviewHeader) mit Titel & Datum
-//  - Blur + Tint, sobald gescrollt wird
-//  - Horizontaler Pager für 3 Tage (DayBefore, Yesterday, Today)
-//  - Score-Chip unter dem Header
-//  - Macro Target Bars
-//  - Macro Distribution Pie
-//  - Daily Energy Balance
-//  - Insight Card
-//
+import SwiftUI
+import Charts
+
+#if false
 
 import SwiftUI
 import Charts
@@ -26,7 +16,7 @@ private struct NutritionScrollOffsetKey: PreferenceKey {
     }
 }
 
-struct NutritionOverviewView: View {
+struct NutritionOverviewView_legacy: View {
 
     // MARK: - Environment
     @EnvironmentObject var appState: AppState
@@ -59,12 +49,12 @@ struct NutritionOverviewView: View {
                 wrappedValue: NutritionOverviewViewModel(
                     healthStore: HealthStore.shared,
                     settings: .shared,
-                    weightViewModel: WeightViewModel(
-                        healthStore: HealthStore.shared,
-                        settings: .shared
+                    //weightViewModel: WeightViewModel(
+                        //healthStore: HealthStore.shared,
+                        //settings: .shared
                     )
                 )
-            )
+            
         }
     }
 
@@ -838,22 +828,4 @@ private struct PageDots: View {
     }
 }
 
-// MARK: - Preview
-
-#Preview("NutritionOverviewView") {
-    let previewStore = HealthStore.preview()
-    let previewState = AppState()
-
-    let previewVM = NutritionOverviewViewModel(
-        healthStore: previewStore,
-        settings: .shared,
-        weightViewModel: WeightViewModel(
-            healthStore: previewStore,
-            settings: .shared
-        )
-    )
-
-    NutritionOverviewView(viewModel: previewVM)
-        .environmentObject(previewStore)
-        .environmentObject(previewState)
-}
+#endif

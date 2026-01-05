@@ -7,10 +7,12 @@ import SwiftUI
 
 struct SectionHeader: View {
 
-    let title: String            // z. B. "Nutrition" oder "Body"
-    let subtitle: String?        // aktuell nicht gerendert, aber für Kompatibilität behalten
-    let tintColor: Color         // Domain-Farbe für Titel + Pfeil
-    let onBack: (() -> Void)?    // optionaler Back-Handler
+    // MARK: - Inputs
+
+    let title: String
+    let subtitle: String?        // aktuell nicht gerendert, für Kompatibilität behalten
+    let tintColor: Color
+    let onBack: (() -> Void)?
 
     // MARK: - Init
 
@@ -30,14 +32,11 @@ struct SectionHeader: View {
 
     var body: some View {
         ZStack {
-
-            // ZENTRIERTER TITEL
             Text(title)
                 .font(.headline.weight(.semibold))
                 .foregroundColor(tintColor)
                 .frame(maxWidth: .infinity, alignment: .center)
 
-            // BACK-PFEIL LINKS, AUSGERICHTET MIT INHALT (16 pt)
             HStack {
                 if let onBack {
                     Button(action: onBack) {
@@ -45,17 +44,13 @@ struct SectionHeader: View {
                             .font(.headline.weight(.semibold))
                             .foregroundColor(tintColor)
                     }
-                    // kein extra leading-Padding mehr, weil wir unten .padding(.horizontal, 16) setzen
                 }
                 Spacer()
             }
         }
-        // 🔥 WICHTIG: dieser Padding-Wert sorgt dafür,
-        // dass Pfeil und Titel mit deinen Karten/Charts (meist .padding(.horizontal)) fluchten.
-        .padding(.horizontal, 30)
-
-        // Top-Abstand kannst du bei Bedarf leicht justieren (z. B. 4 statt 8)
+        .padding(.horizontal, 16)
         .padding(.top, 8)
+        .padding(.bottom, 12)    // CHANGED: mehr Abstand zum Content beim Scrollen
     }
 }
 

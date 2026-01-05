@@ -5,14 +5,10 @@
 
 import SwiftUI
 
-/// Domain: METABOLIC – Glucose-Ziele & Schwellen + HbA1c-Laborwerte
-///
-/// - Optik wie ActivitySettingsSection (Karte mit Rand)
-/// - Nutzt die Domain-Farbe: Color.Glu.metabolicDomain
-/// - Alle Texte in Glu-primaryBlue
 struct MetabolicSettingsSection: View {
 
-    // MARK: - Bindings aus SettingsView
+    @Binding var isInsulinTreated: Bool
+    @Binding var hasCGM: Bool
 
     @Binding var glucoseUnit: GlucoseUnit
     @Binding var glucoseMin: Int
@@ -20,71 +16,154 @@ struct MetabolicSettingsSection: View {
     @Binding var veryLowLimit: Int
     @Binding var veryHighLimit: Int
 
-    // 🔹 HbA1c-Liste
     @Binding var hba1cEntries: [HbA1cEntry]
 
-    // MARK: - Lokale Edit-States für HbA1c
+    // ============================================================
+    // MARK: - TIR Target (UI only)  // !!! NEW
+    // ============================================================
+
+    @Binding var tirTargetPercent: Int                                // !!! NEW
+    @State private var showTirTargetSheet: Bool = false               // !!! NEW
 
     @State private var isEditingHbA1c: Bool = false
-    @State private var editingIndex: Int? = nil   // nil = Neuer Eintrag
+    @State private var editingIndex: Int? = nil
     @State private var editDate: Date = Date()
     @State private var editValueString: String = ""
 
-    // MARK: - Hilfsfunktionen mg/dL <-> mmol/L
+    // ============================================================
+    // MARK: - Constants (mg/dL base)
+    // ============================================================
 
-    private func mgToMmol(_ mg: Int) -> Double {
-        Double(mg) / 18.0
+    private let stepMgdl: Int = 5
+    private let targetMinGapMgdl: Int = 25
+    private let crossGapMgdl: Int = 5
+
+    private let tirRangeMgdl: ClosedRange<Int> = 50...300
+    private let extremeRangeMgdl: ClosedRange<Int> = 40...400
+
+    // ============================================================
+    // MARK: - Unit helpers (display only)
+    // ============================================================
+
+    private func mgToMmol(_ mg: Int) -> Double { Double(mg) / 18.0 }
+    private func mmolToMg(_ mmol: Double) -> Int { Int((mmol * 18.0).rounded()) }
+
+    // ============================================================
+    // MARK: - 5 mg/dL snapping
+    // ============================================================
+
+    private func snappedMgdl(_ mgdl: Int) -> Int {
+        let s = stepMgdl
+        guard s > 1 else { return mgdl }
+        return Int((Double(mgdl) / Double(s)).rounded()) * s
     }
 
-    private func mmolToMg(_ mmol: Double) -> Int {
-        Int((mmol * 18.0).rounded())
+    private func clamp(_ v: Int, _ r: ClosedRange<Int>) -> Int {
+        min(max(v, r.lowerBound), r.upperBound)
     }
 
-    // MARK: - Anzeige TIR
+    // ============================================================
+    // MARK: - Cross-Slider Normalization
+    // ============================================================
+
+    private enum EditedBoundary {
+        case veryLow, tirMin, tirMax, veryHigh
+    }
+
+    private func normalize(after edited: EditedBoundary) {
+        veryLowLimit  = clamp(snappedMgdl(veryLowLimit),  extremeRangeMgdl)
+        veryHighLimit = clamp(snappedMgdl(veryHighLimit), extremeRangeMgdl)
+
+        glucoseMin    = clamp(snappedMgdl(glucoseMin),     tirRangeMgdl)
+        glucoseMax    = clamp(snappedMgdl(glucoseMax),     tirRangeMgdl)
+
+        switch edited {
+
+        case .veryLow:
+            if veryLowLimit > glucoseMin - crossGapMgdl {
+                glucoseMin = veryLowLimit + crossGapMgdl
+            }
+            if glucoseMin > glucoseMax - targetMinGapMgdl {
+                glucoseMax = glucoseMin + targetMinGapMgdl
+            }
+            if glucoseMax > veryHighLimit - crossGapMgdl {
+                veryHighLimit = glucoseMax + crossGapMgdl
+            }
+
+        case .tirMin:
+            if glucoseMin < veryLowLimit + crossGapMgdl {
+                veryLowLimit = glucoseMin - crossGapMgdl
+            }
+            if glucoseMin > glucoseMax - targetMinGapMgdl {
+                glucoseMax = glucoseMin + targetMinGapMgdl
+            }
+            if glucoseMax > veryHighLimit - crossGapMgdl {
+                veryHighLimit = glucoseMax + crossGapMgdl
+            }
+
+        case .tirMax:
+            if glucoseMax > veryHighLimit - crossGapMgdl {
+                veryHighLimit = glucoseMax + crossGapMgdl
+            }
+            if glucoseMin > glucoseMax - targetMinGapMgdl {
+                glucoseMin = glucoseMax - targetMinGapMgdl
+            }
+            if veryLowLimit > glucoseMin - crossGapMgdl {
+                veryLowLimit = glucoseMin - crossGapMgdl
+            }
+
+        case .veryHigh:
+            if veryHighLimit < glucoseMax + crossGapMgdl {
+                glucoseMax = veryHighLimit - crossGapMgdl
+            }
+            if glucoseMin > glucoseMax - targetMinGapMgdl {
+                glucoseMin = glucoseMax - targetMinGapMgdl
+            }
+            if veryLowLimit > glucoseMin - crossGapMgdl {
+                veryLowLimit = glucoseMin - crossGapMgdl
+            }
+        }
+
+        veryLowLimit  = clamp(snappedMgdl(veryLowLimit),  extremeRangeMgdl)
+        veryHighLimit = clamp(snappedMgdl(veryHighLimit), extremeRangeMgdl)
+
+        glucoseMin    = clamp(snappedMgdl(glucoseMin),     tirRangeMgdl)
+        glucoseMax    = clamp(snappedMgdl(glucoseMax),     tirRangeMgdl)
+
+        if veryLowLimit > glucoseMin - crossGapMgdl {
+            veryLowLimit = clamp(glucoseMin - crossGapMgdl, extremeRangeMgdl)
+        }
+        if glucoseMin > glucoseMax - targetMinGapMgdl {
+            glucoseMin = clamp(glucoseMax - targetMinGapMgdl, tirRangeMgdl)
+        }
+        if glucoseMax > veryHighLimit - crossGapMgdl {
+            veryHighLimit = clamp(glucoseMax + crossGapMgdl, extremeRangeMgdl)
+        }
+    }
+
+    // ============================================================
+    // MARK: - Display Strings
+    // ============================================================
 
     private var tirMinDisplay: String {
-        if glucoseUnit == .mgdL {
-            return "\(glucoseMin)"
-        } else {
-            return String(format: "%.1f", mgToMmol(glucoseMin))
-        }
+        if glucoseUnit == .mgdL { return "\(glucoseMin)" }
+        return String(format: "%.1f", mgToMmol(glucoseMin))
     }
 
     private var tirMaxDisplay: String {
-        if glucoseUnit == .mgdL {
-            return "\(glucoseMax)"
-        } else {
-            return String(format: "%.1f", mgToMmol(glucoseMax))
-        }
+        if glucoseUnit == .mgdL { return "\(glucoseMax)" }
+        return String(format: "%.1f", mgToMmol(glucoseMax))
     }
 
-    // MARK: - Anzeige Very Low / High
-
     private var veryLowLineText: String {
-        if glucoseUnit == .mgdL {
-            return "< \(veryLowLimit) \(glucoseUnit.label)"
-        } else {
-            return String(
-                format: "< %.1f %@",
-                mgToMmol(veryLowLimit),
-                glucoseUnit.label
-            )
-        }
+        if glucoseUnit == .mgdL { return "< \(veryLowLimit) \(glucoseUnit.label)" }
+        return String(format: "< %.1f %@", mgToMmol(veryLowLimit), glucoseUnit.label)
     }
 
     private var veryHighLineText: String {
-        if glucoseUnit == .mgdL {
-            return "> \(veryHighLimit) \(glucoseUnit.label)"
-        } else {
-            return String(
-                format: "> %.1f %@",
-                mgToMmol(veryHighLimit),
-                glucoseUnit.label
-            )
-        }
+        if glucoseUnit == .mgdL { return "> \(veryHighLimit) \(glucoseUnit.label)" }
+        return String(format: "> %.1f %@", mgToMmol(veryHighLimit), glucoseUnit.label)
     }
-
-    // MARK: - DateFormatter für HbA1c-Zeilen
 
     private static let hba1cDateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -93,51 +172,122 @@ struct MetabolicSettingsSection: View {
         return df
     }()
 
-    // MARK: - Body
+    private var hba1cEntriesSortedForDisplay: [(index: Int, entry: HbA1cEntry)] {
+        hba1cEntries
+            .enumerated()
+            .map { (index: $0.offset, entry: $0.element) }
+            .sorted { $0.entry.date > $1.entry.date }
+    }
+
+    // ============================================================
+    // MARK: - Done Button (same pattern as Activity)  // !!! NEW
+    // ============================================================
+
+    private func doneButton(_ title: String, action: @escaping () -> Void) -> some View { // !!! NEW
+        let color = Color.Glu.primaryBlue
+        return Button(action: action) {
+            Text(title)
+                .font(.body.weight(.semibold))
+                .padding(.vertical, 8)
+                .padding(.horizontal, 22)
+                .background(Capsule().fill(color.opacity(0.15)))
+                .overlay(
+                    Capsule().stroke(color, lineWidth: 1)
+                )
+                .foregroundColor(color)
+        }
+        .buttonStyle(.plain)
+    }
 
     var body: some View {
         Section {
-            ZStack {
-                // Hintergrundkarte in Metabolic-Farbe
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.Glu.metabolicDomain.opacity(0.06))
+            VStack(alignment: .leading, spacing: 16) {
 
-                // Rahmen in Metabolic-Farbe
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.Glu.metabolicDomain.opacity(0.7), lineWidth: 1)
+                metabolicFeatureFlagsBlock
 
-                VStack(alignment: .leading, spacing: 16) {
+                Divider()
+                    .padding(.vertical, 4)
 
-                    // MARK: Glucose Target Range (TIR)
+                glucoseTargetRangeBlock
+                veryLowHighThresholdBlock
 
-                    glucoseTargetRangeBlock
+                // ====================================================
+                // MARK: - TIR Target Row  // !!! NEW
+                // ====================================================
 
-                    // MARK: Very Low / Very High Thresholds
+                Divider()
+                    .padding(.vertical, 4)
 
-                    veryLowHighThresholdBlock
+                tirTargetBlock                                              // !!! NEW
 
-                    // MARK: HbA1c-Laborwerte (neu)
+                Divider()
+                    .padding(.vertical, 4)
 
-                    Divider()
-                        .padding(.vertical, 4)
-
-                    hba1cBlock
-                }
-                .padding(16)
+                hba1cBlock
             }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: GluVibCardStyle.cornerRadius, style: .continuous)
+                    .fill(Color.Glu.metabolicDomain.opacity(0.06))
+            )
+            .gluVibCardFrame(domainColor: Color.Glu.metabolicDomain)
             .padding(.horizontal, 8)
         }
         .listRowBackground(Color.clear)
         .listRowInsets(.init(top: 8, leading: 0, bottom: 8, trailing: 0))
-        // 🔹 Edit-/Create-Sheet für HbA1c
         .sheet(isPresented: $isEditingHbA1c) {
             editHbA1cSheet
         }
+        .sheet(isPresented: $showTirTargetSheet) {                     // !!! NEW
+            tirTargetSheet
+        }
     }
 
-    // MARK: - Teilblöcke
+    private var metabolicFeatureFlagsBlock: some View {
+        VStack(alignment: .leading, spacing: 12) {
 
-    /// Block für Glucose Target Range (TIR)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Insulin therapy")
+                        .font(.subheadline)
+                        .foregroundColor(Color.Glu.primaryBlue)
+
+                    Text("Enable if you regularly use insulin (bolus and/or basal).")
+                        .font(.caption)
+                        .foregroundColor(Color.Glu.primaryBlue.opacity(0.7))
+                }
+
+                Spacer()
+
+                Toggle("", isOn: $isInsulinTreated)
+                    .labelsHidden()
+                    .tint(Color.Glu.metabolicDomain)
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CGM sensor available")
+                        .font(.subheadline)
+                        .foregroundColor(Color.Glu.primaryBlue)
+
+                    Text("Enable if your glucose is tracked continuously via a sensor.")
+                        .font(.caption)
+                        .foregroundColor(Color.Glu.primaryBlue.opacity(0.7))
+                }
+
+                Spacer()
+
+                Toggle("", isOn: $hasCGM)
+                    .labelsHidden()
+                    .tint(Color.Glu.metabolicDomain)
+            }
+        }
+    }
+
+    // ============================================================
+    // MARK: - Slider 1: Target Range
+    // ============================================================
+
     private var glucoseTargetRangeBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -154,47 +304,38 @@ struct MetabolicSettingsSection: View {
 
             RangeSlider(
                 lowerValue: Binding(
-                    get: {
-                        glucoseUnit == .mgdL
-                        ? Double(glucoseMin)
-                        : mgToMmol(glucoseMin)
-                    },
+                    get: { glucoseUnit == .mgdL ? Double(glucoseMin) : mgToMmol(glucoseMin) },
                     set: { newVal in
-                        if glucoseUnit == .mgdL {
-                            glucoseMin = min(Int(newVal.rounded()), glucoseMax)
-                        } else {
-                            let mg = mmolToMg(newVal)
-                            glucoseMin = min(mg, glucoseMax)
-                        }
+                        let mg = (glucoseUnit == .mgdL)
+                        ? Int(newVal.rounded())
+                        : mmolToMg(newVal)
+
+                        glucoseMin = snappedMgdl(mg)
+                        normalize(after: .tirMin)
                     }
                 ),
                 upperValue: Binding(
-                    get: {
-                        glucoseUnit == .mgdL
-                        ? Double(glucoseMax)
-                        : mgToMmol(glucoseMax)
-                    },
+                    get: { glucoseUnit == .mgdL ? Double(glucoseMax) : mgToMmol(glucoseMax) },
                     set: { newVal in
-                        if glucoseUnit == .mgdL {
-                            glucoseMax = max(Int(newVal.rounded()), glucoseMin)
-                        } else {
-                            let mg = mmolToMg(newVal)
-                            glucoseMax = max(mg, glucoseMin)
-                        }
+                        let mg = (glucoseUnit == .mgdL)
+                        ? Int(newVal.rounded())
+                        : mmolToMg(newVal)
+
+                        glucoseMax = snappedMgdl(mg)
+                        normalize(after: .tirMax)
                     }
                 ),
-                range: glucoseUnit == .mgdL
-                ? 50.0...300.0
-                : 2.775...16.65,
-                minGap: glucoseUnit == .mgdL
-                ? 25.0
-                : 1.5
+                range: glucoseUnit == .mgdL ? 50.0...300.0 : 2.775...16.65,
+                minGap: glucoseUnit == .mgdL ? Double(targetMinGapMgdl) : 1.5
             )
             .frame(height: 40)
         }
     }
 
-    /// Block für Very Low / High Thresholds
+    // ============================================================
+    // MARK: - Slider 2: Very Low / Very High
+    // ============================================================
+
     private var veryLowHighThresholdBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Very Low / Very High Glucose Thresholds")
@@ -203,41 +344,29 @@ struct MetabolicSettingsSection: View {
 
             LowerUpperRangeGlucoseSlider(
                 lowerValue: Binding(
-                    get: {
-                        glucoseUnit == .mgdL
-                        ? Double(veryLowLimit)
-                        : mgToMmol(veryLowLimit)
-                    },
+                    get: { glucoseUnit == .mgdL ? Double(veryLowLimit) : mgToMmol(veryLowLimit) },
                     set: { newVal in
-                        if glucoseUnit == .mgdL {
-                            veryLowLimit = min(Int(newVal.rounded()), veryHighLimit)
-                        } else {
-                            let mg = mmolToMg(newVal)
-                            veryLowLimit = min(mg, veryHighLimit)
-                        }
+                        let mg = (glucoseUnit == .mgdL)
+                        ? Int(newVal.rounded())
+                        : mmolToMg(newVal)
+
+                        veryLowLimit = snappedMgdl(mg)
+                        normalize(after: .veryLow)
                     }
                 ),
                 upperValue: Binding(
-                    get: {
-                        glucoseUnit == .mgdL
-                        ? Double(veryHighLimit)
-                        : mgToMmol(veryHighLimit)
-                    },
+                    get: { glucoseUnit == .mgdL ? Double(veryHighLimit) : mgToMmol(veryHighLimit) },
                     set: { newVal in
-                        if glucoseUnit == .mgdL {
-                            veryHighLimit = max(Int(newVal.rounded()), veryLowLimit)
-                        } else {
-                            let mg = mmolToMg(newVal)
-                            veryHighLimit = max(mg, veryLowLimit)
-                        }
+                        let mg = (glucoseUnit == .mgdL)
+                        ? Int(newVal.rounded())
+                        : mmolToMg(newVal)
+
+                        veryHighLimit = snappedMgdl(mg)
+                        normalize(after: .veryHigh)
                     }
                 ),
-                range: glucoseUnit == .mgdL
-                ? 40.0...400.0
-                : 2.2...22.2,
-                minGap: glucoseUnit == .mgdL
-                ? 25.0
-                : 1.5
+                range: glucoseUnit == .mgdL ? 40.0...400.0 : 2.2...22.2,
+                minGap: glucoseUnit == .mgdL ? 25.0 : 1.5
             )
             .frame(height: 40)
 
@@ -263,7 +392,71 @@ struct MetabolicSettingsSection: View {
         }
     }
 
-    /// Block für HbA1c-Laborwerte
+    // ============================================================
+    // MARK: - TIR Target Block  // !!! NEW
+    // ============================================================
+
+    private var tirTargetBlock: some View {                            // !!! NEW
+        VStack(alignment: .leading, spacing: 6) {
+
+            Button {
+                showTirTargetSheet = true
+            } label: {
+                HStack {
+                    Text("Target Time in Range (TIR)")
+                        .font(.subheadline)
+                        .foregroundColor(Color.Glu.primaryBlue)
+
+                    Spacer()
+
+                    Text("\(tirTargetPercent)%")
+                        .font(.body.weight(.medium))
+                        .foregroundColor(Color.Glu.primaryBlue)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .foregroundColor(Color.Glu.primaryBlue.opacity(0.7))
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+
+            Text("Used for TIR bar target marker and status colors.")
+                .font(.caption)
+                .foregroundColor(Color.Glu.primaryBlue.opacity(0.7))
+        }
+    }
+
+    private var tirTargetSheet: some View {                             // !!! NEW
+        VStack(spacing: 12) {
+            Text("Target Time in Range (TIR)")
+                .font(.headline)
+                .foregroundColor(Color.Glu.primaryBlue)
+                .padding(.top, 10)
+
+            Picker("", selection: $tirTargetPercent) {
+                ForEach(Array(stride(from: 40, through: 95, by: 1)), id: \.self) { v in
+                    Text("\(v)%")
+                        .font(.title3)
+                        .foregroundColor(Color.Glu.primaryBlue)
+                        .tag(v)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(height: 220)
+
+            doneButton("Done") {
+                showTirTargetSheet = false
+            }
+            .padding(.vertical, 16)
+        }
+        .padding(.horizontal, 16)
+        .presentationDetents([.medium])
+    }
+
+    // ============================================================
+    // MARK: - HbA1c Block (unchanged)
+    // ============================================================
+
     private var hba1cBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
 
@@ -295,7 +488,6 @@ struct MetabolicSettingsSection: View {
             } else {
                 VStack(spacing: 6) {
 
-                    // Kopfzeile
                     HStack {
                         Text("Date")
                             .font(.caption2.weight(.semibold))
@@ -316,19 +508,17 @@ struct MetabolicSettingsSection: View {
                         Spacer(minLength: 16)
 
                         Text(" ")
-                            .frame(width: 52) // Platz für Edit + Trash
+                            .frame(width: 52)
                     }
 
-                    // Anzeige-Zeilen mit Edit- und Trash-Button
-                    ForEach(Array(hba1cEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(hba1cEntriesSortedForDisplay, id: \.entry.id) { item in
+                        let index = item.index
+                        let entry = item.entry
+
                         HStack(spacing: 8) {
-                            Text(
-                                MetabolicSettingsSection
-                                    .hba1cDateFormatter
-                                    .string(from: entry.date)
-                            )
-                            .font(.subheadline)
-                            .foregroundColor(Color.Glu.primaryBlue)
+                            Text(MetabolicSettingsSection.hba1cDateFormatter.string(from: entry.date))
+                                .font(.subheadline)
+                                .foregroundColor(Color.Glu.primaryBlue)
 
                             Spacer()
 
@@ -370,13 +560,10 @@ struct MetabolicSettingsSection: View {
         }
     }
 
-    // MARK: - HbA1c Helper
-
-    /// Neuer Eintrag -> öffnet direkt die Maske
     private func startCreatingHbA1cEntry() {
         editingIndex = nil
         editDate = Date()
-        editValueString = ""        // leer, User trägt Wert ein
+        editValueString = ""
         isEditingHbA1c = true
     }
 
@@ -395,7 +582,6 @@ struct MetabolicSettingsSection: View {
     }
 
     private func saveEditedHbA1c() {
-        // Komma in Punkt umwandeln, damit 6,5 auch akzeptiert wird
         let cleaned = editValueString.replacingOccurrences(of: ",", with: ".")
         guard let value = Double(cleaned) else {
             isEditingHbA1c = false
@@ -403,13 +589,11 @@ struct MetabolicSettingsSection: View {
         }
 
         if let index = editingIndex, hba1cEntries.indices.contains(index) {
-            // Bestehenden Eintrag updaten
             var entry = hba1cEntries[index]
             entry.date = editDate
             entry.valuePercent = value
             hba1cEntries[index] = entry
         } else {
-            // Neuen Eintrag anlegen
             let newEntry = HbA1cEntry(date: editDate, valuePercent: value)
             hba1cEntries.append(newEntry)
         }
@@ -417,17 +601,11 @@ struct MetabolicSettingsSection: View {
         isEditingHbA1c = false
     }
 
-    // MARK: - Edit-/Create-Sheet
-
     private var editHbA1cSheet: some View {
         NavigationStack {
             Form {
                 Section {
-                    DatePicker(
-                        "Date",
-                        selection: $editDate,
-                        displayedComponents: .date
-                    )
+                    DatePicker("Date", selection: $editDate, displayedComponents: .date)
 
                     HStack {
                         Text("HbA1c")
@@ -444,9 +622,7 @@ struct MetabolicSettingsSection: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        isEditingHbA1c = false
-                    }
+                    Button("Cancel") { isEditingHbA1c = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
@@ -459,12 +635,12 @@ struct MetabolicSettingsSection: View {
     }
 }
 
-// MARK: - Preview
-
 #Preview("MetabolicSettingsSection") {
     NavigationStack {
         Form {
             MetabolicSettingsSection(
+                isInsulinTreated: .constant(false),
+                hasCGM: .constant(false),
                 glucoseUnit:   .constant(.mgdL),
                 glucoseMin:    .constant(70),
                 glucoseMax:    .constant(180),
@@ -476,7 +652,8 @@ struct MetabolicSettingsSection: View {
                         date: Calendar.current.date(byAdding: .month, value: -3, to: Date()) ?? Date(),
                         valuePercent: 6.8
                     )
-                ])
+                ]),
+                tirTargetPercent: .constant(70) // !!! NEW
             )
         }
     }

@@ -34,6 +34,21 @@ extension Color {
         /// UNITS / globale Controls
         /// – läuft über die Primärfarbe
         static let unitsDomain       = primaryBlue
+        
+        // MARK: - Metabolic / CGM Spezialfarben
+
+        /// CGM-Linie (Acid Red) – Asset-gestützt (Light/Dark automatisch)
+        /// Light: #961C1C
+        /// Dark:  #B84A4A
+        static let acidCGMRed = Color("acidCGMRed")
+        
+        
+        /// Bolus-Insulin (Acid Dark Green) – Asset-gestützt (Light/Dark automatisch)
+        /// Any (Light): #0B4F2A
+        /// Dark:        #2AD67B
+        static let acidBolusDarkGreen = Color("acidBolusDarkGreen")
+        
+        let basalColor: Color = Color("GluBasalMagenta")
 
         // MARK: - Legacy-Namen (nur damit dein bestehender Code nicht bricht)
         // Diese kannst du später Schritt für Schritt entfernen,

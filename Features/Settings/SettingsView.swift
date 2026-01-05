@@ -5,19 +5,13 @@
 
 import SwiftUI
 
-// Snapshot aller relevanten @State-Werte, um nur EINE onChange-Quelle zu haben
 private struct SettingsSnapshot: Equatable {
-    var gender: String
-    var birthDate: Date
-    var height: Int
-    var weightKg: Int
+
     var targetWeight: Int
-    var dailySleepGoalMinutes: Int   // 🔹 neu
+    var dailySleepGoalMinutes: Int
 
     var glucoseUnit: GlucoseUnit
     var weightUnit: WeightUnit
-    var heightUnit: HeightUnit
-    var energyUnit: EnergyUnit
     var distanceUnit: DistanceUnit
 
     var dailyStepTarget: Int
@@ -32,276 +26,237 @@ private struct SettingsSnapshot: Equatable {
     var dailyCalories: Int
     var dailyFat: Int
 
-    // 🔹 neu (HbA1c in Snapshot, für Unsaved-Tracking)
     var hba1cEntries: [HbA1cEntry]
+
+    var isInsulinTreated: Bool
+    var hasCGM: Bool
+
+    // !!! NEW
+    var tirTargetPercent: Int
 }
 
 struct SettingsView: View {
 
-    // Zentrales Settings-Modell
     @ObservedObject private var settings = SettingsModel.shared
 
-    // MARK: - Body / Personal
-
-    @State private var gender: String = "Male"
-    @State private var birthDate: Date = Date()
-    @State private var height: Int = 170
-    @State private var weightKg: Int = 75
     @State private var targetWeight: Int = 75
-    @State private var dailySleepGoalMinutes: Int = 8 * 60    // 🔹 neu
-
-    // MARK: - Units
+    @State private var dailySleepGoalMinutes: Int = 8 * 60
 
     @State private var glucoseUnit: GlucoseUnit = .mgdL
     @State private var weightUnit: WeightUnit = .kg
-    @State private var heightUnit: HeightUnit = .cm
-    @State private var energyUnit: EnergyUnit = .kcal
     @State private var distanceUnit: DistanceUnit = .kilometers
-
-    // MARK: - Activity
 
     @State private var dailyStepTarget: Int = 10_000
 
-    // MARK: - Metabolic
+    @State private var isInsulinTreated: Bool = false
+    @State private var hasCGM: Bool = false
 
     @State private var glucoseMin: Int = 70
     @State private var glucoseMax: Int = 180
     @State private var veryLowLimit: Int = 55
     @State private var veryHighLimit: Int = 250
 
-    // 🔹 neu (HbA1c-Liste als @State, wird mit SettingsModel synchronisiert)
     @State private var hba1cEntries: [HbA1cEntry] = []
-
-    // MARK: - Nutrition
 
     @State private var dailyCarbs: Int = 200
     @State private var dailyProtein: Int = 80
     @State private var dailyCalories: Int = 2500
     @State private var dailyFat: Int = 70
 
-    // MARK: - Aktive Domain
+    // !!! NEW
+    @State private var tirTargetPercent: Int = 70
 
-    @State private var selectedDomain: SettingsDomain = .body
+    @State private var selectedDomain: SettingsDomain
 
-    // MARK: - Save Button State
+    init(startDomain: SettingsDomain = .body) {
+        _selectedDomain = State(initialValue: startDomain)
+    }
 
     @State private var saveButtonState: SettingsSaveButtonState = .idle
-
-    /// True, sobald die initialen Werte aus SettingsModel in die @State-Variablen geladen wurden.
     @State private var didInitialLoad: Bool = false
-
-    /// Flag, um während Undo/Initial-Load das Unsaved-Tracking auszusetzen
     @State private var suspendUnsavedTracking: Bool = false
-
-    /// Lokales Flag für die Button-Bar, damit Cancel sofort verschwindet
     @State private var localHasUnsavedChanges: Bool = false
-
-    // MARK: - Snapshot für onChange
 
     private var snapshot: SettingsSnapshot {
         SettingsSnapshot(
-            gender: gender,
-            birthDate: birthDate,
-            height: height,
-            weightKg: weightKg,
             targetWeight: targetWeight,
-            dailySleepGoalMinutes: dailySleepGoalMinutes,  // 🔹 neu
+            dailySleepGoalMinutes: dailySleepGoalMinutes,
+
             glucoseUnit: glucoseUnit,
             weightUnit: weightUnit,
-            heightUnit: heightUnit,
-            energyUnit: energyUnit,
             distanceUnit: distanceUnit,
+
             dailyStepTarget: dailyStepTarget,
+
             glucoseMin: glucoseMin,
             glucoseMax: glucoseMax,
             veryLowLimit: veryLowLimit,
             veryHighLimit: veryHighLimit,
+
             dailyCarbs: dailyCarbs,
             dailyProtein: dailyProtein,
             dailyCalories: dailyCalories,
             dailyFat: dailyFat,
-            hba1cEntries: hba1cEntries      // 🔹 neu (HbA1c im Snapshot enthalten)
+
+            hba1cEntries: hba1cEntries,
+
+            isInsulinTreated: isInsulinTreated,
+            hasCGM: hasCGM,
+
+            tirTargetPercent: tirTargetPercent // !!! NEW
         )
     }
 
-    // MARK: - Umrechnung
-
-    func mgToMmol(_ mg: Int) -> Double {
-        Double(mg) / 18.0
-    }
-
-    func mmolToMg(_ mmol: Double) -> Int {
-        Int((mmol * 18.0).rounded())
-    }
-
-    // MARK: - Save / Undo Logik
-
-    /// Schreibt alle aktuellen @State-Werte ins SettingsModel und ruft saveToDefaults().
     private func saveAllSettings() {
-        // Steps
         settings.dailyStepGoal = dailyStepTarget
 
-        // Personal / Body
-        settings.gender         = gender
-        settings.birthDate      = birthDate
-        settings.heightCm       = height
-        settings.weightKg       = weightKg
         settings.targetWeightKg = targetWeight
-        settings.dailySleepGoalMinutes = dailySleepGoalMinutes   // 🔹 neu
+        settings.dailySleepGoalMinutes = dailySleepGoalMinutes
 
-        // Units
-        settings.weightUnit     = weightUnit
-        settings.heightUnit     = heightUnit
-        settings.energyUnit     = energyUnit
-        settings.distanceUnit   = distanceUnit
-        settings.glucoseUnit    = glucoseUnit
+        settings.weightUnit   = weightUnit
+        settings.distanceUnit = distanceUnit
+        settings.glucoseUnit  = glucoseUnit
 
-        // Metabolic
+        settings.isInsulinTreated = isInsulinTreated
+        settings.hasCGM = hasCGM
+
         settings.glucoseMin    = glucoseMin
         settings.glucoseMax    = glucoseMax
         settings.veryLowLimit  = veryLowLimit
         settings.veryHighLimit = veryHighLimit
 
-        // 🔹 neu (HbA1c-Entries ins SettingsModel schreiben)
-        settings.hba1cEntries  = hba1cEntries
+        settings.hba1cEntries = hba1cEntries
 
-        // Nutrition
         settings.dailyCarbs    = dailyCarbs
         settings.dailyProtein  = dailyProtein
         settings.dailyCalories = dailyCalories
         settings.dailyFat      = dailyFat
 
-        // In UserDefaults speichern
+        // !!! NEW
+        settings.tirTargetPercent = tirTargetPercent
+
         settings.saveToDefaults()
     }
 
-    /// Stellt alle @State-Werte aus dem aktuellen SettingsModel wieder her.
     private func undoChanges() {
-        // ⛔ Unsaved-Tracking während des Undo-Vorgangs deaktivieren
         suspendUnsavedTracking = true
 
-        // Steps
         dailyStepTarget = settings.dailyStepGoal
 
-        // Personal / Body
-        gender                = settings.gender
-        birthDate             = settings.birthDate
-        height                = settings.heightCm
-        weightKg              = settings.weightKg
-        targetWeight          = settings.targetWeightKg
-        dailySleepGoalMinutes = settings.dailySleepGoalMinutes   // 🔹 neu
+        targetWeight = settings.targetWeightKg
+        dailySleepGoalMinutes = settings.dailySleepGoalMinutes
 
-        // Units
         weightUnit   = settings.weightUnit
-        heightUnit   = settings.heightUnit
-        energyUnit   = settings.energyUnit
         distanceUnit = settings.distanceUnit
         glucoseUnit  = settings.glucoseUnit
 
-        // Metabolic
+        isInsulinTreated = settings.isInsulinTreated
+        hasCGM = settings.hasCGM
+
         glucoseMin    = settings.glucoseMin
         glucoseMax    = settings.glucoseMax
         veryLowLimit  = settings.veryLowLimit
         veryHighLimit = settings.veryHighLimit
 
-        // 🔹 neu (HbA1c-Entries aus SettingsModel zurückholen)
         hba1cEntries  = settings.hba1cEntries
 
-        // Nutrition
         dailyCarbs    = settings.dailyCarbs
         dailyProtein  = settings.dailyProtein
         dailyCalories = settings.dailyCalories
         dailyFat      = settings.dailyFat
 
-        // UI- & Model-Flags zurücksetzen
+        // !!! NEW
+        tirTargetPercent = settings.tirTargetPercent
+
         saveButtonState = .idle
         settings.clearUnsavedChanges()
         localHasUnsavedChanges = false
 
-        // 🔑 Unsaved-Tracking erst NACH dem Snapshot-Update wieder aktivieren
         DispatchQueue.main.async {
             self.suspendUnsavedTracking = false
         }
     }
 
-    // MARK: - Unsaved Helper
-
     private func markUnsaved() {
-        // während Initial-Load oder Undo nichts tracken
         guard didInitialLoad, !suspendUnsavedTracking else { return }
 
         if saveButtonState == .saved {
             saveButtonState = .idle
         }
 
-        // Globales Flag (für ContentView)
         settings.markUnsavedChanges()
-
-        // Lokales Flag für Button-Bar
         localHasUnsavedChanges = true
     }
 
-    // MARK: - Body
-
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-
-                // DOMAIN-PICKER
-                SettingsDomainPicker(selectedDomain: $selectedDomain)
-
-                // Inhalt pro Domain
-                Form {
-                    domainSectionView()
+        MetricDetailScaffold(
+            headerTitle: "Settings",
+            headerTint: Color.Glu.primaryBlue,
+            onBack: nil,
+            onRefresh: nil,
+            background: {
+                // !!! UPDATED: neutraler Settings-Background (GluSoftGray + dezenter Gradient)
+                ZStack {
+                    Color("GluSoftGray")
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.18),
+                            Color.black.opacity(0.06)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .blendMode(.softLight)
                 }
-                .scrollContentBackground(.hidden)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 16) {
 
-                // Untere, schwebende Button-Bar
-                SettingsButtonBar(
-                    saveButtonState: saveButtonState,
-                    hasUnsavedChanges: localHasUnsavedChanges,
-                    onSaveTapped: handleSaveTapped,
-                    onUndoTapped: undoChanges
-                )
+                    // ✅ Chips bleiben (oben wie Metric-Seite)
+                    SettingsDomainPicker(selectedDomain: $selectedDomain)
+
+                    // !!! UPDATED: Domain-Inhalt DIREKT, ohne extra Außenrahmen/Title
+                    domainSectionView()
+
+                    // !!! UPDATED: ButtonBar ohne extra Card-Rahmen (kein doppeltes Framing)
+                    SettingsButtonBar(
+                        saveButtonState: saveButtonState,
+                        hasUnsavedChanges: localHasUnsavedChanges,
+                        onSaveTapped: handleSaveTapped,
+                        onUndoTapped: undoChanges
+                    )
+                }
             }
-            .navigationBarTitleDisplayMode(.inline)
-        }
+        )
         .onAppear {
-            // Initiales Laden: Tracking aussetzen
             suspendUnsavedTracking = true
 
-            // Steps
             dailyStepTarget = settings.dailyStepGoal
 
-            // Personal / Body
-            gender                = settings.gender
-            birthDate             = settings.birthDate
-            height                = settings.heightCm
-            weightKg              = settings.weightKg
-            targetWeight          = settings.targetWeightKg
-            dailySleepGoalMinutes = settings.dailySleepGoalMinutes   // 🔹 neu
+            targetWeight = settings.targetWeightKg
+            dailySleepGoalMinutes = settings.dailySleepGoalMinutes
 
-            // Units
             weightUnit   = settings.weightUnit
-            heightUnit   = settings.heightUnit
-            energyUnit   = settings.energyUnit
             distanceUnit = settings.distanceUnit
             glucoseUnit  = settings.glucoseUnit
 
-            // Metabolic
+            isInsulinTreated = settings.isInsulinTreated
+            hasCGM = settings.hasCGM
+
             glucoseMin    = settings.glucoseMin
             glucoseMax    = settings.glucoseMax
             veryLowLimit  = settings.veryLowLimit
             veryHighLimit = settings.veryHighLimit
 
-            // 🔹 neu (HbA1c-Entries initial aus SettingsModel laden)
             hba1cEntries  = settings.hba1cEntries
 
-            // Nutrition
             dailyCarbs    = settings.dailyCarbs
             dailyProtein  = settings.dailyProtein
             dailyCalories = settings.dailyCalories
             dailyFat      = settings.dailyFat
+
+            // !!! NEW
+            tirTargetPercent = settings.tirTargetPercent
 
             DispatchQueue.main.async {
                 didInitialLoad = true
@@ -310,13 +265,10 @@ struct SettingsView: View {
                 suspendUnsavedTracking = false
             }
         }
-        // Nur eine onChange-Quelle
         .onChange(of: snapshot) { _ in
             markUnsaved()
         }
     }
-
-    // MARK: - Save Button Tap
 
     private func handleSaveTapped() {
         guard saveButtonState != .saving else { return }
@@ -336,21 +288,13 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Domain-Inhalt
-
     @ViewBuilder
     private func domainSectionView() -> some View {
         switch selectedDomain {
         case .body:
             BodySettingsSection(
-                gender: $gender,
-                birthDate: $birthDate,
-                heightCm: $height,
-                weightKg: $weightKg,
                 targetWeightKg: $targetWeight,
-                dailySleepGoalMinutes: $dailySleepGoalMinutes,
-                heightUnit: heightUnit,
-                weightUnit: weightUnit
+                dailySleepGoalMinutes: $dailySleepGoalMinutes
             )
 
         case .activity:
@@ -360,12 +304,15 @@ struct SettingsView: View {
 
         case .metabolic:
             MetabolicSettingsSection(
+                isInsulinTreated: $isInsulinTreated,
+                hasCGM: $hasCGM,
                 glucoseUnit:   $glucoseUnit,
                 glucoseMin:    $glucoseMin,
                 glucoseMax:    $glucoseMax,
                 veryLowLimit:  $veryLowLimit,
                 veryHighLimit: $veryHighLimit,
-                hba1cEntries:  $hba1cEntries      // 🔹 neu: Binding-Liste an Section übergeben
+                hba1cEntries:  $hba1cEntries,
+                tirTargetPercent: $tirTargetPercent // !!! NEW
             )
 
         case .nutrition:
@@ -380,9 +327,7 @@ struct SettingsView: View {
             UnitsSettingsSection(
                 glucoseUnit:  $glucoseUnit,
                 distanceUnit: $distanceUnit,
-                weightUnit:   $weightUnit,
-                heightUnit:   $heightUnit,
-                energyUnit:   $energyUnit
+                weightUnit:   $weightUnit
             )
         }
     }

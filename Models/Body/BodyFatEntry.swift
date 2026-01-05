@@ -1,17 +1,24 @@
-import Foundation                                   // !!! NEW
-import SwiftUI                                      // !!! NEW
+//
+//  BodyFatEntry.swift
+//  GluVibProbe
+//
 
-// MARK: - Body Fat Entry                           // !!! NEW
+import Foundation
 
-struct BodyFatEntry: Identifiable {                 // !!! NEW
-    let id = UUID()                                 // !!! NEW
-    let date: Date                                  // !!! NEW
-    let bodyFatPercent: Double                      // !!! NEW   // z.B. 18.5 (%)
-}                                                   // !!! NEW
+/// Tages-Eintrag für Körperfett (Body Domain, V1)
+struct BodyFatEntry: Identifiable {
 
-// MARK: - Preview                                  // !!! NEW
+    /// Stabile ID = Tag (00:00 lokale Zeit)
+    var id: Date { dayStart }                         // !!! UPDATED
 
-#Preview("BodyFatEntry – Preview") {                // !!! NEW
-    Text("BodyFatEntry Preview")                    // !!! NEW
-        .padding()                                  // !!! NEW
-}                                                   // !!! NEW
+    /// Datum (kann Uhrzeit enthalten, z.B. stats.startDate)
+    let date: Date
+
+    /// Körperfett in Prozent (0...100)
+    let bodyFatPercent: Double
+
+    /// Normalisiert auf Tagesstart (00:00 lokale Zeit)
+    var dayStart: Date {                              // !!! NEW
+        Calendar.current.startOfDay(for: date)
+    }
+}
