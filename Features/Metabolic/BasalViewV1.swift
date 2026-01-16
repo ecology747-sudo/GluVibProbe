@@ -9,6 +9,7 @@ struct BasalViewV1: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
+    @EnvironmentObject private var settings: SettingsModel   // ✅ ADD
 
     @StateObject private var viewModel: BasalViewModelV1
 
@@ -73,12 +74,12 @@ struct BasalViewV1: View {
                     dailyScale: viewModel.dailyScale,
                     periodScale: viewModel.periodScale,
 
-                    // !!! NEW: Target support (none for Basal)
+                    // Target support (none for Basal)
                     goalValue: nil,
 
                     // Navigation
                     onMetricSelected: onMetricSelected,
-                    metrics: AppState.metabolicVisibleMetrics,
+                    metrics: AppState.metabolicVisibleMetrics(settings: settings),   // ✅ FIX
 
                     // Scale Type
                     dailyScaleType: .insulinUnitsDaily
@@ -103,5 +104,5 @@ struct BasalViewV1: View {
     return BasalViewV1(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
-        .environmentObject(SettingsModel.shared)
+        .environmentObject(SettingsModel.shared) // ✅ required now (settings used in view)
 }

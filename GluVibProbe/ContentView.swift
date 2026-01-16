@@ -9,103 +9,184 @@ struct ContentView: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
+    @EnvironmentObject private var settings: SettingsModel
 
     @State private var selectedTab: GluTab
 
-    private let settings = SettingsModel.shared
-    @State private var showUnsavedAlert: Bool = false
-
-    // Orientation detection am Root (iOS 16 safe)
     @Environment(\.verticalSizeClass) private var vSizeClass
     private var isLandscape: Bool { vSizeClass == .compact }
 
-    // Root rule – wann darf MainChart-Landscape übernehmen?
-    // - Nur im Home-Tab
-    // - Nur wenn kein Metabolic Router Screen aktiv ist
+    private var showsHomeTab: Bool { settings.hasCGM }
+
     private var shouldShowMainChartLandscape: Bool {
-        isLandscape && selectedTab == .home && appState.currentStatsScreen == .none
+        isLandscape &&
+        selectedTab == .home &&
+        appState.currentStatsScreen == .none &&
+        showsHomeTab
     }
 
-    // MARK: - Init
+    // UPDATED: kept locally for sheet detent selection (single account sheet presenter)
+    @State private var accountSheetDetent: PresentationDetent = .large
+
     init(startTab: GluTab = .home) {
         _selectedTab = State(initialValue: startTab)
     }
 
-    // MARK: - Body
     var body: some View {
 
-        // ============================================================
-        // Root Landscape takeover (TabBar wird NICHT gerendert)
-        // ============================================================
-        if shouldShowMainChartLandscape {
+        Group { // UPDATED: ensures modifiers attach to a concrete view instance
 
-            MainChartLandscapeViewV1()
-                .environmentObject(settings)
-                .tint(Color.Glu.primaryBlue)
+            if shouldShowMainChartLandscape {
 
-        } else {
+                MainChartLandscapeViewV1()
+                    .environmentObject(settings)
+                    .tint(Color.Glu.primaryBlue)
 
-            VStack(spacing: 0) {
+            } else {
 
-                ZStack {
+                VStack(spacing: 0) {
 
-                    // ---------------------------------------------------------
-                    // Global Router by StatsScreen (Metabolic entry)
-                    // ---------------------------------------------------------
-                    switch appState.currentStatsScreen {
+                    // ====================================================
+                    // MARK: - Main Content Routing
+                    // ====================================================
 
-                    // !!! UPDATED: include .timeInRange + .gmi
-                    case .metabolicOverview,
-                         .bolus,
-                         .basal,
-                         .bolusBasalRatio,
-                         .carbsBolusRatio,
-                         .timeInRange,
-                         .gmi:
-                        MetabolicDashboardView()
+                    ZStack {
 
-                    default:
-                        // -----------------------------------------------------
-                        // Existing Tab Content
-                        // -----------------------------------------------------
-                        switch selectedTab {
-                        case .activity:  activityRootView
-                        case .body:      bodyRootView
-                        case .nutrition: nutritionRootView
-                        case .home:      HomeView()
-                        case .history:   HistoryView()
-                        case .settings:  SettingsView(startDomain: .units)
+                        switch appState.currentStatsScreen {
+
+                        // Metabolic Detail / Overview
+                        case .metabolicOverview,
+                             .bolus,
+                             .basal,
+                             .bolusBasalRatio,
+                             .carbsBolusRatio,
+                             .timeInRange,
+                             .range,
+                             .gmi,
+                             .SD,
+                             .ig,
+                             .CV:
+                            MetabolicDashboardView()
+
+                        // Root per Tab
+                        default:
+                            switch selectedTab {
+
+                            case .activity:
+                                activityRootView
+
+                            case .body:
+                                bodyRootView
+
+                            case .nutrition:
+                                nutritionRootView
+
+                            case .home:
+                                if showsHomeTab {
+                                    PremiumOverviewViewV1()
+                                } else {
+                                    activityRootView
+                                }
+
+                            case .history:
+                                HistoryOverviewViewV1()
+                            }
                         }
                     }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // ---------------------------------------------------------
-                // BottomTabBar nur im "normal mode"
-                // ---------------------------------------------------------
-                GluBottomTabBar(
-                    selectedTab: Binding(
-                        get: { selectedTab },
-                        set: { newValue in handleTabSelection(newValue) }
+                    // ====================================================
+                    // MARK: - Reactive Tab Adjustments
+                    // ====================================================
+
+                    .onChange(of: settings.hasCGM) { hasCGM in
+                        if !hasCGM, selectedTab == .home {
+                            selectedTab = .activity
+                            appState.currentStatsScreen = .none
+                        }
+                    }
+
+                    .onChange(of: appState.requestedTab) { newTab in
+                        guard let newTab else { return }
+
+                        if newTab == .home, !showsHomeTab {
+                            selectedTab = .activity
+                            appState.currentStatsScreen = .none
+                            appState.requestedTab = nil
+                            return
+                        }
+
+                        selectedTab = newTab
+
+                        if appState.currentStatsScreen == .none {
+                            switch newTab {
+                            case .nutrition:
+                                appState.currentStatsScreen = .nutritionOverview
+                            case .activity, .body, .home, .history:
+                                appState.currentStatsScreen = .none
+                            }
+                        }
+
+                        appState.requestedTab = nil
+                    }
+
+                    // ====================================================
+                    // MARK: - Bottom Tab Bar (NO Settings)
+                    // ====================================================
+
+                    GluBottomTabBar(
+                        selectedTab: Binding(
+                            get: { selectedTab },
+                            set: { handleTabSelection($0) }
+                        ),
+                        showsHomeTab: showsHomeTab
                     )
-                )
+                }
+                .tint(Color.Glu.primaryBlue)
             }
-            .alert(
-                "Unsaved Settings",
-                isPresented: $showUnsavedAlert
-            ) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text("""
-                You have unsaved changes.
-                Please tap “Save Settings” before leaving this screen.
-                """)
+        }
+        // ============================================================
+        // MARK: - Account Sheet Presenter (SINGLE ROOT STACK)
+        // ============================================================
+        .sheet(isPresented: $appState.isAccountSheetPresented) { // UPDATED
+            AccountSheetRootView() // UPDATED
+                .environmentObject(appState)
+                .environmentObject(healthStore) // UPDATED
+                .environmentObject(settings)
+                .presentationDetents([.medium, .large], selection: $accountSheetDetent)
+                .presentationDragIndicator(.visible)
+        }
+
+        // ============================================================
+        // MARK: - Serial Handoff: Account -> Settings (prevents "everything disappears")
+        // ============================================================
+        .onChange(of: appState.isAccountSheetPresented) { isPresented in // UPDATED
+            guard isPresented == false else { return }                  // UPDATED
+            guard let pending = appState.pendingSettingsStartDomain else { return } // UPDATED
+
+            appState.settingsStartDomain = pending                      // UPDATED
+            appState.pendingSettingsStartDomain = nil                   // UPDATED
+
+            DispatchQueue.main.async {                                  // UPDATED
+                appState.isSettingsSheetPresented = true                // UPDATED
             }
-            .tint(Color.Glu.primaryBlue)
+        }
+
+        // ============================================================
+        // MARK: - Settings Sheet Presenter (SINGLE ROOT STACK)
+        // ============================================================
+        .sheet(isPresented: $appState.isSettingsSheetPresented) {
+            SettingsView()                             // ✅ keine Parameter
+                .environmentObject(appState)
+                .environmentObject(healthStore)
+                .environmentObject(settings)
+                .tint(Color.Glu.primaryBlue)
         }
     }
 
+    // ============================================================
     // MARK: - Activity Root
+    // ============================================================
 
     @ViewBuilder
     private var activityRootView: some View {
@@ -119,23 +200,14 @@ struct ContentView: View {
              .workoutMinutes:
             ActivityDashboardView()
 
-        // Metabolic States ignorieren (compile-safe)
-        // !!! UPDATED: include .timeInRange + .gmi
-        case .metabolicOverview,
-             .bolus,
-             .basal,
-             .bolusBasalRatio,
-             .carbsBolusRatio,
-             .timeInRange,
-             .gmi:
-            ActivityOverviewViewV1()
-
         default:
             ActivityOverviewViewV1()
         }
     }
 
+    // ============================================================
     // MARK: - Body Root
+    // ============================================================
 
     @ViewBuilder
     private var bodyRootView: some View {
@@ -148,23 +220,14 @@ struct ContentView: View {
              .restingHeartRate:
             BodyDashboardView()
 
-        // Metabolic States ignorieren (compile-safe)
-        // !!! UPDATED: include .timeInRange + .gmi
-        case .metabolicOverview,
-             .bolus,
-             .basal,
-             .bolusBasalRatio,
-             .carbsBolusRatio,
-             .timeInRange,
-             .gmi:
-            BodyOverviewViewV1()
-
         default:
             BodyOverviewViewV1()
         }
     }
 
+    // ============================================================
     // MARK: - Nutrition Root
+    // ============================================================
 
     @ViewBuilder
     private var nutritionRootView: some View {
@@ -176,61 +239,37 @@ struct ContentView: View {
         case .carbs, .protein, .fat, .calories:
             NutritionDashboardView()
 
-        // Metabolic States ignorieren (compile-safe)
-        // !!! UPDATED: include .timeInRange + .gmi
-        case .metabolicOverview,
-             .bolus,
-             .basal,
-             .bolusBasalRatio,
-             .carbsBolusRatio,
-             .timeInRange,
-             .gmi:
-            NutritionOverviewViewV1()
-
         default:
             NutritionOverviewViewV1()
         }
     }
 
+    // ============================================================
     // MARK: - Tab Handling
+    // ============================================================
 
     private func handleTabSelection(_ newTab: GluTab) {
 
-        // Block leaving Settings with unsaved changes
-        if selectedTab == .settings,
-           newTab != .settings,
-           settings.hasUnsavedChanges {
-            showUnsavedAlert = true
+        if newTab == .home, !showsHomeTab {
+            selectedTab = .activity
+            appState.currentStatsScreen = .none
             return
         }
 
         selectedTab = newTab
 
-        // Domain start screens
         switch newTab {
-
         case .nutrition:
             appState.currentStatsScreen = .nutritionOverview
-
-        case .activity:
+        case .activity, .body, .home, .history:
             appState.currentStatsScreen = .none
-
-        case .body:
-            appState.currentStatsScreen = .none
-
-        case .home:
-            appState.currentStatsScreen = .none
-
-        case .history:
-            appState.currentStatsScreen = .none
-
-        case .settings:
-            break
         }
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("ContentView – Home Tab") {
     let previewStore = HealthStore.preview()

@@ -673,7 +673,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     // ============================================================
 
     private func loadLastExercises() async {
-        let workouts = await healthStore.fetchRecentWorkouts(limit: 3)
+        let workouts = await healthStore.fetchRecentWorkouts(limit: 200)
         lastWorkoutForInsight = workouts.first
 
         let calendar = Calendar.current

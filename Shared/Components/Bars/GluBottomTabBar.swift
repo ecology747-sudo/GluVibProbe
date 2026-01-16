@@ -1,69 +1,104 @@
-// Datei: GluBottomTabBar.swift
-// GluVibProbe – zentrierte, flache Bottom Tab Bar
+//
+//  GluBottomTabBar.swift
+//  GluVibProbe – zentrierte, flache Bottom Tab Bar
+//
 
 import SwiftUI
 
+// ============================================================
+// MARK: - Tab Definition
+// ============================================================
+
 enum GluTab: CaseIterable {
-    case activity   // 🔴 Activity-Domain (Steps, Activity Energy, Workouts)
-    case body       // 🟠 Body-Domain (Sleep, Weight, HR, HRV)
-    case nutrition  // 🟦 Nutrition-Domain
-    case home       // 🟢 Metabolic-Domain Dashboard (Merken für später)
+    case home
+    case activity
+    case body
+    case nutrition
     case history
-    case settings
 
     var title: String {
         switch self {
+        case .home:      return "Home"
         case .activity:  return "Activity"
         case .body:      return "Body"
         case .nutrition: return "Nutrition"
-        case .home:      return "Home"
         case .history:   return "History"
-        case .settings:  return "Settings"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .activity:  return "figure.walk"          // Aktivität
-        case .body:      return "figure.arms.open"     // Körper (Sleep/Weight)
-        case .nutrition: return "fork.knife"
         case .home:      return "house.fill"
+        case .activity:  return "figure.walk"
+        case .body:      return "figure.arms.open"
+        case .nutrition: return "fork.knife"
         case .history:   return "folder.fill.badge.plus"
-        case .settings:  return "gearshape"
         }
     }
 }
 
+// ============================================================
+// MARK: - Bottom Tab Bar
+// ============================================================
+
 struct GluBottomTabBar: View {
+
     @Binding var selectedTab: GluTab
+
+    /// Home kann dynamisch ein-/ausgeblendet werden (CGM abhängig)
+    let showsHomeTab: Bool
+
+    /// FIXED ORDER (left → right):
+    /// Home → Activity → Body → Nutrition → History
+    private var tabs: [GluTab] {
+        var result: [GluTab] = []
+
+        if showsHomeTab {
+            result.append(.home)
+        }
+
+        result.append(contentsOf: [
+            .activity,
+            .body,
+            .nutrition,
+            .history
+        ])
+
+        return result
+    }
+
+    // MARK: - Style Tokens (SSoT)
+
+    private let activeColor: Color = Color.Glu.primaryBlue
+    private let inactiveColor: Color = .secondary
+
+    private let iconFont: Font = .system(size: 24, weight: .medium)   // ⬅️ smaller
+    private let titleFont: Font = .caption2                             // ⬅️ slightly smaller
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(GluTab.allCases, id: \.self) { tab in
+            ForEach(tabs, id: \.self) { tab in
+                let isActive = selectedTab == tab
+
                 Button {
                     selectedTab = tab
                 } label: {
                     VStack(spacing: 2) {
                         Image(systemName: tab.systemImage)
-                            .font(.system(size: 30, weight: .medium))
+                            .font(iconFont)
 
                         Text(tab.title)
-                            .font(.caption2)
+                            .font(titleFont)
                     }
-                    .padding(.top, 0)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity   // füllt die TabBar → vertikal zentriert
-                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
-                    .foregroundColor(
-                        selectedTab == tab ? .accentColor : .secondary
-                    )
+                    .foregroundColor(isActive ? activeColor : inactiveColor)
                 }
+                .buttonStyle(.plain)
             }
         }
-        .frame(height: 60)              // sichtbare TabBar-Höhe
-        .padding(.horizontal, 15)
+        .frame(height: 56)                    // ⬅️ slightly flatter
+        .padding(.horizontal, 14)
         .background(.thinMaterial)
     }
 }

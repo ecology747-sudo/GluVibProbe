@@ -13,6 +13,10 @@ struct MetricScaleHelper {
         let valueLabel: (Double) -> String
     }
 
+    // ============================================================
+    // MARK: - MetricScaleType
+    // ============================================================
+
     enum MetricScaleType {
         case energyDaily
         case energyMonthly
@@ -33,7 +37,16 @@ struct MetricScaleHelper {
         case insulinUnitsDaily
         case ratioInt10
 
-        case percent0to100                                   // NEW
+        case percent0to100
+
+        case gmiPercent
+
+        case minutes0to1440
+
+        // Metabolic — base-unit only
+        case glucoseMeanMgdl              // !!! NEW (IG / Mean Glucose in mg/dL)
+        case glucoseSdMgdl                // SD in mg/dL (Base)
+        case glucoseCvPercent             // CV in %
     }
 
     static func scale(
@@ -86,8 +99,23 @@ struct MetricScaleHelper {
         case .ratioInt10:
             return ratioInt10Scale(values: cleaned)
 
-        case .percent0to100:                                 // NEW
-            return percent0to100Scale()                       // NEW
+        case .percent0to100:
+            return percent0to100Scale()
+
+        case .gmiPercent:
+            return gmiPercentScale(values: cleaned)
+
+        case .minutes0to1440:
+            return minutes0to1440Scale(values: cleaned)
+
+        case .glucoseMeanMgdl:                                        // !!! NEW
+            return glucoseMeanMgdlScale(values: cleaned)               // !!! NEW
+
+        case .glucoseSdMgdl:
+            return glucoseSdMgdlScale(values: cleaned)
+
+        case .glucoseCvPercent:
+            return glucoseCvPercentScale(values: cleaned)
         }
     }
 
@@ -95,16 +123,163 @@ struct MetricScaleHelper {
     // MARK: - FIXED PERCENT 0...100 (TIR)
     // ============================================================
 
-    private static func percent0to100Scale() -> MetricScaleResult {            // NEW
+    private static func percent0to100Scale() -> MetricScaleResult {
         let ticks: [Double] = [0, 25, 50, 75, 100]
         return MetricScaleResult(
             yAxisTicks: ticks,
             yMax: 100,
             valueLabel: { v in "\(Int(v.rounded()))" }
         )
-    }  
+    }
 
-    // MARK: - Profile
+    // ============================================================
+    // MARK: - FIXED MINUTES 0...1440 (Range)
+    // ============================================================
+
+    private static func minutes0to1440Scale(values: [Double]) -> MetricScaleResult {
+        let ticks: [Double] = [0, 360, 720, 1080, 1440]
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: 1440,
+            valueLabel: { v in "\(Int(v.rounded()))" }
+        )
+    }
+
+    // ============================================================
+    // MARK: - IG / Mean Glucose (mg/dL) — dynamic scale (Base Unit)
+    // ============================================================
+
+    private static func glucoseMeanMgdlScale(values: [Double]) -> MetricScaleResult {  // !!! NEW
+        guard let maxValue = values.max(), maxValue > 0 else {
+            let ticks: [Double] = [0, 50, 100, 150, 200, 250, 300]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 300,
+                valueLabel: { v in "\(Int(v.rounded()))" }
+            )
+        }
+
+        let step: Double
+        switch maxValue {
+        case ..<120: step = 20
+        case ..<200: step = 25
+        case ..<300: step = 50
+        default:     step = 75
+        }
+
+        let upper = max(ceil(maxValue / step) * step, 200)
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in "\(Int(v.rounded()))" }
+        )
+    }
+
+    // ============================================================
+    // MARK: - SD (mg/dL) — dynamic scale (Base Unit)
+    // ============================================================
+
+    private static func glucoseSdMgdlScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            let ticks: [Double] = [0, 20, 40, 60, 80, 100, 120]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 120,
+                valueLabel: { v in "\(Int(v.rounded()))" }
+            )
+        }
+
+        let step: Double
+        switch maxValue {
+        case ..<30:  step = 5
+        case ..<60:  step = 10
+        case ..<100: step = 20
+        default:     step = 30
+        }
+
+        let upper = ceil(maxValue / step) * step
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in "\(Int(v.rounded()))" }
+        )
+    }
+
+    // ============================================================
+    // MARK: - CV (%) — dynamic scale
+    // ============================================================
+
+    private static func glucoseCvPercentScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            let ticks: [Double] = [0, 15, 30, 45, 60]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 60,
+                valueLabel: { v in "\(Int(v.rounded()))" }
+            )
+        }
+
+        let step: Double
+        switch maxValue {
+        case ..<20:   step = 5
+        case ..<40:   step = 10
+        case ..<60:   step = 15
+        case ..<80:   step = 20
+        default:      step = 25
+        }
+
+        let upper = max(ceil(maxValue / step) * step, 40)
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in "\(Int(v.rounded()))" }
+        )
+    }
+
+    // ============================================================
+    // MARK: - GMI (%) — dynamic 3...20-ish scale
+    // ============================================================
+
+    private static func gmiPercentScale(values: [Double]) -> MetricScaleResult {
+        guard let maxValue = values.max(), maxValue > 0 else {
+            let ticks: [Double] = [3, 6, 9, 12, 15, 18, 20]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 20,
+                valueLabel: { v in String(format: "%.1f", v) }
+            )
+        }
+
+        let minY: Double = 3
+
+        let step: Double
+        switch maxValue {
+        case ..<8:   step = 1
+        case ..<12:  step = 2
+        case ..<16:  step = 2
+        case ..<20:  step = 2.5
+        default:     step = 5
+        }
+
+        let upperRaw = max(maxValue, minY + step * 2)
+        let upper = max(ceil(upperRaw / step) * step, 20)
+
+        let ticks = stride(from: minY, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in String(format: "%.1f", v) }
+        )
+    }
+
+    // MARK: - Profile (unchanged)
 
     private static func energyDailyScale(values: [Double]) -> MetricScaleResult {
         guard let maxValue = values.max(), maxValue > 0 else {
@@ -161,10 +336,6 @@ struct MetricScaleHelper {
         )
     }
 
-    // ============================================================
-    // MARK: - GRAMS (Daily)
-    // ============================================================
-
     private static func gramsDailyScale(values: [Double]) -> MetricScaleResult {
         guard let maxValue = values.max(), maxValue > 0 else {
             let ticks: [Double] = [0, 50, 100]
@@ -200,10 +371,6 @@ struct MetricScaleHelper {
             valueLabel: { v in "\(Int(v.rounded()))" }
         )
     }
-
-    // ============================================================
-    // MARK: - GRAMS (Monthly)
-    // ============================================================
 
     private static func gramsMonthlyScale(values: [Double]) -> MetricScaleResult {
         guard let maxValue = values.max(), maxValue > 0 else {
@@ -431,10 +598,6 @@ struct MetricScaleHelper {
         )
     }
 
-    // ============================================================
-    // MARK: - INSULIN (Daily IE) — Metabolic (Bolus/Basal)
-    // ============================================================
-
     private static func insulinUnitsDailyScale(values: [Double]) -> MetricScaleResult {
         guard let maxValue = values.max(), maxValue > 0 else {
             let ticks: [Double] = [0, 5, 10, 15, 20]
@@ -464,17 +627,9 @@ struct MetricScaleHelper {
         )
     }
 
-    // ============================================================
-    // MARK: - RATIO (Int*10) — Metabolic Ratios
-    // - Values sind Int*10 (z.B. 1.2 -> 12)
-    // - Labels zeigen 1 decimal (12 -> "1.2")
-    // - Keine Einheit im Chart
-    // ============================================================
-
-    private static func ratioInt10Scale(values: [Double]) -> MetricScaleResult {     // !!! UPDATED
+    private static func ratioInt10Scale(values: [Double]) -> MetricScaleResult {
         guard let maxValue = values.max(), maxValue > 0 else {
-            // 0.0 .. 2.0  (Int*10 -> 0..20) in 0.5er Schritten
-            let ticks: [Double] = [0, 5, 10, 15, 20]                                 // !!! UPDATED
+            let ticks: [Double] = [0, 5, 10, 15, 20]
             return MetricScaleResult(
                 yAxisTicks: ticks,
                 yMax: 20,
@@ -482,15 +637,14 @@ struct MetricScaleHelper {
             )
         }
 
-        // maxValue ist Int*10 (z.B. 87 => 8.7)
         let step: Double
         switch maxValue {
-        case 0..<20:     step = 2    // 0.2
-        case 20..<50:    step = 5    // 0.5
-        case 50..<100:   step = 10   // 1.0
-        case 100..<150:  step = 15   // 1.5
-        case 150..<200:  step = 20   // 2.0
-        default:         step = 25   // 2.5
+        case 0..<20:     step = 2
+        case 20..<50:    step = 5
+        case 50..<100:   step = 10
+        case 100..<150:  step = 15
+        case 150..<200:  step = 20
+        default:         step = 25
         }
 
         let upper = ceil(maxValue / step) * step
@@ -502,10 +656,6 @@ struct MetricScaleHelper {
             valueLabel: { v in String(format: "%.1f", v / 10.0) }
         )
     }
-
-    // ============================================================
-    // MARK: - PERCENT (Int*10) — BodyFat
-    // ============================================================
 
     private static func percentInt10Scale(values: [Double]) -> MetricScaleResult {
         guard let maxValue = values.max(), maxValue > 0 else {
@@ -546,7 +696,5 @@ struct MetricScaleHelper {
         )
     }
 }
-
-// MARK: - Globaler Alias (für ältere Stellen)
 
 typealias MetricScaleResult = MetricScaleHelper.MetricScaleResult

@@ -9,6 +9,7 @@ struct CarbsBolusRatioViewV1: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
+    @EnvironmentObject private var settings: SettingsModel   // ✅ ADD
 
     @StateObject private var viewModel: CarbsBolusRatioViewModelV1
 
@@ -28,15 +29,6 @@ struct CarbsBolusRatioViewV1: View {
     }
 
     var body: some View {
-
-        // Adapter: DailyRatioEntry -> DailyStepsEntry (Int*10)
-        let last90StepsLike: [DailyStepsEntry] = viewModel.last90DaysRatio.map {
-            DailyStepsEntry(
-                date: $0.date,
-                steps: Int(($0.ratio * 10.0).rounded())
-            )
-        }
-
         MetricDetailScaffold(
             headerTitle: "Metabolic",
             headerTint: Color.Glu.metabolicDomain,
@@ -44,7 +36,7 @@ struct CarbsBolusRatioViewV1: View {
             onBack: { appState.currentStatsScreen = .none },
 
             onRefresh: {
-                await healthStore.refreshNutrition(.pullToRefresh)
+                // SSoT – Metabolic refresh reicht (Carbs90 + Bolus90 + Derived)
                 await healthStore.refreshMetabolic(.pullToRefresh)
             },
 
@@ -67,27 +59,25 @@ struct CarbsBolusRatioViewV1: View {
                     kpiSecondaryText: nil,
 
                     // Charts
-                    last90DaysData: last90StepsLike,
+                    last90DaysData: viewModel.last90DaysRatioInt10,
                     periodAverages: viewModel.periodAverages,
 
-                    // Scales (SSoT: VM)
+                    // Scales
                     dailyScale: viewModel.dailyScale,
                     periodScale: viewModel.periodScale,
 
-                    // !!! NEW: Target support (none for Ratio)
                     goalValue: nil,
 
                     // Navigation
                     onMetricSelected: onMetricSelected,
-                    metrics: AppState.metabolicVisibleMetrics,
+                    metrics: AppState.metabolicVisibleMetrics(settings: settings),   // ✅ FIX
 
-                    // Scale Type (Int*10, 1 decimal Label)
+                    // Scale Type (Int*10)
                     dailyScaleType: .ratioInt10
                 )
             }
         }
         .task {
-            await healthStore.refreshNutrition(.navigation)
             await healthStore.refreshMetabolic(.navigation)
         }
     }
@@ -104,5 +94,5 @@ struct CarbsBolusRatioViewV1: View {
     return CarbsBolusRatioViewV1(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
-        .environmentObject(SettingsModel.shared)
+        .environmentObject(SettingsModel.shared) // ✅ required now (settings used in view)
 }

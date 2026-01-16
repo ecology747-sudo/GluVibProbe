@@ -9,7 +9,8 @@ import SwiftUI
 
 struct MetricDetailScaffold<Background: View, Content: View>: View {
 
-    // MARK: - Inputs
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var settings: SettingsModel
 
     let headerTitle: String
     let headerTint: Color
@@ -19,13 +20,9 @@ struct MetricDetailScaffold<Background: View, Content: View>: View {
     @ViewBuilder let background: () -> Background
     @ViewBuilder let content: () -> Content
 
-    // MARK: - Layout Constants (Overview-aligned)
-
-    private let horizontalInset: CGFloat = 16        // ✅ HIER: entspricht Overview .padding(.horizontal, 16)
+    private let horizontalInset: CGFloat = 16
     private let topInset: CGFloat = 8
     private let bottomInset: CGFloat = 16
-
-    // MARK: - Init
 
     init(
         headerTitle: String,
@@ -43,8 +40,6 @@ struct MetricDetailScaffold<Background: View, Content: View>: View {
         self.content = content
     }
 
-    // MARK: - Body
-
     var body: some View {
         ZStack {
             background()
@@ -52,17 +47,22 @@ struct MetricDetailScaffold<Background: View, Content: View>: View {
 
             VStack(spacing: 0) {
 
+                // UPDATED: Only one avatar trigger (global) — no local sheet here.
                 SectionHeader(
                     title: headerTitle,
                     subtitle: nil,
                     tintColor: headerTint,
-                    onBack: onBack
+                    onBack: onBack,
+                    showsAvatar: true,
+                    onAvatarTapped: {
+                        appState.presentAccountSheet() // UPDATED
+                    }
                 )
 
                 ScrollView {
                     content()
                         .padding(.top, topInset)
-                        .padding(.horizontal, horizontalInset)   // ✅ exakt wie Overview
+                        .padding(.horizontal, horizontalInset)
                         .padding(.bottom, bottomInset)
                 }
                 .modifier(RefreshableIfAvailable(onRefresh: onRefresh))
@@ -71,7 +71,7 @@ struct MetricDetailScaffold<Background: View, Content: View>: View {
     }
 }
 
-// MARK: - Refresh Helper (lokal, damit keine Abhängigkeit fehlt)
+// MARK: - Refresh Helper
 
 private struct RefreshableIfAvailable: ViewModifier {
 

@@ -45,10 +45,10 @@ final class HealthStore: ObservableObject {
     // -------------------------
     // 🟠 RESTING ENERGY (kcal) — Basal Energy Burned
     // -------------------------
-    @Published var todayRestingEnergyKcal: Int = 0                                    // !!! NEW
-    @Published var last90DaysRestingEnergy: [RestingEnergyEntry] = []                 // !!! NEW
-    @Published var monthlyRestingEnergy: [MonthlyMetricEntry] = []                    // !!! NEW
-    @Published var restingEnergyDaily365: [DailyRestingEnergyEntry] = []              // !!! NEW
+    @Published var todayRestingEnergyKcal: Int = 0
+    @Published var last90DaysRestingEnergy: [RestingEnergyEntry] = []
+    @Published var monthlyRestingEnergy: [MonthlyMetricEntry] = []
+    @Published var restingEnergyDaily365: [DailyRestingEnergyEntry] = []
 
     // -------------------------
     // 🟣 EXERCISE MINUTES (min)
@@ -73,6 +73,13 @@ final class HealthStore: ObservableObject {
     @Published var last90DaysWorkoutMinutes: [DailyWorkoutMinutesEntry] = []
     @Published var monthlyWorkoutMinutes: [MonthlyMetricEntry] = []
     @Published var workoutMinutesDaily365: [DailyWorkoutMinutesEntry] = []
+
+    // ============================================================
+    // MARK: - Recent Workouts (Overview / History helper)
+    // ============================================================
+
+    @Published var recentWorkouts: [HKWorkout] = []
+    @Published var recentWorkoutsOverview: [HKWorkout] = []
 
     // -------------------------
     // 🟠 MOVEMENT SPLIT (min)
@@ -100,8 +107,6 @@ final class HealthStore: ObservableObject {
     @Published var avg7dExerciseMinutesEndingToday: Int = 0
     @Published var avg7dActiveEnergyKcalEndingToday: Int = 0
 
-    @Published var recentWorkoutsOverview: [HKWorkout] = []
-
     // -------------------------
     // 🔵 SLEEP (Minuten)
     // -------------------------
@@ -110,13 +115,8 @@ final class HealthStore: ObservableObject {
     @Published var monthlySleep: [MonthlyMetricEntry] = []
     @Published var sleepDaily365: [DailySleepEntry] = []
 
-    // ------------------------------------------------------------
-    // !!! NEW: Session-based Series (Sleep session ending that day)
-    // - NICHT für MovementSplit verwenden
-    // - Nur für Sleep KPI/Charts (Session-Logik)
-    // ------------------------------------------------------------
-    @Published var last90DaysSleepSessionsEndingDay: [DailySleepEntry] = []     // !!! NEW
-    @Published var sleepDaily365SessionsEndingDay: [DailySleepEntry] = []       // !!! NEW
+    @Published var last90DaysSleepSessionsEndingDay: [DailySleepEntry] = []
+    @Published var sleepDaily365SessionsEndingDay: [DailySleepEntry] = []
 
     // -------------------------
     // 🟠 WEIGHT (kg) — V1
@@ -125,6 +125,7 @@ final class HealthStore: ObservableObject {
     @Published var last90DaysWeight: [DailyWeightEntry] = []
     @Published var monthlyWeight: [MonthlyMetricEntry] = []
     @Published var weightDaily365Raw: [DailyWeightEntry] = []
+    @Published var recentWeightSamplesForHistoryV1: [WeightSamplePointV1] = []   // ✅ NEW
 
     // -------------------------
     // ❤️ RESTING HEART RATE (bpm)
@@ -186,42 +187,26 @@ final class HealthStore: ObservableObject {
     // MARK: - 🧠 METABOLIC DOMAIN (V1) — Published State (SSoT)
     // ============================================================
 
-    // -------------------------
-    // 🩸 RAW3DAYS (Today/Yesterday/DayBefore) — DayProfile Overlay
-    // -------------------------
-    @Published var cgmSamples3Days: [CGMSamplePoint] = []                       // !!! NEW
-    @Published var bolusEvents3Days: [InsulinBolusEvent] = []                   // !!! NEW
-    @Published var basalEvents3Days: [InsulinBasalEvent] = []                   // CHANGE: Segments -> Events
+    @Published var dailyRange90: [DailyRangeEntry] = []
 
-    @Published var carbEvents3Days: [NutritionEvent] = []                       // !!! NEW
-    @Published var proteinEvents3Days: [NutritionEvent] = []                    // !!! NEW
+    @Published var rangeTodaySummary: RangePeriodSummaryEntry? = nil
+    @Published var range7dSummary: RangePeriodSummaryEntry? = nil
+    @Published var range14dSummary: RangePeriodSummaryEntry? = nil
+    @Published var range30dSummary: RangePeriodSummaryEntry? = nil
+    @Published var range90dSummary: RangePeriodSummaryEntry? = nil
 
-    @Published var activityEvents3Days: [ActivityOverlayEvent] = []             // !!! NEW
-    @Published var fingerGlucoseEvents3Days: [FingerGlucoseEvent] = []          // !!! NEW (optional)
+    @Published var cgmSamples3Days: [CGMSamplePoint] = []
+    @Published var bolusEvents3Days: [InsulinBolusEvent] = []
+    @Published var basalEvents3Days: [InsulinBasalEvent] = []
 
-    // -------------------------
-    // MainChart Cache (V1) — stored state MUST be in HealthStore (no stored props in Extensions)
-    // -------------------------
-    @Published var mainChartCacheV1: [MainChartCacheItemV1] = []                // NEW
-    @Published var mainChartCacheLastUpdatedV1: Date? = nil                     // NEW
+    @Published var carbEvents3Days: [NutritionEvent] = []
+    @Published var proteinEvents3Days: [NutritionEvent] = []
 
-    // ============================================================
-    // CGM — QUICK KPIs + PERIOD STATE (SSoT = HealthStore Published)
-    // ============================================================
-    //
-    // Enthält NUR State (berechnete Werte), keine DailyStats-Berechnung hier.
-    // Berechnung passiert in:
-    // - HealthStore+CGMV1.swift (RAW → Today + Last24h + Period RAW-derived)
-    // - HealthStore+CGMTIRV1.swift (HYBRID Period Builder für TIR aus dailyTIR90 + todayTIR*)
-    //
-    // ============================================================
+    @Published var activityEvents3Days: [ActivityOverlayEvent] = []
+    @Published var fingerGlucoseEvents3Days: [FingerGlucoseEvent] = []
 
-
-    // ============================================================
-    // MARK: - LAST 24H — Glucose Quick KPI (RAW-based)
-    // - Mean mg/dL (Last 24h)
-    // - Coverage Minutes (Samples * 5, capped to 1440)
-    // ============================================================
+    @Published var mainChartCacheV1: [MainChartCacheItemV1] = []
+    @Published var mainChartCacheLastUpdatedV1: Date? = nil
 
     @Published var last24hGlucoseMeanMgdl: Double? = nil
     @Published var last24hGlucoseCoverageMinutes: Int = 0
@@ -229,16 +214,8 @@ final class HealthStore: ObservableObject {
     @Published var last24hGlucoseCoverageRatio: Double = 0
     @Published var last24hGlucoseIsPartial: Bool = true
 
-    // --- Variability (Last 24h)
-    @Published var last24hGlucoseSdMgdl: Double? = nil                        // SD (mg/dL)  // !!! NEW (falls nicht schon vorhanden)
-    @Published var last24hGlucoseCvPercent: Double? = nil                     // CV (%)      // !!! NEW
-
-
-    // ============================================================
-    // MARK: - LAST 24H — TIR Quick KPI (RAW-based)
-    // - Minutenbasiert (Samples * 5)
-    // - Nur vorhandene Samples zählen (keine Hochrechnung auf 288)
-    // ============================================================
+    @Published var last24hGlucoseSdMgdl: Double? = nil
+    @Published var last24hGlucoseCvPercent: Double? = nil
 
     @Published var last24hTIRVeryLowMinutes: Int = 0
     @Published var last24hTIRLowMinutes: Int = 0
@@ -251,13 +228,6 @@ final class HealthStore: ObservableObject {
     @Published var last24hTIRCoverageRatio: Double = 0
     @Published var last24hTIRIsPartial: Bool = true
 
-
-    // ============================================================
-    // MARK: - TODAY — TIR Quick KPI (00:00 → now) ✅ required for HYBRID periods
-    // - Minutenbasiert (Samples * 5)
-    // - Nur vorhandene Samples zählen (keine Hochrechnung auf 288)
-    // ============================================================
-
     @Published var todayTIRVeryLowMinutes: Int = 0
     @Published var todayTIRLowMinutes: Int = 0
     @Published var todayTIRInRangeMinutes: Int = 0
@@ -269,55 +239,32 @@ final class HealthStore: ObservableObject {
     @Published var todayTIRCoverageRatio: Double = 0
     @Published var todayTIRIsPartial: Bool = true
 
-
-    // ============================================================
-    // MARK: - TODAY — Glucose Quick KPI (RAW-based; 00:00 → now)
-    // - Mean mg/dL (Today)
-    // - Coverage Minutes (Samples * 5, capped to expected)
-    // ============================================================
-
     @Published var todayGlucoseMeanMgdl: Double? = nil
     @Published var todayGlucoseCoverageMinutes: Int = 0
     @Published var todayGlucoseExpectedMinutes: Int = 0
     @Published var todayGlucoseCoverageRatio: Double = 0
     @Published var todayGlucoseIsPartial: Bool = true
 
-
-    // ============================================================
-    // MARK: - PERIOD KPIs — CGM (RAW-derived, no DailyStats)
-    // - Glucose Mean / SD / CV for 7/14/30/90
-    // - TIR Summaries (computed elsewhere / wrapper state)
-    // ============================================================
-
-    // --- Glucose Mean (mg/dL)
     @Published var glucoseMean7dMgdl: Double? = nil
     @Published var glucoseMean14dMgdl: Double? = nil
-    @Published var glucoseMean30dMgdl: Double? = nil                            // !!! NEW
-    @Published var glucoseMean90dMgdl: Double? = nil                            // !!! NEW
+    @Published var glucoseMean30dMgdl: Double? = nil
+    @Published var glucoseMean90dMgdl: Double? = nil
 
-    // --- Glucose SD (mg/dL)
     @Published var glucoseSd7dMgdl: Double? = nil
     @Published var glucoseSd14dMgdl: Double? = nil
     @Published var glucoseSd30dMgdl: Double? = nil
     @Published var glucoseSd90dMgdl: Double? = nil
 
-    // --- Glucose CV (%)
-    @Published var glucoseCv7dPercent: Double? = nil                            // !!! NEW
-    @Published var glucoseCv14dPercent: Double? = nil                           // !!! NEW
-    @Published var glucoseCv30dPercent: Double? = nil                           // !!! NEW
-    @Published var glucoseCv90dPercent: Double? = nil                           // !!! NEW
+    @Published var glucoseCv7dPercent: Double? = nil
+    @Published var glucoseCv14dPercent: Double? = nil
+    @Published var glucoseCv30dPercent: Double? = nil
+    @Published var glucoseCv90dPercent: Double? = nil
 
-    // --- TIR Summaries (State only)
     @Published var tirTodaySummary: TIRPeriodSummaryEntry? = nil
     @Published var tir7dSummary: TIRPeriodSummaryEntry? = nil
     @Published var tir14dSummary: TIRPeriodSummaryEntry? = nil
     @Published var tir30dSummary: TIRPeriodSummaryEntry? = nil
     @Published var tir90dSummary: TIRPeriodSummaryEntry? = nil
-
-
-    // ============================================================
-    // MARK: - DAILYSTATS90 (≥90 Tage) — Trends / Rolling / Ratios
-    // ============================================================
 
     @Published var dailyGlucoseStats90: [DailyGlucoseStatsEntry] = []
     @Published var dailyTIR90: [DailyTIREntry] = []
@@ -329,6 +276,10 @@ final class HealthStore: ObservableObject {
 
     @Published var dailyCarbs90: [DailyCarbsEntry] = []
     @Published var dailyCarbBolusRatio90: [DailyCarbBolusRatioEntry] = []
+
+    @Published var overviewGlucoseDaily7FullDays: [DailyGlucoseStatsEntry] = []
+    @Published var overviewTIRDaily7FullDays: [DailyTIREntry] = []
+    @Published var mainChartSelectedDayOffsetV1: Int = 0
 
     // ============================================================
     // MARK: - Preview Caches
@@ -343,7 +294,7 @@ final class HealthStore: ObservableObject {
     var previewDailySleep: [DailySleepEntry] = []
 
     var previewDailyWeight: [DailyWeightEntry] = []
-    var previewDailyMovementSplit: [DailyMovementSplitEntry] = []
+    var previewDailyMovementSplit: [DailyMovementSplitEntry] = []   // ✅ FIX (needed by HealthStore+MovementSplitV1)
 
     var previewDailyCarbs: [DailyCarbsEntry] = []
     var previewDailyProtein: [DailyProteinEntry] = []
@@ -378,7 +329,7 @@ final class HealthStore: ObservableObject {
             let fatType              = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal),
             let nutritionEnergyType  = HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed),
             let insulinDeliveryType  = HKQuantityType.quantityType(forIdentifier: .insulinDelivery),
-            let bloodGlucoseType     = HKQuantityType.quantityType(forIdentifier: .bloodGlucose)   // !!! NEW
+            let bloodGlucoseType     = HKQuantityType.quantityType(forIdentifier: .bloodGlucose)
         else {
             return
         }
@@ -407,116 +358,8 @@ final class HealthStore: ObservableObject {
                 bloodGlucoseType,
                 workoutType
             ]
-        ) { [weak self] success, error in
-            guard let self else { return }
-
-            if success {
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-
-                    // ----------------------------------------------------
-                    // STEPS (V1)
-                    // ----------------------------------------------------
-                    self.fetchStepsTodayV1()
-                    self.fetchLast90DaysStepsV1()
-                    self.fetchMonthlyStepsV1()
-                    self.fetchStepsDaily365V1()
-
-                    // ----------------------------------------------------
-                    // ACTIVITY ENERGY (V1)
-                    // ----------------------------------------------------
-                    self.fetchActiveEnergyTodayV1()
-                    self.fetchLast90DaysActiveEnergyV1()
-                    self.fetchMonthlyActiveEnergyV1()
-                    self.fetchActiveEnergyDaily365V1()
-
-                    // ----------------------------------------------------
-                    // RESTING ENERGY (V1)
-                    // ----------------------------------------------------
-                    self.fetchRestingEnergyTodayV1()                                       // !!! NEW
-                    self.fetchLast90DaysRestingEnergyV1()                                  // !!! NEW
-                    self.fetchMonthlyRestingEnergyV1()                                     // !!! NEW
-                    self.fetchRestingEnergyDaily365V1()                                    // !!! NEW
-
-                    // ----------------------------------------------------
-                    // EXERCISE TIME (V1)
-                    // ----------------------------------------------------
-                    self.todayExerciseMinutes = 0
-                    self.last90DaysExerciseMinutes = []
-                    self.monthlyExerciseMinutes = []
-                    self.fetchExerciseTimeDaily365V1()
-
-                    // ----------------------------------------------------
-                    // MOVEMENT SPLIT (V1)
-                    // ----------------------------------------------------
-                    self.movementSplitActiveSourceTodayV1 = .none
-                    self.fetchMovementSplitDaily365V1(last: 3, completion: nil)
-
-                    // ----------------------------------------------------
-                    // SLEEP (V1)
-                    // ----------------------------------------------------
-                    self.fetchSleepTodayV1()
-                    self.fetchLast90DaysSleepV1()
-                    self.fetchMonthlySleepV1()
-                    self.fetchSleepDaily365V1()
-
-                    // ----------------------------------------------------
-                    // WEIGHT (V1)
-                    // ----------------------------------------------------
-                    self.fetchWeightTodayV1()
-                    self.fetchLast90DaysWeightV1()
-                    self.fetchMonthlyWeightV1()
-                    self.fetchWeightDaily365RawV1()
-
-                    // ----------------------------------------------------
-                    // RESTING HEART RATE (V1)
-                    // ----------------------------------------------------
-                    self.fetchRestingHeartRateTodayV1()
-                    self.fetchLast90DaysRestingHeartRateV1()
-                    self.fetchMonthlyRestingHeartRateV1()
-                    self.fetchRestingHeartRateDaily365V1()
-
-                    // ----------------------------------------------------
-                    // BODY FAT (V1)
-                    // ----------------------------------------------------
-                    self.fetchBodyFatTodayV1()
-                    self.fetchLast90DaysBodyFatV1()
-                    self.fetchMonthlyBodyFatV1()
-                    self.fetchBodyFatDaily365V1()
-
-                    // ----------------------------------------------------
-                    // BMI (V1)
-                    // ----------------------------------------------------
-                    self.fetchBMITodayV1()
-                    self.fetchLast90DaysBMIV1()
-                    self.fetchMonthlyBMIV1()
-                    self.fetchBMIDaily365V1()
-
-                    // ----------------------------------------------------
-                    // NUTRITION (V1)
-                    // ----------------------------------------------------
-                    self.fetchCarbsTodayV1()
-                    self.fetchLast90DaysCarbsV1()
-                    self.fetchMonthlyCarbsV1()
-                    self.fetchCarbsDaily365V1()
-
-                    self.fetchProteinTodayV1()
-                    self.fetchLast90DaysProteinV1()
-                    self.fetchMonthlyProteinV1()
-                    self.fetchProteinDaily365V1()
-
-                    self.fetchFatTodayV1()
-                    self.fetchLast90DaysFatV1()
-                    self.fetchMonthlyFatV1()
-                    self.fetchFatDaily365V1()
-
-                    self.fetchNutritionEnergyTodayV1()
-                    self.fetchLast90DaysNutritionEnergyV1()
-                    self.fetchMonthlyNutritionEnergyV1()
-                    self.fetchNutritionEnergyDaily365V1()
-                }
-
-            } else {
+        ) { success, error in
+            if !success {
                 print("HealthKit Auth fehlgeschlagen:", error?.localizedDescription ?? "unbekannt")
             }
         }
@@ -531,13 +374,13 @@ extension HealthStore {
     static func preview() -> HealthStore {
         let store = HealthStore(isPreview: true)
         let _ = Calendar.current.startOfDay(for: Date())
-        // ... (Rest deiner Preview-Logik unverändert lassen)
+        // Preview-Daten werden weiterhin extern (z.B. im #Preview) gesetzt.
         return store
     }
 }
 
 // ============================================================
-// MARK: - Recent Workouts (needed by ActivityOverviewViewModelV1)
+// MARK: - Recent Workouts Fetch (existing helper)
 // ============================================================
 
 extension HealthStore {
@@ -558,11 +401,63 @@ extension HealthStore {
                 predicate: nil,
                 limit: max(1, limit),
                 sortDescriptors: [sort]
-            ) { _, samples, _ in
-                continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
+            ) { [weak self] _, samples, _ in
+                let workouts = (samples as? [HKWorkout]) ?? []
+                DispatchQueue.main.async {
+                    self?.recentWorkouts = workouts
+                    self?.recentWorkoutsOverview = workouts
+                }
+                continuation.resume(returning: workouts)
             }
 
             self.healthStore.execute(query)
         }
+    }
+}
+
+// ============================================================
+// MARK: - Workouts Fetch (History Window 10 days)
+// ============================================================
+
+extension HealthStore {
+
+    func fetchRecentWorkoutsForHistoryWindowV1(days: Int = 10, limit: Int = 500) async -> [HKWorkout] { // NEW
+        if isPreview { return [] }
+
+        let cal = Calendar.current
+        let todayStart = cal.startOfDay(for: Date())
+        let start = cal.date(byAdding: .day, value: -(max(1, days) - 1), to: todayStart) ?? todayStart
+        let end = Date() // now is fine
+
+        let workoutType = HKObjectType.workoutType()
+
+        let sort = NSSortDescriptor(
+            key: HKSampleSortIdentifierEndDate,
+            ascending: false
+        )
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: workoutType,
+                predicate: predicate,
+                limit: max(1, limit),
+                sortDescriptors: [sort]
+            ) { [weak self] _, samples, _ in
+                let workouts = (samples as? [HKWorkout]) ?? []
+                DispatchQueue.main.async {
+                    self?.recentWorkouts = workouts
+                    self?.recentWorkoutsOverview = workouts
+                }
+                continuation.resume(returning: workouts)
+            }
+
+            self.healthStore.execute(query)
+        }
+    }
+
+    func fetchRecentWorkoutsForHistoryWindowV1Async(days: Int = 10) async { // NEW helper
+        _ = await fetchRecentWorkoutsForHistoryWindowV1(days: days)
     }
 }

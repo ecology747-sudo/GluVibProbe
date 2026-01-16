@@ -52,7 +52,8 @@ struct MainChartViewV1: View {
     // MARK: - UI State
     // ============================================================
 
-    @State private var dayOffset: Int = 0
+    // !!! UPDATED: Day selection is SSoT (HealthStore), not local state
+    private var dayOffset: Int { healthStore.mainChartSelectedDayOffsetV1 }
 
     // X Zoom/Scroll (iOS 17+)
     @State private var visibleXSeconds: TimeInterval = 24 * 60 * 60
@@ -68,6 +69,7 @@ struct MainChartViewV1: View {
     @State private var showProtein: Bool = true
     @State private var showBolus: Bool = true
     @State private var showBasal: Bool = true
+    @State private var showCGM: Bool = true
 
     // ============================================================
     // MARK: - Derived (Cache Read)
@@ -84,6 +86,15 @@ struct MainChartViewV1: View {
     private let fixedYDomain: ClosedRange<Double> = 0 ... 300
 
     // ============================================================
+    // MARK: - Gating (Premium rules)
+    // ============================================================
+
+    /// Insulin-Overlays sind NUR sinnvoll, wenn CGM aktiv ist UND Insulinpflicht aktiv ist.
+    private var isTherapyEnabled: Bool {
+        settings.hasCGM && settings.isInsulinTreated
+    }
+
+    // ============================================================
     // MARK: - Glucose Unit (Display-Only Helpers)
     // ============================================================
 
@@ -97,7 +108,6 @@ struct MainChartViewV1: View {
         }
     }
 
-    // NEW: Statische Unit-Anzeige (bleibt bei Scroll/Zoom sichtbar)
     private var glucoseUnitText: String {
         settings.glucoseUnit.label
     }
@@ -127,14 +137,26 @@ struct MainChartViewV1: View {
                 landscapeFullscreenLayout
             }
         }
+        // !!! UPDATED: ensure cache for SSoT-selected day
         .task { await initialEnsureCache() }
         .modifier(RefreshableIfNeeded(isEnabled: interactionMode == .embedded) {
             await handlePullToRefresh()
         })
+        .onChange(of: settings.hasCGM) { _ in
+            applyTherapyGatingIfNeeded()
+        }
+        .onChange(of: settings.isInsulinTreated) { _ in
+            applyTherapyGatingIfNeeded()
+        }
+        // !!! NEW: if History (or anyone) changes the SSoT dayOffset, ensure cache for that day
+        .onChange(of: healthStore.mainChartSelectedDayOffsetV1) { _ in
+            resetZoomStateForNewDay()
+            Task { await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset) }
+        }
     }
 
     // ============================================================
-    // MARK: - Portrait (Embedded) — bleibt wie bisher: Card/Kachel-UI
+    // MARK: - Portrait (Embedded)
     // ============================================================
 
     private var embeddedCardLayout: some View {
@@ -161,18 +183,19 @@ struct MainChartViewV1: View {
 
             overlayChipBar
         }
-        .padding(14)
+        .padding(.top, 14)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 8)
         .gluVibCardFrame(domainColor: Color.Glu.metabolicDomain)
     }
 
     // ============================================================
-    // MARK: - Landscape — fullscreen ohne Card / ohne Rahmen / ohne Shadow-Container
+    // MARK: - Landscape
     // ============================================================
 
     private var landscapeFullscreenLayout: some View {
         GeometryReader { geo in
             let insets = geo.safeAreaInsets
-
             let edge: CGFloat = 12
 
             VStack(alignment: .leading, spacing: 10) {
@@ -201,24 +224,37 @@ struct MainChartViewV1: View {
     }
 
     // ============================================================
-    // MARK: - Header Row (Datum + Pfeile)
+    // MARK: - Header Row
+    // ============================================================
+
+    // ============================================================
+    // MARK: - Header Row
     // ============================================================
 
     private var headerRow: some View {
-        HStack {
-            dayNavButton(isLeft: true)
+        ZStack {
 
-            Spacer()
+            // Center cluster: arrows stay close to the date
+            HStack(spacing: 14) {
+                dayNavButton(isLeft: true)
 
-            Text(dayTitleText)
-                .font(.headline)
+                Text(dayTitleText)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
 
-            Spacer()
+                dayNavButton(isLeft: false)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
 
-            dayNavButton(isLeft: false)
+            // Leading badge: does NOT affect center spacing
+            HStack {
+                unitBadge
+                    .padding(.leading, 2)     // <-- move badge left/right here
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-
     // ============================================================
     // MARK: - Empty State
     // ============================================================
@@ -244,41 +280,89 @@ struct MainChartViewV1: View {
             switch chipLayout {
 
             case .twoRows:
-                HStack(spacing: 12) {
-                    overlayChipMetricStyle("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
-                    overlayChipMetricStyle("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
-                    overlayChipMetricStyle("Protein", isOn: $showProtein, accent: Color.Glu.bodyDomain)
-                }
 
-                HStack(spacing: 12) {
-                    overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
-                    overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                GeometryReader { geo in
+                    let spacing: CGFloat = 12
+                    let columns: CGFloat = 3
+                    let chipWidth = (geo.size.width - spacing * (columns - 1)) / columns
+
+                    VStack(alignment: .leading, spacing: 12) {
+
+                        HStack(spacing: spacing) {
+                            overlayChipMetricStyle("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
+                                .frame(width: chipWidth)
+                            overlayChipMetricStyle("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
+                                .frame(width: chipWidth)
+                            overlayChipMetricStyle("Protein", isOn: $showProtein, accent: Color.Glu.bodyDomain)
+                                .frame(width: chipWidth)
+                        }
+
+                        HStack(spacing: spacing) {
+
+                            if isTherapyEnabled {
+                                overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
+                                    .frame(width: chipWidth)
+
+                                overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                                    .frame(width: chipWidth)
+
+                                overlayChipMetricStyle("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                    .frame(width: chipWidth)
+
+                            } else {
+                                Color.clear.frame(width: chipWidth, height: 1)
+                                overlayChipMetricStyle("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                    .frame(width: chipWidth)
+                                Color.clear.frame(width: chipWidth, height: 1)
+                            }
+                        }
+                    }
+                    .frame(width: geo.size.width, alignment: .leading)
                 }
+                .frame(height: (interactionMode == .landscape) ? 104 : 82)
 
             case .singleRow:
 
                 if interactionMode == .landscape {
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        overlayChipMetricStyle("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
-                        Spacer(minLength: 0)
-                        overlayChipMetricStyle("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
-                        Spacer(minLength: 0)
-                        overlayChipMetricStyle("Protein", isOn: $showProtein, accent: Color.Glu.bodyDomain)
-                        Spacer(minLength: 0)
-                        overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
-                        Spacer(minLength: 0)
-                        overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
-                        Spacer(minLength: 0)
+
+                    GeometryReader { geo in
+                        let spacing: CGFloat = 12
+                        let count: CGFloat = isTherapyEnabled ? 6 : 4
+                        let chipWidth = (geo.size.width - spacing * (count - 1)) / count
+
+                        HStack(spacing: spacing) {
+                            overlayChipMetricStyle("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
+                                .frame(width: chipWidth)
+                            overlayChipMetricStyle("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
+                                .frame(width: chipWidth)
+                            overlayChipMetricStyle("Protein", isOn: $showProtein, accent: Color.Glu.bodyDomain)
+                                .frame(width: chipWidth)
+
+                            if isTherapyEnabled {
+                                overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
+                                    .frame(width: chipWidth)
+                                overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                                    .frame(width: chipWidth)
+                            }
+
+                            overlayChipMetricStyle("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                .frame(width: chipWidth)
+                        }
+                        .frame(width: geo.size.width, alignment: .leading)
                     }
+                    .frame(height: 44)
+
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
                             overlayChipMetricStyle("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
                             overlayChipMetricStyle("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
                             overlayChipMetricStyle("Protein", isOn: $showProtein, accent: Color.Glu.bodyDomain)
-                            overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
-                            overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                            if isTherapyEnabled {
+                                overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
+                                overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                            }
+                            overlayChipMetricStyle("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
                         }
                         .padding(.horizontal, 2)
                     }
@@ -286,8 +370,9 @@ struct MainChartViewV1: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 2)
-        .padding(.vertical, 4)
+        .padding(.top, 5)
+        .padding(.bottom, 0)
+        .onAppear { applyTherapyGatingIfNeeded() }
     }
 
     private var bolusChipAccent: Color { Color("acidBolusDarkGreen") }
@@ -296,8 +381,8 @@ struct MainChartViewV1: View {
         let isActive = isOn.wrappedValue
 
         let font: Font = (interactionMode == .landscape)
-            ? .callout.weight(.semibold)
-            : .caption.weight(.semibold)
+        ? .callout.weight(.semibold)
+        : .caption.weight(.semibold)
 
         let vPad: CGFloat = (interactionMode == .landscape) ? 10 : 5
         let hPad: CGFloat = (interactionMode == .landscape) ? 18 : 12
@@ -312,6 +397,7 @@ struct MainChartViewV1: View {
                 .layoutPriority(1)
                 .padding(.vertical, vPad)
                 .padding(.horizontal, hPad)
+                .frame(maxWidth: .infinity)
         }
         .buttonStyle(MetricChipLookalikeStyle(accent: accent, isActive: isActive))
     }
@@ -326,22 +412,22 @@ struct MainChartViewV1: View {
             let visualActive = isActive || configuration.isPressed
 
             let strokeColor: Color = visualActive
-                ? Color.white.opacity(0.90)
-                : accent.opacity(0.90)
+            ? Color.white.opacity(0.90)
+            : accent.opacity(0.90)
 
             let lineWidth: CGFloat = visualActive ? 1.6 : 1.2
 
             let backgroundFill: some ShapeStyle = visualActive
-                ? LinearGradient(
-                    colors: [accent.opacity(0.95), accent.opacity(0.75)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                : LinearGradient(
-                    colors: [Color.clear, Color.clear],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+            ? LinearGradient(
+                colors: [accent.opacity(0.95), accent.opacity(0.75)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            : LinearGradient(
+                colors: [Color.clear, Color.clear],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
 
             let shadowOpacity: Double = visualActive ? 0.25 : 0.15
             let shadowRadius: CGFloat = visualActive ? 4 : 2.5
@@ -386,7 +472,10 @@ struct MainChartViewV1: View {
         let baseChart = Chart {
 
             targetRangeBand(window: window, bandLower: bandLower, bandUpper: bandUpper)
-            cgmLineMarks(profile: profile, window: window)
+
+            if showCGM {
+                cgmLineMarks(profile: profile, window: window)
+            }
 
             if showActivity {
                 activityBars(profile: profile, window: window, baseY: baseY, height: activityBarHeight)
@@ -400,11 +489,11 @@ struct MainChartViewV1: View {
                 nutritionStems(profile: profile, window: window, kind: .protein, baseY: baseY)
             }
 
-            if showBolus {
+            if isTherapyEnabled && showBolus {
                 bolusStems(profile: profile, window: window, baseY: baseY, insulinMaxUnits: insulinMaxUnits)
             }
 
-            if showBasal {
+            if isTherapyEnabled && showBasal {
                 basalStems(profile: profile, window: window, baseY: baseY, insulinMaxUnits: insulinMaxUnits)
             }
         }
@@ -441,7 +530,6 @@ struct MainChartViewV1: View {
 
             let availableSeconds = max(1, window.end.timeIntervalSince(window.start))
             let visibleLengthSeconds = min(visibleXSeconds, availableSeconds)
-
             let isZoomedIn = visibleLengthSeconds < (availableSeconds - 1)
 
             let chartWithDomain = baseChart
@@ -501,11 +589,7 @@ struct MainChartViewV1: View {
             }()
 
             chartWithXZoom
-                .overlay(alignment: .top) {
-                    unitBadge
-                        .padding(.top, 6)
-
-                }
+                
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 6)
                         .onChanged { g in
@@ -529,11 +613,7 @@ struct MainChartViewV1: View {
 
         } else {
             baseChart
-                .overlay(alignment: .top) {
-                    unitBadge
-                        .padding(.top, 6)
-
-                }
+                
         }
     }
 
@@ -550,14 +630,58 @@ struct MainChartViewV1: View {
         case .mmolL:
             let stepMmol: Double = 2
             let upperMmol = settings.glucoseUnit.convertedValue(fromMgdl: upperMgdl)
-
             let snappedUpperMmol = ceil(upperMmol / stepMmol) * stepMmol
-
             let mmolTicks = Array(stride(from: 0, through: snappedUpperMmol, by: stepMmol))
-
             return mmolTicks.map { settings.glucoseUnit.mgdlValue(fromMmol: $0) }
         }
     }
+
+    // ============================================================
+    // MARK: - Refresh Logic
+    // ============================================================
+
+    @MainActor
+    private func initialEnsureCache() async {
+        await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset)
+    }
+
+    @MainActor
+    private func handlePullToRefresh() async {
+        await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset, forceRefetch: true)
+    }
+
+    // ============================================================
+    // MARK: - Gating Apply Helper
+    // ============================================================
+
+    @MainActor
+    private func applyTherapyGatingIfNeeded() {
+        guard !isTherapyEnabled else { return }
+        showBolus = false
+        showBasal = false
+    }
+
+    // ============================================================
+    // MARK: - Helpers (Chart Data)
+    // ============================================================
+
+    private struct TimeWindow {
+        let start: Date
+        let end: Date
+    }
+
+    private func xDomainWindow(for profile: MainChartDayProfileV1) -> TimeWindow {
+        let cal = Calendar.current
+        let dayStart = cal.startOfDay(for: profile.day)
+
+        let fullEnd = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let end: Date = profile.isToday ? min(Date(), fullEnd) : fullEnd
+        let start: Date = dayStart
+
+        return TimeWindow(start: start, end: end)
+    }
+
+    private func xAxisHourStride24h() -> Int { 3 }
 
     // ============================================================
     // MARK: - Chart Content Builders
@@ -629,9 +753,7 @@ struct MainChartViewV1: View {
         let lineWidth: CGFloat = isCarbs ? 6.0 : 3.0
 
         let markColor: Color = isCarbs ? carbsColor : proteinColor
-        let textColor: Color = isCarbs
-            ? carbsColor
-            : Color.Glu.bodyDomain
+        let textColor: Color = isCarbs ? carbsColor : Color.Glu.bodyDomain
 
         ForEach(filteredNutrition(profile: profile, window: window, kind: kind)) { e in
             let topY = nutritionBarTopYMgdl(grams: e.grams)
@@ -709,7 +831,7 @@ struct MainChartViewV1: View {
                 yStart: .value("Basal Base", baseY),
                 yEnd:   .value("Basal Top", topY)
             )
-            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .butt, lineJoin: .miter)) // konsistent zu Bolus
+            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .butt, lineJoin: .miter))
             .foregroundStyle(basalColor)
             .shadow(color: Color.black.opacity(0.18), radius: 2.0, x: 0, y: 1.4)
             .annotation(position: .top, alignment: .center) {
@@ -723,79 +845,8 @@ struct MainChartViewV1: View {
     }
 
     // ============================================================
-    // MARK: - Refresh Logic
-    // ============================================================
-
-    @MainActor
-    private func initialEnsureCache() async {
-        await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset)
-    }
-
-    @MainActor
-    private func handlePullToRefresh() async {
-        await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset, forceRefetch: true)
-    }
-
-    // ============================================================
-    // MARK: - Helpers (UI)
-    // ============================================================
-
-    private var dayTitleText: String {
-        guard let p = profile else { return "—" }
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .none
-        return df.string(from: p.day)
-    }
-
-    private func dayNavButton(isLeft: Bool) -> some View {
-        Button {
-            if isLeft {
-                dayOffset = max(dayOffset - 1, -9)
-            } else {
-                dayOffset = min(dayOffset + 1, 0)
-            }
-
-            visibleXSeconds = 24 * 60 * 60
-            yUpperBound = 300
-
-            Task { await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset) }
-
-        } label: {
-            Image(systemName: isLeft ? "chevron.left.circle.fill" : "chevron.right.circle.fill")
-                .font(.title2)
-                .opacity(isEnabledNav(isLeft: isLeft) ? 1.0 : 0.25)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabledNav(isLeft: isLeft))
-    }
-
-    private func isEnabledNav(isLeft: Bool) -> Bool {
-        if isLeft { return dayOffset > -9 }
-        return dayOffset < 0
-    }
-
-    // ============================================================
     // MARK: - Helpers (Chart Data)
     // ============================================================
-
-    private struct TimeWindow {
-        let start: Date
-        let end: Date
-    }
-
-    private func xDomainWindow(for profile: MainChartDayProfileV1) -> TimeWindow {
-        let cal = Calendar.current
-        let dayStart = cal.startOfDay(for: profile.day)
-
-        let fullEnd = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-        let end: Date = profile.isToday ? min(Date(), fullEnd) : fullEnd
-        let start: Date = dayStart
-
-        return TimeWindow(start: start, end: end)
-    }
-
-    private func xAxisHourStride24h() -> Int { 3 }
 
     private func filteredCGMPoints(profile: MainChartDayProfileV1, window: TimeWindow) -> [CGMSamplePoint] {
         profile.cgm
@@ -871,6 +922,55 @@ struct MainChartViewV1: View {
         let y = (u / maxUnits) * targetPeakMgdl
         return min(fixedYDomain.upperBound, max(0, y))
     }
+
+    // ============================================================
+    // MARK: - Helpers (UI)
+    // ============================================================
+
+    private var dayTitleText: String {
+        guard let p = profile else { return "—" }
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .none
+        return df.string(from: p.day)
+    }
+
+    private func dayNavButton(isLeft: Bool) -> some View {
+        Button {
+            // !!! UPDATED: write day selection into SSoT
+            if isLeft {
+                healthStore.mainChartSelectedDayOffsetV1 = max(dayOffset - 1, -9)
+            } else {
+                healthStore.mainChartSelectedDayOffsetV1 = min(dayOffset + 1, 0)
+            }
+
+            resetZoomStateForNewDay()
+
+            Task { await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset) }
+
+        } label: {
+            Image(systemName: isLeft ? "chevron.left" : "chevron.right")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(
+                    Color.Glu.primaryBlue.opacity(isEnabledNav(isLeft: isLeft) ? 0.95 : 0.25)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabledNav(isLeft: isLeft))
+    }
+
+    private func isEnabledNav(isLeft: Bool) -> Bool {
+        if isLeft { return dayOffset > -9 }
+        return dayOffset < 0
+    }
+
+    // !!! NEW: central reset for zoom/drag state when day changes
+    private func resetZoomStateForNewDay() {
+        visibleXSeconds = 24 * 60 * 60
+        yUpperBound = 300
+        lastMagnificationValue = 1.0
+        lastVerticalDragY = 0
+    }
 }
 
 // ============================================================
@@ -889,6 +989,8 @@ private struct RefreshableIfNeeded: ViewModifier {
         }
     }
 }
+
+// MARK: - Preview
 
 #Preview {
     MainChartViewV1(healthStore: .preview())

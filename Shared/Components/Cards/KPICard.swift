@@ -34,6 +34,8 @@ struct KPICard: View {
             Text(title)
                 .font(.caption)
                 .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                .frame(maxWidth: .infinity, alignment: .center)          // !!! UPDATED
+                .multilineTextAlignment(.center)                          // !!! UPDATED
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
 
@@ -51,11 +53,12 @@ struct KPICard: View {
                         .minimumScaleFactor(0.8)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .center)              // !!! UPDATED
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity)
-        .gluVibCardFrame(domainColor: domain.accentColor)          // !!! UPDATED (zentraler Kachelrahmen)
+        .gluVibCardFrame(domainColor: domain.accentColor)
     }
 }
 

@@ -69,7 +69,7 @@ final class BasalViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodayBasal: String {
-        "\(format1(todayBasalUnits)) IE"
+        "\(format1(todayBasalUnits)) U"
     }
 
     // ============================================================

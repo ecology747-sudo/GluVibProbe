@@ -2,6 +2,11 @@
 //  BolusBasalRatioViewModelV1.swift
 //  GluVibProbe
 //
+//  V1: Bolus/Basal Ratio ViewModel (Metabolic)
+//  - KEIN Fetch im ViewModel
+//  - SSoT: HealthStore.dailyBolusBasalRatio90 (derived in HealthStore)
+//  - UI-nah: Chart-Adapter (Int*10 via DailyStepsEntry), Period Averages, Formatting
+//
 
 import Foundation
 import Combine
@@ -35,26 +40,43 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Bindings
+    // MARK: - Bindings (SSoT → ViewModel)
     // ============================================================
 
     private func bindHealthStore() {
 
-        Publishers.CombineLatest(healthStore.$dailyBolus90, healthStore.$dailyBasal90)
+        // !!! NEW: Single SSoT stream (derived daily array)
+        healthStore.$dailyBolusBasalRatio90
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] bolus, basal in
+            .sink { [weak self] daily in
                 guard let self else { return }
-                let mapped = Self.buildDailyRatioInt10(bolus: bolus, basal: basal)
-                self.last90DaysRatioInt10 = mapped
-                self.todayRatioInt10 = Self.extractTodayInt10(from: mapped)
+                self.recompute(from: daily)
             }
             .store(in: &cancellables)
     }
 
     private func syncFromStores() {
-        let mapped = Self.buildDailyRatioInt10(bolus: healthStore.dailyBolus90, basal: healthStore.dailyBasal90)
-        last90DaysRatioInt10 = mapped
-        todayRatioInt10 = Self.extractTodayInt10(from: mapped)
+        recompute(from: healthStore.dailyBolusBasalRatio90) // !!! NEW
+    }
+
+    // ============================================================
+    // MARK: - Recompute (UI-nahe Mapping)
+    // ============================================================
+
+    private func recompute(from daily: [DailyBolusBasalRatioEntry]) {
+
+        let calendar = Calendar.current
+
+        let mapped: [DailyStepsEntry] = daily
+            .map { e in
+                let day = calendar.startOfDay(for: e.date)
+                let int10 = Int((max(0, e.ratio) * 10.0).rounded())
+                return DailyStepsEntry(date: day, steps: max(0, int10))
+            }
+            .sorted { $0.date < $1.date }
+
+        self.last90DaysRatioInt10 = mapped
+        self.todayRatioInt10 = Self.extractTodayInt10(from: mapped)
     }
 
     // ============================================================
@@ -66,7 +88,7 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Period Averages (≤90)
+    // MARK: - Period Averages (≤90) — endet gestern
     // ============================================================
 
     var periodAverages: [PeriodAverageEntry] {
@@ -107,43 +129,16 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
     // ============================================================
 
     var dailyScale: MetricScaleResult {
-        MetricScaleHelper.scale(last90DaysRatioInt10.map { Double($0.steps) }, for: .ratioInt10)   // !!! IMPORTANT
+        MetricScaleHelper.scale(last90DaysRatioInt10.map { Double($0.steps) }, for: .ratioInt10)   // !!! NEW
     }
 
     var periodScale: MetricScaleResult {
-        MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .ratioInt10)         // !!! IMPORTANT
+        MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .ratioInt10)         // !!! NEW
     }
 
     // ============================================================
-    // MARK: - Builders
+    // MARK: - Helpers
     // ============================================================
-
-    private static func buildDailyRatioInt10(
-        bolus: [DailyBolusEntry],
-        basal: [DailyBasalEntry]
-    ) -> [DailyStepsEntry] {
-
-        let calendar = Calendar.current
-
-        // Basal lookup by day
-        let basalByDay: [Date: Double] = Dictionary(
-            uniqueKeysWithValues: basal.map { (calendar.startOfDay(for: $0.date), $0.basalUnits) }
-        )
-
-        // Map over bolus days (90d) and compute ratio per day
-        let mapped: [DailyStepsEntry] = bolus.map { b in
-            let day = calendar.startOfDay(for: b.date)
-            let basalUnits = basalByDay[day] ?? 0
-
-            let ratio: Double = (basalUnits > 0) ? (b.bolusUnits / basalUnits) : 0
-            let int10 = Int((ratio * 10.0).rounded())
-
-            return DailyStepsEntry(date: day, steps: max(0, int10))
-        }
-        .sorted { $0.date < $1.date }
-
-        return mapped
-    }
 
     private static func extractTodayInt10(from daily: [DailyStepsEntry]) -> Int {
         let calendar = Calendar.current

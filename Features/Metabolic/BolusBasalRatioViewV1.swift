@@ -9,6 +9,7 @@ struct BolusBasalRatioViewV1: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
+    @EnvironmentObject private var settings: SettingsModel   // ✅ ADD
 
     @StateObject private var viewModel: BolusBasalRatioViewModelV1
 
@@ -64,12 +65,12 @@ struct BolusBasalRatioViewV1: View {
                     dailyScale: viewModel.dailyScale,
                     periodScale: viewModel.periodScale,
 
-                    // !!! NEW: Target support (none for Ratio)
+                    // Target support (none for Ratio)
                     goalValue: nil,
 
                     // Navigation
                     onMetricSelected: onMetricSelected,
-                    metrics: AppState.metabolicVisibleMetrics,
+                    metrics: AppState.metabolicVisibleMetrics(settings: settings),   // ✅ FIX
 
                     // Scale Type (period-adaptiv in der SectionCard)
                     dailyScaleType: .ratioInt10

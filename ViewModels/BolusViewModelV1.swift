@@ -70,12 +70,12 @@ final class BolusViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodayBolus: String {
-        "\(format1(todayBolusUnits)) IE"
+        "\(format1(todayBolusUnits)) U"
     }
 
     var formattedAvg7dBolus: String {                                        // !!! NEW
         let avg7 = Double(periodAverages.first(where: { $0.days == 7 })?.value ?? 0)
-        return "\(format1(avg7)) IE"
+        return "\(format1(avg7)) U"
     }                                                                         // !!! NEW
 
     var kpiDeltaText: String {                                                // !!! NEW
@@ -140,12 +140,17 @@ final class BolusViewModelV1: ObservableObject {
     // ============================================================
 
     var dailyScale: MetricScaleResult {
-        // !!! UPDATED: eigener insulinUnitsDaily-Scale existiert noch nicht → vorerst generisch wie gramsDaily
-        MetricScaleHelper.scale(last90DaysData.map { $0.bolusUnits }, for: .gramsDaily)          // !!! UPDATED
+        MetricScaleHelper.scale(
+            last90DaysData.map { $0.bolusUnits }.filter { $0 > 0 },
+            for: .insulinUnitsDaily
+        )
     }
 
     var periodScale: MetricScaleResult {
-        MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .gramsDaily)      // !!! UPDATED
+        MetricScaleHelper.scale(
+            periodAverages.map { Double($0.value) }.filter { $0 > 0 },
+            for: .insulinUnitsDaily
+        )
     }
 
     // ============================================================

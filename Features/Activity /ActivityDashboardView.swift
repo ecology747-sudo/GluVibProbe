@@ -15,24 +15,6 @@ struct ActivityDashboardView: View {
         switch appState.currentStatsScreen {
 
         // -----------------------------------------------------
-        // NICHT-ACTIVITY → gehört NICHT ins Activity-Dashboard
-        // -----------------------------------------------------
-        case .none,
-
-             // Nutrition
-             .nutritionOverview,
-
-             // ✅ Metabolic (V1)
-             .metabolicOverview,
-             .bolus,
-             .basal,
-             .bolusBasalRatio,
-             .carbsBolusRatio,
-             .timeInRange,                 // !!! NEW
-             .gmi:                         // !!! NEW
-            EmptyView()
-
-        // -----------------------------------------------------
         // Activity Screens
         // -----------------------------------------------------
         case .steps:
@@ -54,23 +36,10 @@ struct ActivityDashboardView: View {
             WorkoutMinutesViewV1(onMetricSelected: handleMetricSelection)
 
         // -----------------------------------------------------
-        // Nutrition-Screens → im Activity-Dashboard wegparken
-        // (dein bisheriges Verhalten: fallback auf Steps)
+        // Alles andere → im Activity-Dashboard parken
+        // (bewusstes Fallback-Verhalten: Steps)
         // -----------------------------------------------------
-        case .carbs,
-             .protein,
-             .fat,
-             .calories:
-            StepsViewV1(onMetricSelected: handleMetricSelection)
-
-        // -----------------------------------------------------
-        // Body-Screens → ebenfalls wegparken (fallback auf Steps)
-        // -----------------------------------------------------
-        case .sleep,
-             .weight,
-             .bmi,
-             .bodyFat,
-             .restingHeartRate:
+        default:
             StepsViewV1(onMetricSelected: handleMetricSelection)
         }
     }
@@ -92,8 +61,8 @@ struct ActivityDashboardView: View {
         case "Movement Split":
             appState.currentStatsScreen = .movementSplit
 
-        case "Move Time", "MoveTime", "Move Minutes", "Move", "moveTime":
-            appState.currentStatsScreen = .moveTime
+        //case "Move Time", "MoveTime", "Move Minutes", "Move", "moveTime":
+            //appState.currentStatsScreen = .moveTime
 
         case "Workout Minutes":
             appState.currentStatsScreen = .workoutMinutes

@@ -4,15 +4,6 @@
 //
 //  MainChart V1 — DayProfile Builder (from existing RAW caches)
 //
-//  Zweck:
-//  - Baut einen MainChartDayProfileV1 für einen Kalendertag
-//  - Nutzt vorhandene Published RAW Arrays (SSoT = HealthStore)
-//  - Keine DailyStats, keine neuen Berechnungen
-//
-//  Hinweis (Foundation-first):
-//  - Aktuell filtert der Builder nur aus den bereits vorhandenen RAW Arrays.
-//  - Für echte 7–10 Tage Historie erweitern wir später die Fetches (stabil, Schritt für Schritt).
-//
 
 import Foundation
 
@@ -22,20 +13,21 @@ extension HealthStore {
     // MARK: - Public API
     // ============================================================
 
-    /// Cache-API Wrapper für konsistentes Wiring:
-    /// - Erwartet `dayStart` (00:00 lokaler Tag)
-    /// - Wird vom Cache/Refresh-Flow genutzt, ohne dass Views/VMs irgendwas wissen müssen.
     @MainActor
     func buildMainChartDayProfileV1(dayStart: Date) -> MainChartDayProfileV1 {
         buildMainChartDayProfileFromCurrentCachesV1(for: dayStart)
     }
 
-    /// Build a day profile from currently available RAW caches.
-    /// IMPORTANT:
-    /// - Works immediately for Today/Yesterday/DayBefore (weil Raw3Days gefüllt ist).
-    /// - For older days, result may be empty until we extend fetch windows.
     @MainActor
     func buildMainChartDayProfileFromCurrentCachesV1(for day: Date) -> MainChartDayProfileV1 {
+
+        // ========================================================
+        // MARK: - Settings Gating (Premium rules)  // !!! NEW
+        // ========================================================
+
+        let settings = SettingsModel.shared                              // !!! NEW
+        let hasCGM = settings.hasCGM                                    // !!! NEW
+        let isInsulinTreated = settings.isInsulinTreated                // !!! NEW
 
         // ========================================================
         // MARK: - Time Window (0:00 → end)
@@ -48,44 +40,46 @@ extension HealthStore {
         let todayStart = cal.startOfDay(for: Date())
         let isToday = (dayStart == todayStart)
 
-        // For today we cap at "now", for past days we use end-of-day
         let end: Date = isToday ? Date() : dayEnd
 
         // ========================================================
         // MARK: - CGM (points)
         // ========================================================
 
-        let rawCGM = cgmSamples3Days
-        let cgm = rawCGM
-            .filter { $0.timestamp >= dayStart && $0.timestamp < end }
-            .sorted { $0.timestamp < $1.timestamp }
+        let cgm: [CGMSamplePoint] = {
+            guard hasCGM else { return [] }                              // !!! NEW
+            return cgmSamples3Days
+                .filter { $0.timestamp >= dayStart && $0.timestamp < end }
+                .sorted { $0.timestamp < $1.timestamp }
+        }()
 
         // ========================================================
         // MARK: - Insulin (events)
         // ========================================================
 
-        let rawBolus = bolusEvents3Days
-        let bolus = rawBolus
-            .filter { $0.timestamp >= dayStart && $0.timestamp < end }
-            .sorted { $0.timestamp < $1.timestamp }
+        let bolus: [InsulinBolusEvent] = {
+            guard hasCGM, isInsulinTreated else { return [] }           // !!! NEW
+            return bolusEvents3Days
+                .filter { $0.timestamp >= dayStart && $0.timestamp < end }
+                .sorted { $0.timestamp < $1.timestamp }
+        }()
 
-        // CHANGE: Basal ist Event (wie Bolus), kein Segment mehr
-        let rawBasal = basalEvents3Days
-        let basal = rawBasal
-            .filter { $0.timestamp >= dayStart && $0.timestamp < end }  // CHANGE: timestamp filter statt overlap
-            .sorted { $0.timestamp < $1.timestamp }
+        let basal: [InsulinBasalEvent] = {
+            guard hasCGM, isInsulinTreated else { return [] }           // !!! NEW
+            return basalEvents3Days
+                .filter { $0.timestamp >= dayStart && $0.timestamp < end }
+                .sorted { $0.timestamp < $1.timestamp }
+        }()
 
         // ========================================================
         // MARK: - Nutrition (events)
         // ========================================================
 
-        let rawCarbs = carbEvents3Days
-        let carbs = rawCarbs
+        let carbs = carbEvents3Days
             .filter { $0.timestamp >= dayStart && $0.timestamp < end && $0.kind == .carbs }
             .sorted { $0.timestamp < $1.timestamp }
 
-        let rawProtein = proteinEvents3Days
-        let protein = rawProtein
+        let protein = proteinEvents3Days
             .filter { $0.timestamp >= dayStart && $0.timestamp < end && $0.kind == .protein }
             .sorted { $0.timestamp < $1.timestamp }
 
@@ -93,13 +87,11 @@ extension HealthStore {
         // MARK: - Activity + Fingerstick (optional overlays)
         // ========================================================
 
-        let rawActivity = activityEvents3Days
-        let activity = rawActivity
-            .filter { $0.end > dayStart && $0.start < end }   // overlap filter bleibt korrekt für Activity-Intervalle
+        let activity = activityEvents3Days
+            .filter { $0.end > dayStart && $0.start < end }
             .sorted { $0.start < $1.start }
 
-        let rawFinger = fingerGlucoseEvents3Days
-        let finger = rawFinger
+        let finger = fingerGlucoseEvents3Days
             .filter { $0.timestamp >= dayStart && $0.timestamp < end }
             .sorted { $0.timestamp < $1.timestamp }
 
@@ -114,7 +106,7 @@ extension HealthStore {
             isToday: isToday,
             cgm: cgm,
             bolus: bolus,
-            basal: basal,          // CHANGE: [InsulinBasalEvent]
+            basal: basal,
             carbs: carbs,
             protein: protein,
             activity: activity,

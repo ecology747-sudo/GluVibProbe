@@ -37,29 +37,9 @@ struct NutritionDashboardView: View {
             NutritionEnergyViewV1(onMetricSelected: handleMetricSelection)
 
         // -----------------------------------------------------
-        // Andere Domains → gehören NICHT hierher
+        // Alle anderen Domains → hier immer Overview
         // -----------------------------------------------------
-        case .steps,
-             .activityEnergy,
-             .activityExerciseMinutes,
-             .movementSplit,
-             .moveTime,
-             .workoutMinutes,
-
-             .weight,
-             .sleep,
-             .bmi,
-             .bodyFat,
-             .restingHeartRate,
-
-             .metabolicOverview,
-             .bolus,
-             .basal,
-             .bolusBasalRatio,
-             .carbsBolusRatio,
-
-             .timeInRange,                 // !!! NEW (AppState)
-             .gmi:                         // !!! NEW (AppState)
+        default:
             NutritionOverviewViewV1()
         }
     }

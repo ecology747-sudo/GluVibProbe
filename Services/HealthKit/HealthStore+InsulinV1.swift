@@ -253,7 +253,7 @@ extension HealthStore {
 }
 
 // ============================================================
-// MARK: - Async Wrappers (Option B Fix)
+// MARK: - Async Wrappers (FIX: wait for HealthKit completion)
 // ============================================================
 
 extension HealthStore {
@@ -262,19 +262,133 @@ extension HealthStore {
     func fetchDailyBolus90V1Async() async {
         if isPreview { return }
 
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            self.fetchDailyBolus90V1()
-            DispatchQueue.main.async { continuation.resume(returning: ()) }
+        guard let type = HKQuantityType.quantityType(forIdentifier: .insulinDelivery) else {
+            self.dailyBolus90 = []
+            return
         }
+
+        let calendar = Calendar.current
+        let now = Date()
+        let todayStart = calendar.startOfDay(for: now)
+
+        guard let startDate = calendar.date(byAdding: .day, value: -(90 - 1), to: todayStart) else {
+            self.dailyBolus90 = []
+            return
+        }
+
+        let bolusPredicate = HKQuery.predicateForObjects(
+            withMetadataKey: HKMetadataKeyInsulinDeliveryReason,
+            allowedValues: [HKInsulinDeliveryReason.bolus.rawValue]
+        )
+
+        let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [datePredicate, bolusPredicate])
+
+        let interval = DateComponents(day: 1)
+        let unit = HKUnit.internationalUnit()
+
+        let out: [DailyBolusEntry] = await withCheckedContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum,
+                anchorDate: startDate,
+                intervalComponents: interval
+            )
+
+            query.initialResultsHandler = { _, results, _ in
+                guard let results else {
+                    continuation.resume(returning: [])
+                    return
+                }
+
+                var daily: [DailyBolusEntry] = []
+                daily.reserveCapacity(90)
+
+                results.enumerateStatistics(from: startDate, to: now) { stats, _ in
+                    let sum = stats.sumQuantity()?.doubleValue(for: unit) ?? 0
+                    daily.append(
+                        DailyBolusEntry(
+                            id: UUID(),
+                            date: stats.startDate,
+                            bolusUnits: max(0, sum)
+                        )
+                    )
+                }
+
+                continuation.resume(returning: daily.sorted { $0.date < $1.date })
+            }
+
+            self.healthStore.execute(query)
+        }
+
+        self.dailyBolus90 = out
     }
 
     @MainActor
     func fetchDailyBasal90V1Async() async {
         if isPreview { return }
 
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            self.fetchDailyBasal90V1()
-            DispatchQueue.main.async { continuation.resume(returning: ()) }
+        guard let type = HKQuantityType.quantityType(forIdentifier: .insulinDelivery) else {
+            self.dailyBasal90 = []
+            return
         }
+
+        let calendar = Calendar.current
+        let now = Date()
+        let todayStart = calendar.startOfDay(for: now)
+
+        guard let startDate = calendar.date(byAdding: .day, value: -(90 - 1), to: todayStart) else {
+            self.dailyBasal90 = []
+            return
+        }
+
+        let basalPredicate = HKQuery.predicateForObjects(
+            withMetadataKey: HKMetadataKeyInsulinDeliveryReason,
+            allowedValues: [HKInsulinDeliveryReason.basal.rawValue]
+        )
+
+        let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [datePredicate, basalPredicate])
+
+        let interval = DateComponents(day: 1)
+        let unit = HKUnit.internationalUnit()
+
+        let out: [DailyBasalEntry] = await withCheckedContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum,
+                anchorDate: startDate,
+                intervalComponents: interval
+            )
+
+            query.initialResultsHandler = { _, results, _ in
+                guard let results else {
+                    continuation.resume(returning: [])
+                    return
+                }
+
+                var daily: [DailyBasalEntry] = []
+                daily.reserveCapacity(90)
+
+                results.enumerateStatistics(from: startDate, to: now) { stats, _ in
+                    let sum = stats.sumQuantity()?.doubleValue(for: unit) ?? 0
+                    daily.append(
+                        DailyBasalEntry(
+                            id: UUID(),
+                            date: stats.startDate,
+                            basalUnits: max(0, sum)
+                        )
+                    )
+                }
+
+                continuation.resume(returning: daily.sorted { $0.date < $1.date })
+            }
+
+            self.healthStore.execute(query)
+        }
+
+        self.dailyBasal90 = out
     }
 }

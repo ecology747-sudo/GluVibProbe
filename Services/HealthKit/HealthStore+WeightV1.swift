@@ -15,10 +15,22 @@ import Foundation
 import HealthKit
 
 // ============================================================
+// MARK: - History Weight Sample Model (V1)
+// ============================================================
+
+struct WeightSamplePointV1: Identifiable, Hashable {          // ✅ NEW
+    let id: UUID = UUID()
+    let timestamp: Date
+    let kg: Double
+}
+
+// ============================================================
 // MARK: - HealthStore + Weight (V1 kompatibel)
 // ============================================================
 
 extension HealthStore {
+
+   
 
     // ============================================================
     // MARK: - Public API (Entry Points) — V1 kompatibel
@@ -27,7 +39,6 @@ extension HealthStore {
     /// TODAY KPI (latest measured weight) → writes `todayWeightKgRaw`
     func fetchWeightTodayV1() {
         if isPreview {
-            let calendar = Calendar.current
             let value = previewDailyWeight.sorted { $0.date < $1.date }.last?.kg ?? 0
             DispatchQueue.main.async {
                 self.todayWeightKgRaw = max(0, value)
@@ -60,6 +71,7 @@ extension HealthStore {
 
         healthStore.execute(query)
     }
+
     /// 90d Serie (für Charts)
     func fetchLast90DaysWeightV1() {
         if isPreview {
@@ -75,7 +87,6 @@ extension HealthStore {
             unit: .gramUnit(with: .kilo),
             days: 90
         ) { [weak self] entries in
-            // !!! UPDATED: kein doppeltes Main-dispatching (Helper dispatcht bereits auf Main)
             self?.last90DaysWeight = entries
         }
     }
@@ -199,9 +210,68 @@ extension HealthStore {
             unit: .gramUnit(with: .kilo),
             days: 365
         ) { [weak self] entries in
-            // !!! UPDATED: kein doppeltes Main-dispatching (Helper dispatcht bereits auf Main)
             self?.weightDaily365Raw = entries
         }
+    }
+
+    // ============================================================
+    // MARK: - History Window: recent weight samples (10 days)
+    // ============================================================
+
+    func fetchRecentWeightSamplesForHistoryWindowV1(days: Int = 10) {    // ✅ NEW
+        if isPreview {
+            let calendar = Calendar.current
+            let todayStart = calendar.startOfDay(for: Date())
+            let start = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) ?? todayStart
+
+            // previewDailyWeight has day-level dates -> give it a plausible time (07:15)
+            let points = previewDailyWeight
+                .filter { $0.date >= start && $0.kg > 0 }
+                .map { e in
+                    WeightSamplePointV1(
+                        timestamp: e.date.addingTimeInterval(7 * 3600 + 15 * 60),
+                        kg: e.kg
+                    )
+                }
+                .sorted { $0.timestamp > $1.timestamp }
+
+            DispatchQueue.main.async {
+                self.recentWeightSamplesForHistoryV1 = points
+            }
+            return
+        }
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return }
+
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        let start = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) ?? todayStart
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: Date(), options: [])
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+
+        let query = HKSampleQuery(
+            sampleType: type,
+            predicate: predicate,
+            limit: HKObjectQueryNoLimit,
+            sortDescriptors: [sort]
+        ) { [weak self] _, samples, _ in
+            guard let self else { return }
+
+            let points: [WeightSamplePointV1] = (samples as? [HKQuantitySample] ?? [])
+                .map { s in
+                    let kg = s.quantity.doubleValue(for: .gramUnit(with: .kilo))
+                    return WeightSamplePointV1(timestamp: s.endDate, kg: max(0, kg))
+                }
+                .filter { $0.kg > 0 }
+                .sorted { $0.timestamp > $1.timestamp }
+
+            DispatchQueue.main.async {
+                self.recentWeightSamplesForHistoryV1 = points
+            }
+        }
+
+        healthStore.execute(query)
     }
 }
 
@@ -241,7 +311,6 @@ private extension HealthStore {
 
         query.initialResultsHandler = { _, results, _ in
             results?.enumerateStatistics(from: startDate, to: now) { stats, _ in
-                // ✅ nur echte Mess-Tage -> averageQuantity != nil
                 guard let q = stats.averageQuantity() else { return }
                 let kg = q.doubleValue(for: unit)
                 guard kg > 0 else { return }

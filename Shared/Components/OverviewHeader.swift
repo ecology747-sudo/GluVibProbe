@@ -9,36 +9,23 @@ import SwiftUI
 
 struct OverviewHeader: View {
 
-    // MARK: - Öffentliche Parameter (API wie gehabt)
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var settings: SettingsModel
 
-    /// Seitentitel („Nutrition Overview“ etc.)
     let title: String
-
-    /// Untertitel (z. B. Datum)
     let subtitle: String?
-
-    /// Domainfarbe (aktuell nicht genutzt, bleibt für später erhalten)
     let tintColor: Color
-
-    /// Scrollzustand (aktuell nicht verwendet, API-kompatibel zur View)
     let hasScrolled: Bool
 
-    // MARK: - Body
     var body: some View {
 
         ZStack {
 
-            // MARK: - Änderung: Hintergrund etwas dezenter
-            //
-            // - Weiß mit 90 % Deckkraft bleibt
-            // - Blur-Radius reduziert, damit der Übergang zum Score weicher ist
-            //
             Rectangle()
                 .fill(Color.white.opacity(0.90))
-                .blur(radius: 10)                     // MARK: - Änderung: Blur von 15 → 10 reduziert
+                .blur(radius: 10)
                 .ignoresSafeArea(edges: .top)
 
-            // MARK: - Titel + Untertitel
             VStack(spacing: 2) {
 
                 Text(title)
@@ -51,11 +38,50 @@ struct OverviewHeader: View {
                         .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
                 }
             }
-            .padding(.top, 4)                        // MARK: - Änderung: etwas weniger Top-Padding
-            .padding(.bottom, 4)                     // MARK: - Änderung: etwas weniger Bottom-Padding
+            .padding(.top, 4)
+            .padding(.bottom, 4)
             .frame(maxWidth: .infinity)
-        }
-        .frame(height: 44)                           // MARK: - Änderung: Höhe von 60 → 44 verkleinert
+
+            HStack {
+                Spacer()
+
+                // UPDATED: Right-aligned action group – tighter & visually secondary
+                HStack(spacing: 4) {   // UPDATED: noch dichter
+
+                    Button {
+                        // TODO: Present Reports / Print (AGP-like summaries)
+                    } label: {
+                        Image(systemName: "printer")
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundColor(Color.Glu.primaryBlue)
+                            .opacity(0.9)                      // UPDATED
+                            .accessibilityLabel("Reports")
+                            .padding(.leading, 6)
+                            .padding(.trailing, 2)              // UPDATED: zieht optisch näher ran
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        appState.presentAccountSheet()
+                    } label: {
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.system(size: 27, weight: .semibold))
+                            .foregroundColor(Color.Glu.primaryBlue)
+                            .shadow(
+                                color: Color.black.opacity(0.22),
+                                radius: 4.5,
+                                x: 0,
+                                y: 2
+                            )
+                            .accessibilityLabel("Account menu")
+                            .padding(6)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.trailing, 12)
+            }     }
+        .frame(height: 44)
     }
 }
 
@@ -67,6 +93,8 @@ struct OverviewHeader: View {
         tintColor: .green,
         hasScrolled: false
     )
+    .environmentObject(AppState())
+    .environmentObject(SettingsModel.shared)
     .previewLayout(.sizeThatFits)
     .padding()
 }

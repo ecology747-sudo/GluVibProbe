@@ -15,27 +15,6 @@ struct BodyDashboardView: View {
         switch appState.currentStatsScreen {
 
         // -----------------------------------------------------
-        // Nicht-Body-Fälle → hier nur wegparken
-        // -----------------------------------------------------
-        case .none,
-
-             // Nutrition
-             .nutritionOverview,
-             .carbs, .protein, .fat, .calories,
-
-             // Activity
-             .steps, .activityEnergy, .activityExerciseMinutes,
-             .movementSplit, .moveTime, .workoutMinutes,
-
-             // Metabolic
-             .metabolicOverview,
-             .bolus, .basal,
-             .bolusBasalRatio, .carbsBolusRatio,
-             .timeInRange,                       // !!! NEW
-             .gmi:                               // !!! NEW
-            EmptyView()
-
-        // -----------------------------------------------------
         // BODY-DOMAIN (V1)
         // -----------------------------------------------------
         case .sleep:
@@ -52,6 +31,12 @@ struct BodyDashboardView: View {
 
         case .restingHeartRate:
             RestingHeartRateViewV1(onMetricSelected: handleMetricSelection)
+
+        // -----------------------------------------------------
+        // Alles andere → im Body-Dashboard wegparken
+        // -----------------------------------------------------
+        default:
+            EmptyView()
         }
     }
 

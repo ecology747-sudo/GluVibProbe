@@ -1,5 +1,5 @@
 // ============================================================
-// MARK: - SettingsModel.swift  // !!! UPDATED (TIR Target)
+// MARK: - SettingsModel.swift  // !!! UPDATED (Metabolic Premium Capability)
 // ============================================================
 
 import Foundation
@@ -32,8 +32,14 @@ final class SettingsModel: ObservableObject {
     @Published var veryLowLimit: Int = 55
     @Published var veryHighLimit: Int = 250
 
-    // !!! NEW: TIR Target (%)
+    // TIR Target (%)
     @Published var tirTargetPercent: Int = 70
+
+    // CV Target (%)
+    @Published var cvTargetPercent: Int = 36                      // !!! NEW
+
+    // GMI90 Target (%) — stored as Double
+    @Published var gmi90TargetPercent: Double = 7.0               // !!! NEW
 
     // MARK: Nutrition Targets
     @Published var dailyCarbs: Int = 200
@@ -41,8 +47,14 @@ final class SettingsModel: ObservableObject {
     @Published var dailyCalories: Int = 2500
     @Published var dailyFat: Int = 70
 
+    // MARK: Metabolic Feature Flags (User intent)
     @Published var isInsulinTreated: Bool = false
     @Published var hasCGM: Bool = false
+
+    // ============================================================
+    // MARK: - Capability Flag (Free vs Premium gating)
+    // ============================================================
+    @Published var hasMetabolicPremium: Bool = false                 // !!! NEW
 
     @Published var hba1cEntries: [HbA1cEntry] = []
 
@@ -66,8 +78,11 @@ final class SettingsModel: ObservableObject {
         static let veryLowLimit  = "settings_veryLowLimit"
         static let veryHighLimit = "settings_veryHighLimit"
 
-        // !!! NEW
         static let tirTargetPercent = "settings_tirTargetPercent"
+
+        // CV + GMI Targets
+        static let cvTargetPercent        = "settings_cvTargetPercent"        // !!! NEW
+        static let gmi90TargetPercent     = "settings_gmi90TargetPercent"     // !!! NEW
 
         static let dailyCarbs    = "settings_dailyCarbs"
         static let dailyProtein  = "settings_dailyProtein"
@@ -76,7 +91,10 @@ final class SettingsModel: ObservableObject {
 
         static let isInsulinTreated = "settings_isInsulinTreated"
         static let hasCGM           = "settings_hasCGM"
+
         static let hba1cEntries     = "settings_hba1cEntries"
+
+        static let hasMetabolicPremium = "settings_hasMetabolicPremium"       // !!! NEW
     }
 
     private init() {
@@ -120,9 +138,16 @@ final class SettingsModel: ObservableObject {
             veryHighLimit = defaults.integer(forKey: Keys.veryHighLimit)
         }
 
-        // !!! NEW
         if defaults.object(forKey: Keys.tirTargetPercent) != nil {
             tirTargetPercent = defaults.integer(forKey: Keys.tirTargetPercent)
+        }
+
+        // CV + GMI Targets
+        if defaults.object(forKey: Keys.cvTargetPercent) != nil {              // !!! NEW
+            cvTargetPercent = defaults.integer(forKey: Keys.cvTargetPercent)   // !!! NEW
+        }
+        if defaults.object(forKey: Keys.gmi90TargetPercent) != nil {           // !!! NEW
+            gmi90TargetPercent = defaults.double(forKey: Keys.gmi90TargetPercent) // !!! NEW
         }
 
         if defaults.object(forKey: Keys.dailyCarbs) != nil {
@@ -143,6 +168,10 @@ final class SettingsModel: ObservableObject {
         }
         if defaults.object(forKey: Keys.hasCGM) != nil {
             hasCGM = defaults.bool(forKey: Keys.hasCGM)
+        }
+
+        if defaults.object(forKey: Keys.hasMetabolicPremium) != nil {
+            hasMetabolicPremium = defaults.bool(forKey: Keys.hasMetabolicPremium)
         }
 
         if let data = defaults.data(forKey: Keys.hba1cEntries),
@@ -166,8 +195,11 @@ final class SettingsModel: ObservableObject {
         defaults.set(veryLowLimit, forKey: Keys.veryLowLimit)
         defaults.set(veryHighLimit, forKey: Keys.veryHighLimit)
 
-        // !!! NEW
         defaults.set(tirTargetPercent, forKey: Keys.tirTargetPercent)
+
+        // CV + GMI Targets
+        defaults.set(cvTargetPercent, forKey: Keys.cvTargetPercent)                 // !!! NEW
+        defaults.set(gmi90TargetPercent, forKey: Keys.gmi90TargetPercent)           // !!! NEW
 
         defaults.set(dailyCarbs, forKey: Keys.dailyCarbs)
         defaults.set(dailyProtein, forKey: Keys.dailyProtein)
@@ -176,6 +208,8 @@ final class SettingsModel: ObservableObject {
 
         defaults.set(isInsulinTreated, forKey: Keys.isInsulinTreated)
         defaults.set(hasCGM, forKey: Keys.hasCGM)
+
+        defaults.set(hasMetabolicPremium, forKey: Keys.hasMetabolicPremium)
 
         if let encoded = try? JSONEncoder().encode(hba1cEntries) {
             defaults.set(encoded, forKey: Keys.hba1cEntries)

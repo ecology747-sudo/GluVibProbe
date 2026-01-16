@@ -118,14 +118,20 @@ extension HealthStore {
         let clusteredCarbs = clusterNutritionEventsV1(rawCarbs, windowMinutes: 10)
         let clusteredProtein = clusterNutritionEventsV1(rawProtein, windowMinutes: 10)
 
+        // ✅ NEW: Insulin clustering (10 min) – matches Nutrition behavior
+        let rawBolus = await bolus
+        let rawBasal = await basal
+        let clusteredBolus = clusterBolusEventsV1(rawBolus, windowMinutes: 10)   // !!! NEW
+        let clusteredBasal = clusterBasalEventsV1(rawBasal, windowMinutes: 10)   // !!! NEW
+
         let profile = MainChartDayProfileV1(
             id: UUID(),
             day: dayStart,
             builtAt: Date(),
             isToday: Calendar.current.isDate(dayStart, inSameDayAs: Date()),
             cgm: await cgm,
-            bolus: await bolus,
-            basal: await basal,                 // CHANGE: Basal Events
+            bolus: clusteredBolus,                // !!! UPDATED
+            basal: clusteredBasal,                // !!! UPDATED
             carbs: clusteredCarbs,
             protein: clusteredProtein,
             activity: [],
@@ -183,7 +189,7 @@ extension HealthStore {
             .filter { $0.timestamp >= dayStart && $0.timestamp < end }
             .sorted { $0.timestamp < $1.timestamp }
 
-        let bolus = bolusEvents3Days
+        let bolusRaw = bolusEvents3Days
             .filter { $0.timestamp >= dayStart && $0.timestamp < end }
             .sorted { $0.timestamp < $1.timestamp }
 
@@ -191,7 +197,11 @@ extension HealthStore {
         // CHANGE: Sub-Expressions, damit der Compiler NICHT an der Expression stirbt (“unable to type-check…”)
         let basalAll = basalEvents3Days
         let basalFiltered = basalAll.filter { $0.timestamp >= dayStart && $0.timestamp < end }
-        let basal = basalFiltered.sorted { $0.timestamp < $1.timestamp }
+        let basalRaw = basalFiltered.sorted { $0.timestamp < $1.timestamp }
+
+        // ✅ NEW: Insulin clustering (10 min) – matches Nutrition behavior
+        let bolus = clusterBolusEventsV1(bolusRaw, windowMinutes: 10)            // !!! NEW
+        let basal = clusterBasalEventsV1(basalRaw, windowMinutes: 10)            // !!! NEW
 
         // Meal-Cluster (10 Min) pro Kind
         let rawCarbs = carbEvents3Days
@@ -219,8 +229,8 @@ extension HealthStore {
             builtAt: Date(),
             isToday: isToday,
             cgm: cgm,
-            bolus: bolus,
-            basal: basal,              // CHANGE: Basal Events
+            bolus: bolus,                         // !!! UPDATED
+            basal: basal,                         // !!! UPDATED
             carbs: carbs,
             protein: protein,
             activity: activity,
@@ -282,6 +292,116 @@ extension HealthStore {
                 currentStart = e.timestamp
                 lastTime = e.timestamp
                 sum = max(0, e.grams)
+            }
+        }
+
+        flushIfNeeded()
+        return result.sorted { $0.timestamp < $1.timestamp }
+    }
+
+    // ============================================================
+    // MARK: - Insulin Cluster Helper (10 Min Window)   // ✅ NEW
+    // ============================================================
+
+    private func clusterBolusEventsV1(
+        _ events: [InsulinBolusEvent],
+        windowMinutes: Int
+    ) -> [InsulinBolusEvent] {
+
+        guard !events.isEmpty else { return [] }
+
+        let window: TimeInterval = TimeInterval(max(1, windowMinutes) * 60)
+
+        var result: [InsulinBolusEvent] = []
+        result.reserveCapacity(events.count)
+
+        var currentStart: Date? = nil
+        var lastTime: Date? = nil
+        var sum: Double = 0
+
+        func flushIfNeeded() {
+            guard let start = currentStart else { return }
+            guard sum > 0 else { return }
+            result.append(
+                InsulinBolusEvent(
+                    id: UUID(),
+                    timestamp: start,
+                    units: sum
+                )
+            )
+        }
+
+        for e in events {
+            if currentStart == nil {
+                currentStart = e.timestamp
+                lastTime = e.timestamp
+                sum = max(0, e.units)
+                continue
+            }
+
+            let closeEnough = (lastTime.map { e.timestamp.timeIntervalSince($0) <= window } ?? false)
+
+            if closeEnough {
+                sum += max(0, e.units)
+                lastTime = e.timestamp
+            } else {
+                flushIfNeeded()
+                currentStart = e.timestamp
+                lastTime = e.timestamp
+                sum = max(0, e.units)
+            }
+        }
+
+        flushIfNeeded()
+        return result.sorted { $0.timestamp < $1.timestamp }
+    }
+
+    private func clusterBasalEventsV1(
+        _ events: [InsulinBasalEvent],
+        windowMinutes: Int
+    ) -> [InsulinBasalEvent] {
+
+        guard !events.isEmpty else { return [] }
+
+        let window: TimeInterval = TimeInterval(max(1, windowMinutes) * 60)
+
+        var result: [InsulinBasalEvent] = []
+        result.reserveCapacity(events.count)
+
+        var currentStart: Date? = nil
+        var lastTime: Date? = nil
+        var sum: Double = 0
+
+        func flushIfNeeded() {
+            guard let start = currentStart else { return }
+            guard sum > 0 else { return }
+            result.append(
+                InsulinBasalEvent(
+                    id: UUID(),
+                    timestamp: start,
+                    units: sum
+                )
+            )
+        }
+
+        for e in events {
+            if currentStart == nil {
+                currentStart = e.timestamp
+                lastTime = e.timestamp
+                sum = max(0, e.units)
+                continue
+            }
+
+            let closeEnough = (lastTime.map { e.timestamp.timeIntervalSince($0) <= window } ?? false)
+
+            if closeEnough {
+                sum += max(0, e.units)
+                lastTime = e.timestamp
+            } else {
+                flushIfNeeded()
+                currentStart = e.timestamp
+                lastTime = e.timestamp
+                sum = max(0, e.units)
             }
         }
 
