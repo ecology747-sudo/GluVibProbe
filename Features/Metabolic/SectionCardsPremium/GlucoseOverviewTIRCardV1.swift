@@ -11,13 +11,15 @@
 
 import SwiftUI
 import Charts
-import TipKit
 
 struct GlucoseOverviewTIRCardV1: View {
 
     @EnvironmentObject private var healthStore: HealthStore
     @EnvironmentObject private var settings: SettingsModel
     @EnvironmentObject private var appState: AppState
+
+    // UPDATED: central bubble presenter from PremiumOverviewViewV1
+    @Environment(\.presentInfoBubble) private var presentInfoBubble
 
     private let cardPadding: CGFloat = 16
     private let gapTirValueToBar: CGFloat = 3
@@ -85,36 +87,26 @@ private extension GlucoseOverviewTIRCardV1 {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Color.Glu.primaryBlue.opacity(0.70))
 
+            // UPDATED: TipInlineButton no longer uses TipKit; central bubble is still used
             TipInlineButton(
-                tip: Last24HoursCGMTip(),
-                learnMoreTitle: "Learn more in Settings",
-                frameColor: Color.Glu.primaryBlue,
-                onLearnMore: {
-                    appState.currentStatsScreen = .none
-                    appState.settingsStartDomain = .metabolic
-                    appState.currentStatsScreen = .none
-                    appState.requestedTab = .home
+                onTap: {
+                    presentInfoBubble(
+                        PremiumOverviewViewV1.InfoBubble(
+                            title: "Time in Range (24h)",
+                            message:
+                                "This metric uses the most recent CGM readings available in Apple Health. "
+                                + "Due to system synchronization, newer readings may appear with a short delay. "
+                                + "Details are available in the FAQs.",
+                            primaryTitle: "OK",
+                            secondaryTitle: "Open FAQs",
+                            secondaryAction: .openFAQ
+                        )
+                    )
                 }
             )
+
             Spacer()
         }
-    }
-}
-
-// MARK: - Tip (local to this Card; no global coupling)
-
-private struct Last24HoursCGMTip: Tip {
-
-    var title: Text {
-        Text("Last 24 Hours (24h)")
-    }
-
-    var message: Text? {
-        Text("For accuracy, CGM metrics labeled (24h) are based on the latest fully available readings from Apple Health. Newer readings may appear with a short delay.")
-    }
-
-    var image: Image? {
-        Image(systemName: "info.circle")
     }
 }
 
@@ -132,7 +124,7 @@ private extension GlucoseOverviewTIRCardV1 {
             let startDate = cal.date(byAdding: .day, value: -6, to: endDate)
         else { return [] }
 
-        // !!! UPDATED: Use Overview-lightweight 7-day series (NOT dailyTIR90) to avoid missing data in Overview
+        // Use Overview-lightweight 7-day series (fallback to dailyTIR90 only if empty)
         let source = healthStore.overviewTIRDaily7FullDays.isEmpty
             ? healthStore.dailyTIR90
             : healthStore.overviewTIRDaily7FullDays
@@ -418,9 +410,6 @@ private struct TriangleMarker: Shape {
     let store = HealthStore.preview()
     store.last24hTIRInRangeMinutes = 900
     store.last24hTIRCoverageMinutes = 1200
-
-    // Optional: if you want to see bars in preview, fill overview series:
-    // store.overviewTIRDaily7FullDays = [...]
 
     let state = AppState()
 

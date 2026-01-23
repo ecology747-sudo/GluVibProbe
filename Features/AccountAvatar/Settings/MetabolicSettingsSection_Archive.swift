@@ -10,7 +10,7 @@
 
 import SwiftUI
 
-struct MetabolicSettingsSection: View {
+struct MetabolicSettingsSection_Archive: View {
 
     @Binding var isInsulinTreated: Bool
     @Binding var hasCGM: Bool

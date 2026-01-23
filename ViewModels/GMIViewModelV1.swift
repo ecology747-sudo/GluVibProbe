@@ -70,7 +70,7 @@ final class GMIViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // !!! UPDATED: HYBRID Periods derive from (dailyGlucoseStats90 + today RAW)
+        // HYBRID Periods derive from (dailyGlucoseStats90 + today RAW)
         Publishers.CombineLatest3(
             healthStore.$dailyGlucoseStats90,
             healthStore.$todayGlucoseMeanMgdl,
@@ -87,8 +87,6 @@ final class GMIViewModelV1: ObservableObject {
     private func syncFromStores() {
         last24hGmiPercent = Self.computeGmiPercent(fromMeanMgdl: healthStore.last24hGlucoseMeanMgdl)
         todayGmiPercent   = Self.computeGmiPercent(fromMeanMgdl: healthStore.todayGlucoseMeanMgdl)
-
-        // !!! UPDATED: HYBRID init compute
         recomputeHybridPeriods()
     }
 
@@ -98,7 +96,6 @@ final class GMIViewModelV1: ObservableObject {
 
     var formattedLast24hGMI: String { formatPercent1(last24hGmiPercent) }
     var formattedTodayGMI: String { formatPercent1(todayGmiPercent) }
-
     var formatted90dGMI: String { formatPercent1(gmi90dPercent) }
 
     // ============================================================
@@ -115,7 +112,7 @@ final class GMIViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - HYBRID compute
+    // MARK: - HYBRID compute (SSoT)
     // ============================================================
 
     private func recomputeHybridPeriods() {
@@ -143,7 +140,6 @@ final class GMIViewModelV1: ObservableObject {
         let pastDays = max(0, days - 1)
         let pastStart = cal.date(byAdding: .day, value: -pastDays, to: todayStart) ?? todayStart
 
-        // (days-1) from DailyStats90, excluding today
         let pastEntries = healthStore.dailyGlucoseStats90
             .filter { $0.date >= pastStart && $0.date < todayStart }
             .sorted { $0.date < $1.date }
@@ -158,7 +154,6 @@ final class GMIViewModelV1: ObservableObject {
             coverageSum += c
         }
 
-        // + Today from RAW KPI
         if let todayMean = healthStore.todayGlucoseMeanMgdl, todayMean > 0 {
             let todayCoverage = max(0, healthStore.todayGlucoseCoverageMinutes)
             if todayCoverage > 0 {
@@ -169,6 +164,16 @@ final class GMIViewModelV1: ObservableObject {
 
         guard coverageSum > 0 else { return nil }
         return weightedSum / Double(coverageSum)
+    }
+
+    // ============================================================
+    // MARK: - Report Access (SSoT passthrough)
+    // ============================================================
+
+    /// Exposes the exact same HYBRID mean used for GMI.
+    /// Report must call THIS – no own computation.
+    func hybridMeanMgdl(days: Int) -> Double? {
+        computeHybridMeanMgdl(days: days)
     }
 
     // ============================================================

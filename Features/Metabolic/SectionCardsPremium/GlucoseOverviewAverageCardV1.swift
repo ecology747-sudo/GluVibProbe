@@ -14,55 +14,57 @@
 
 import SwiftUI
 import Charts
-import TipKit
 
 struct GlucoseOverviewAverageCardV1: View {
-    
+
     @EnvironmentObject private var healthStore: HealthStore
     @EnvironmentObject private var settings: SettingsModel
     @EnvironmentObject private var appState: AppState
-    
+
+    // UPDATED: central bubble presenter from PremiumOverviewViewV1
+    @Environment(\.presentInfoBubble) private var presentInfoBubble
+
     private let cardPadding: CGFloat = 16
     private let gapHeaderToGlucose: CGFloat = 10
     private let gapGlucoseValueToBar: CGFloat = 3
     private let gapToMiniChart: CGFloat = 12
-    
+
     // Chart Scale (Settings-driven)
     private var chartMaxGlucoseMgdl: Double {
         let padded = Double(settings.veryHighLimit) + 20
         return max(300, padded)
     }
-    
+
     // Glucose Unit (display-only)
     private var avgGlucoseDisplayText: String {
         let mgdl = healthStore.last24hGlucoseMeanMgdl ?? 0
         let digits = (settings.glucoseUnit == .mgdL) ? 0 : 1
         return settings.glucoseUnit.formattedNumber(fromMgdl: mgdl, fractionDigits: digits)
     }
-    
+
     private var avgGlucoseUnitText: String { settings.glucoseUnit.label }
-    
+
     // 7-day data (Overview-series; UI-only mapping)
     private var last7DaysMeanEntries: [GlucoseMiniTrendEntry] {
         buildLast7DaysMeanEntries()
     }
-    
+
     var body: some View {
-        
+
         Button {
             // Navigate to IG metric
-            appState.currentStatsScreen = .ig          // !!! NEW
-            appState.requestedTab = .home              // !!! NEW (sicherstellen, dass du im Home/Metabolic Kontext bist)
+            appState.currentStatsScreen = .ig
+            appState.requestedTab = .home
         } label: {
-            
+
             VStack(alignment: .leading, spacing: 0) {
-                
+
                 header
                 Gap(gapHeaderToGlucose)
-                
+
                 VStack(alignment: .leading, spacing: 0) {
                     Gap(gapGlucoseValueToBar)
-                    
+
                     GlucoseFiveZoneBar(
                         valueMgdl: healthStore.last24hGlucoseMeanMgdl ?? 0,
                         maxMgdl: chartMaxGlucoseMgdl,
@@ -70,9 +72,9 @@ struct GlucoseOverviewAverageCardV1: View {
                         unitText: avgGlucoseUnitText
                     )
                 }
-                
+
                 Gap(gapToMiniChart)
-                
+
                 GlucoseMiniTrendChart(
                     data: last7DaysMeanEntries,
                     domainColor: Color.Glu.metabolicDomain
@@ -82,9 +84,10 @@ struct GlucoseOverviewAverageCardV1: View {
             .padding(cardPadding)
             .gluVibCardFrame(domainColor: Color.Glu.metabolicDomain)
         }
-        .buttonStyle(.plain) // !!! NEW (keine Button-Optik)
+        .buttonStyle(.plain)
     }
 }
+
 // MARK: - Header
 
 private extension GlucoseOverviewAverageCardV1 {
@@ -104,15 +107,21 @@ private extension GlucoseOverviewAverageCardV1 {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Color.Glu.primaryBlue.opacity(0.70))
 
+            // UPDATED: TipInlineButton no longer uses TipKit; central bubble is used
             TipInlineButton(
-                tip: Last24HoursCGMTip(),
-                learnMoreTitle: "Learn more in Settings",
-                frameColor: Color.Glu.primaryBlue,
-                onLearnMore: {
-                    appState.currentStatsScreen = .none
-                    appState.settingsStartDomain = .metabolic
-                    appState.currentStatsScreen = .none
-                    
+                onTap: {
+                    presentInfoBubble(
+                        PremiumOverviewViewV1.InfoBubble(
+                            title: "Last 24 Hours (24h)",
+                            message:
+                                "This metric uses the most recent CGM readings available in Apple Health. "
+                                + "Due to system synchronization, newer readings may appear with a short delay. "
+                                + "Details are available in the FAQs.",
+                            primaryTitle: "OK",
+                            secondaryTitle: "Open FAQs",
+                            secondaryAction: .openFAQ
+                        )
+                    )
                 }
             )
 
@@ -129,19 +138,6 @@ private extension GlucoseOverviewAverageCardV1 {
     }
 }
 
-// MARK: - Tip (local to this Card; no global coupling)
-
-private struct Last24HoursCGMTip: Tip {
-
-    var title: Text { Text("Last 24 Hours (24h)") }
-
-    var message: Text? {
-        Text("For accuracy, CGM metrics labeled (24h) are based on the latest fully available CGM readings from Apple Health. Newer readings may appear with a short delay.")
-    }
-
-    var image: Image? { Image(systemName: "info.circle") }
-}
-
 // MARK: - 7-day builder (yesterday + 6 before)
 
 private extension GlucoseOverviewAverageCardV1 {
@@ -150,7 +146,7 @@ private extension GlucoseOverviewAverageCardV1 {
 
         let cal = Calendar.current
 
-        // !!! UPDATED: Overview must use the dedicated 7-full-days series (yesterday…-6), NOT dailyGlucoseStats90
+        // Overview must use the dedicated 7-full-days series (yesterday…-6), NOT dailyGlucoseStats90
         let src = healthStore.overviewGlucoseDaily7FullDays
 
         return src
@@ -459,12 +455,11 @@ private struct TriangleMarker: Shape {
         return p
     }
 }
+
 // MARK: - Preview
 
 #Preview("GlucoseOverviewAverageCardV1") {
 
-    // ✅ FIX: keine Statements im Preview-Builder,
-    // sondern eine Expression, die einen konfigurierten Store zurückgibt.
     let store: HealthStore = {
         let s = HealthStore.preview()
         s.last24hGlucoseMeanMgdl = 136

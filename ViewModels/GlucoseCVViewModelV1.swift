@@ -94,6 +94,28 @@ final class GlucoseCVViewModelV1: ObservableObject {
     }
 
     // ============================================================
+    // MARK: - Report Access (SSoT passthrough)  // UPDATED
+    // ============================================================
+
+    /// Report expects a pure numeric CV text WITHOUT '%' (unit is rendered in ReportRangeSectionView).
+    func cvTextForReport(windowDays: Int) -> String { // UPDATED
+        let v: Double
+        switch windowDays {
+        case 7:  v = averageCVPercent(last: 7)
+        case 14: v = averageCVPercent(last: 14)
+        case 30: v = averageCVPercent(last: 30)
+        case 90: v = averageCVPercent(last: 90)
+        default: return "–"
+        }
+        return formatOneDecimalNumberOnly(v) // UPDATED
+    }
+
+    private func formatOneDecimalNumberOnly(_ value: Double) -> String { // UPDATED
+        guard value > 0 else { return "–" }
+        return String(format: "%.1f", value)
+    }
+
+    // ============================================================
     // MARK: - Chart Adapter (Daily)
     // ============================================================
 

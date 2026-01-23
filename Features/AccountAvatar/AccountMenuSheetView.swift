@@ -18,15 +18,24 @@ struct AccountMenuSheetView: View {
     let onOpenSettings: (_ startDomain: SettingsDomain) -> Void
     let onOpenHelp: () -> Void
     let onOpenManage: () -> Void
+    let onOpenFAQ: () -> Void
+    let onOpenAppInfo: () -> Void
+    let onOpenLegal: () -> Void // UPDATED
 
     init(
         onOpenSettings: @escaping (_ startDomain: SettingsDomain) -> Void = { _ in },
         onOpenHelp: @escaping () -> Void = { },
-        onOpenManage: @escaping () -> Void = { }
+        onOpenManage: @escaping () -> Void = { },
+        onOpenFAQ: @escaping () -> Void = { },
+        onOpenAppInfo: @escaping () -> Void = { },
+        onOpenLegal: @escaping () -> Void = { } // UPDATED
     ) {
         self.onOpenSettings = onOpenSettings
         self.onOpenHelp = onOpenHelp
         self.onOpenManage = onOpenManage
+        self.onOpenFAQ = onOpenFAQ
+        self.onOpenAppInfo = onOpenAppInfo
+        self.onOpenLegal = onOpenLegal // UPDATED
     }
 
     // MARK: - Status logic (capability-aligned)
@@ -37,7 +46,7 @@ struct AccountMenuSheetView: View {
     }
 
     private var statusTitle: String {
-        isPremiumUser ? "Premium User" : "Free App"
+        isPremiumUser ? "Premium" : "Free"
     }
 
     private var statusIcon: String {
@@ -49,14 +58,14 @@ struct AccountMenuSheetView: View {
     }
 
     private var insulinMetricsLine: String {
-        "Status: Insulin Metrics \(settings.isInsulinTreated ? "On" : "Off")"
+        "Insulin Metrics: \(settings.isInsulinTreated ? "On" : "Off")"
     }
 
     var body: some View {
         VStack(spacing: 0) {
 
             // ====================================================
-            // MARK: - Avatar + Status
+            // MARK: - Avatar + App Status
             // ====================================================
 
             VStack(spacing: 8) {
@@ -71,6 +80,11 @@ struct AccountMenuSheetView: View {
                     )
                     .padding(.top, 14)
 
+                Text("App Status")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.Glu.primaryBlue)
+                    .padding(.top, 2)
+
                 VStack(spacing: 6) {
                     HStack(spacing: 8) {
                         Image(systemName: statusIcon)
@@ -82,12 +96,14 @@ struct AccountMenuSheetView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                    Text(insulinMetricsLine)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.Glu.primaryBlue)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                    if isPremiumUser {
+                        Text(insulinMetricsLine)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.Glu.primaryBlue)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
                 }
-                .padding(.top, 6)
+                .padding(.top, 4)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 4)
             }
@@ -111,13 +127,13 @@ struct AccountMenuSheetView: View {
                     Button {
                         onOpenManage()
                     } label: {
-                        Label("Manage Account", systemImage: "person.crop.circle")
+                        Label("Manage App Status", systemImage: "person.crop.circle")
                     }
                 }
 
                 Section {
                     Button {
-                        // placeholder (FAQ)
+                        onOpenFAQ()
                     } label: {
                         Label("Frequently Asked Questions", systemImage: "questionmark.circle")
                     }
@@ -129,13 +145,13 @@ struct AccountMenuSheetView: View {
                     }
 
                     Button {
-                        // placeholder (App Info)
+                        onOpenAppInfo()
                     } label: {
                         Label("App Info", systemImage: "info.circle")
                     }
 
-                    Button {
-                        // placeholder (Legal)
+                    Button { // UPDATED
+                        onOpenLegal() // UPDATED
                     } label: {
                         Label("Legal Information", systemImage: "doc.text")
                     }
@@ -155,7 +171,10 @@ struct AccountMenuSheetView: View {
     AccountMenuSheetView(
         onOpenSettings: { _ in },
         onOpenHelp: { },
-        onOpenManage: { }
+        onOpenManage: { },
+        onOpenFAQ: { },
+        onOpenAppInfo: { },
+        onOpenLegal: { }
     )
     .environmentObject(AppState())
     .environmentObject(SettingsModel.shared)

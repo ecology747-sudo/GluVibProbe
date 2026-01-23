@@ -35,6 +35,24 @@ struct HistoryOverviewViewV1: View {
     @State private var hasScrolled: Bool = false
     @State private var didInitialLoad: Bool = false
 
+    // ============================================================
+    // MARK: - History Metric Picker (MainChart-style)
+    // ============================================================
+
+    @State private var showActivity: Bool = true
+    @State private var showCarbs: Bool = true
+    @State private var showWeight: Bool = true
+    @State private var showBolus: Bool = true
+    @State private var showBasal: Bool = true
+    @State private var showCGM: Bool = true              // controls glucose markers + CGM-dependent UI
+
+    private var isTherapyEnabled: Bool {                 // matches MainChart gating
+        settings.hasCGM && settings.isInsulinTreated
+    }
+
+    // UPDATED: must match OverviewHeader height so pinned header sticks BELOW it
+    private let overviewHeaderHeight: CGFloat = 44
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -50,7 +68,8 @@ struct HistoryOverviewViewV1: View {
             ZStack(alignment: .top) {
 
                 ScrollView {
-                    VStack(spacing: 16) {
+                    // Sticky Metric-Picker via pinned section header (Apple-conform)
+                    LazyVStack(spacing: contentSpacing, pinnedViews: [.sectionHeaders]) {
 
                         GeometryReader { geo in
                             Color.clear
@@ -61,23 +80,36 @@ struct HistoryOverviewViewV1: View {
                         }
                         .frame(height: 0)
 
-                        // ✅ Embedding the rows-only HistoryView (no duplicated layout/UI logic elsewhere)
-                        HistoryView(
-                            sections: sectionedEvents,
-                            isChartEnabled: settings.hasCGM,
-                            onTapDayChart: { dayStart in
-                                routeToMainChart(for: dayStart)
-                            },
-                            onTapMetric: { route in
-                                routeToMetric(route)
-                            },
-                            onTapOverview: { route in
-                                routeToOverview(route)
-                            }
-                        )
+                        Section {
+                            // ✅ Embedding the rows-only HistoryView (no duplicated layout/UI logic elsewhere)
+                            HistoryView(
+                                sections: sectionedEvents,
+                                isChartEnabled: settings.hasCGM,
+                                onTapDayChart: { dayStart in
+                                    routeToMainChart(for: dayStart)
+                                },
+                                onTapMetric: { route in
+                                    routeToMetric(route)
+                                },
+                                onTapOverview: { route in
+                                    routeToOverview(route)
+                                }
+                            )
+                        } header: {
+                            historyMetricPicker
+                                .padding(.horizontal, 16)
+                                .padding(.top, 2)
+                                .padding(.bottom, pickerBottomPadding)
+                                .background(pinnedHeaderBackground)
+                        }
                     }
-                    .padding(.top, 30)
+                    // UPDATED: tighter top padding because safeAreaInset reserves the header height
+                    .padding(.top, topContentPadding)
                     .padding(.bottom, 24)
+                }
+                // UPDATED: reserve space INSIDE the scroll view so pinned header never hides under OverviewHeader
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    Color.clear.frame(height: overviewHeaderHeight)
                 }
                 .refreshable {
                     await healthStore.refreshHistory(.pullToRefresh)
@@ -86,6 +118,15 @@ struct HistoryOverviewViewV1: View {
                     withAnimation(.easeInOut(duration: 0.22)) {
                         hasScrolled = offset < 0
                     }
+                }
+                .onAppear {
+                    applyGatingIfNeeded()
+                }
+                .onChange(of: settings.hasCGM) { _ in
+                    applyGatingIfNeeded()
+                }
+                .onChange(of: settings.isInsulinTreated) { _ in
+                    applyGatingIfNeeded()
                 }
 
                 OverviewHeader(
@@ -106,6 +147,187 @@ struct HistoryOverviewViewV1: View {
         }
     }
 
+    // ============================================================
+    // MARK: - Layout Helpers (Sticky Picker + Tight Spacing)
+    // ============================================================
+
+    private var topContentPadding: CGFloat {
+        // UPDATED: when only 1 picker row, move content up (less air above chips)
+        settings.hasCGM ? 12 : 6
+    }
+
+    private var contentSpacing: CGFloat {
+        // keep sections visually compact when CGM is OFF (1 row)
+        settings.hasCGM ? 16 : 10
+    }
+
+    private var pickerBottomPadding: CGFloat {
+        // remove “empty line” feeling when only 1 row
+        settings.hasCGM ? 6 : 0
+    }
+
+    private var pinnedHeaderBackground: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.92))
+            .blur(radius: 10)
+    }
+
+    // ============================================================
+    // MARK: - Picker UI (MainChart-style)
+    // ============================================================
+
+    private var historyMetricPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+
+            GeometryReader { geo in
+                let spacing: CGFloat = 12
+                let columns: CGFloat = 3
+                let chipWidth = (geo.size.width - spacing * (columns - 1)) / columns
+
+                VStack(alignment: .leading, spacing: 12) {
+
+                    // Row 1 (3 fixed)
+                    HStack(spacing: spacing) {
+                        historyChip("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
+                            .frame(width: chipWidth)
+
+                        historyChip("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
+                            .frame(width: chipWidth)
+
+                        historyChip("Weight", isOn: $showWeight, accent: Color.Glu.bodyDomain)
+                            .frame(width: chipWidth)
+                    }
+
+                    // Row 2 renders ONLY when CGM is enabled
+                    if settings.hasCGM {
+                        HStack(spacing: spacing) {
+
+                            if isTherapyEnabled {
+
+                                historyChip("Bolus", isOn: $showBolus, accent: Color("acidBolusDarkGreen"))
+                                    .frame(width: chipWidth)
+
+                                historyChip("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                                    .frame(width: chipWidth)
+
+                                historyChip("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                    .frame(width: chipWidth)
+
+                            } else {
+
+                                Color.clear.frame(width: chipWidth, height: 1)
+
+                                historyChip("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                    .frame(width: chipWidth)
+
+                                Color.clear.frame(width: chipWidth, height: 1)
+                            }
+                        }
+                    }
+                }
+                .frame(width: geo.size.width, alignment: .leading)
+            }
+            // Dynamic height (1 row when CGM OFF, 2 rows when CGM ON)
+            .frame(height: settings.hasCGM ? 82 : 44)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func historyChip(_ title: String, isOn: Binding<Bool>, accent: Color) -> some View {
+        let isActive = isOn.wrappedValue
+
+        return Button {
+            isOn.wrappedValue.toggle()
+        } label: {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .layoutPriority(1)
+                .padding(.vertical, 5)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(HistoryMetricChipLookalikeStyle(accent: accent, isActive: isActive))
+    }
+
+    private struct HistoryMetricChipLookalikeStyle: ButtonStyle {
+
+        let accent: Color
+        let isActive: Bool
+
+        func makeBody(configuration: Configuration) -> some View {
+
+            let visualActive = isActive || configuration.isPressed
+
+            let strokeColor: Color = visualActive
+            ? Color.white.opacity(0.90)
+            : accent.opacity(0.90)
+
+            let lineWidth: CGFloat = visualActive ? 1.6 : 1.2
+
+            let backgroundFill: some ShapeStyle = visualActive
+            ? LinearGradient(
+                colors: [accent.opacity(0.95), accent.opacity(0.75)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            : LinearGradient(
+                colors: [Color.clear, Color.clear],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            let shadowOpacity: Double = visualActive ? 0.25 : 0.15
+            let shadowRadius: CGFloat = visualActive ? 4 : 2.5
+            let shadowYOffset: CGFloat = visualActive ? 2 : 1.5
+
+            return configuration.label
+                .background(Capsule().fill(backgroundFill))
+                .overlay(Capsule().stroke(strokeColor, lineWidth: lineWidth))
+                .shadow(
+                    color: Color.black.opacity(shadowOpacity),
+                    radius: shadowRadius,
+                    x: 0,
+                    y: shadowYOffset
+                )
+                .foregroundStyle(visualActive ? Color.white : Color.Glu.primaryBlue.opacity(0.95))
+                .scaleEffect(visualActive ? 1.05 : 1.0)
+                .animation(.easeOut(duration: 0.15), value: visualActive)
+        }
+    }
+
+    // ============================================================
+    // MARK: - Apply Gating (Display-only)
+    // ============================================================
+
+    // NEW: remembers if we forced CGM off due to hasCGM == false
+    @State private var didForceDisableCGM: Bool = false
+
+    @MainActor
+    private func applyGatingIfNeeded() {
+
+        // If CGM is OFF, force-disable CGM + therapy and remember it was forced
+        if !settings.hasCGM {
+            if showCGM { didForceDisableCGM = true }   // NEW
+            showCGM = false
+            showBolus = false
+            showBasal = false
+            return
+        }
+
+        // If CGM is back ON and we previously forced CGM off, restore default ON
+        if settings.hasCGM, didForceDisableCGM {       // NEW
+            showCGM = true
+            didForceDisableCGM = false
+        }
+
+        // If Therapy is NOT enabled, force therapy chips OFF
+        if !isTherapyEnabled {
+            showBolus = false
+            showBasal = false
+        }
+    }
     // MARK: - Routing
 
     private func routeToMainChart(for dayStart: Date) {
@@ -159,9 +381,9 @@ struct HistoryOverviewViewV1: View {
             appState.currentStatsScreen = .basal
             appState.requestedTab = .home
 
-        case .weight:                          // ✅ NEW
-                    appState.currentStatsScreen = .weight
-                    appState.requestedTab = .body
+        case .weight:
+            appState.currentStatsScreen = .weight
+            appState.requestedTab = .body
         }
     }
 
@@ -173,7 +395,9 @@ struct HistoryOverviewViewV1: View {
         return min(0, max(-9, delta))
     }
 
-    // MARK: - Sectioning (10 days)
+    // ============================================================
+    // MARK: - Sectioning (10 days) + Metric Filtering
+    // ============================================================
 
     private var sectionedEvents: [HistoryDaySection] {
 
@@ -181,7 +405,10 @@ struct HistoryOverviewViewV1: View {
         let today = cal.startOfDay(for: Date())
         let yesterday = cal.date(byAdding: .day, value: -1, to: today) ?? today
 
-        let grouped = Dictionary(grouping: viewModel.events) { e in
+        // display-only filter (visibility) + CGM marker stripping
+        let filtered = filteredEventsForDisplay(viewModel.events)
+
+        let grouped = Dictionary(grouping: filtered) { e in
             cal.startOfDay(for: e.timestamp)
         }
 
@@ -206,6 +433,55 @@ struct HistoryOverviewViewV1: View {
                     items: items.sorted { $0.timestamp > $1.timestamp }
                 )
             }
+    }
+
+    private func filteredEventsForDisplay(_ input: [HistoryListEvent]) -> [HistoryListEvent] {
+
+        let allowCGMMarkers = settings.hasCGM && showCGM
+
+        return input.compactMap { e in
+
+            // 1) Visibility per metric toggle + premium gating (DISPLAY ONLY)
+            switch e.metricRoute {
+
+            case .workoutMinutes:
+                guard showActivity else { return nil }
+
+            case .carbs:
+                guard showCarbs else { return nil }
+
+            case .weight:
+                guard showWeight else { return nil }
+
+            case .bolus:
+                guard isTherapyEnabled, showBolus else { return nil }
+
+            case .basal:
+                guard isTherapyEnabled, showBasal else { return nil }
+            }
+
+            // 2) If CGM OFF (or CGM chip OFF), strip markers everywhere
+            if allowCGMMarkers {
+                return e
+            } else {
+                let m = e.cardModel
+                let stripped = HistoryEventRowCardModel(
+                    domain: m.domain,
+                    titleText: m.titleText,
+                    detailText: m.detailText,
+                    timeText: m.timeText,
+                    glucoseMarkers: [],
+                    contextHint: m.contextHint
+                )
+
+                return HistoryListEvent(
+                    timestamp: e.timestamp,
+                    cardModel: stripped,
+                    metricRoute: e.metricRoute,
+                    overviewRoute: e.overviewRoute
+                )
+            }
+        }
     }
 }
 

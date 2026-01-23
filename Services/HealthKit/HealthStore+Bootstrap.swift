@@ -98,6 +98,37 @@ extension HealthStore {
         await refreshNutritionChartsAndHistory()
         await refreshNutritionSecondary()
     }
+    
+    // ============================================================
+    // MARK: - Report (Bootstrap Orchestration)
+    // ============================================================
+
+   
+
+        @MainActor
+        func refreshMetabolicReport(_ context: RefreshContext = .pullToRefresh, windowDays: Int) async { // UPDATED
+            if isPreview { return }
+
+            // 1) RAW3DAYS (Today/Yesterday/DayBefore) – needed for Today RAW KPIs + cache
+            await refreshMetabolicTodayRaw3DaysV1(refreshSource: "bootstrap-report-\(context.rawValue)")
+
+            // 2) RANGE Hybrid (needs RAW3DAYS: cgmSamples3Days)
+            let s = SettingsModel.shared
+            let thresholds = RangeThresholds(
+                glucoseMin: s.glucoseMin,
+                glucoseMax: s.glucoseMax,
+                veryLowLimit: s.veryLowLimit,
+                veryHighLimit: s.veryHighLimit
+            )
+            await refreshRangeHybridV1Async(thresholds: thresholds)
+
+            // 3) DailyStats90 (heavy) – deterministic basis for period KPIs / GMI hybrid
+            await refreshMetabolicDailyStats90V1(refreshSource: "bootstrap-report-\(context.rawValue)")
+
+            // 4) Deterministic gate (optional but recommended for Report consistency)
+            await awaitHybridGlucoseReadyV1()
+        }
+    
 
     // ============================================================
     // MARK: - Metabolic Domain (Bootstrap Orchestration)

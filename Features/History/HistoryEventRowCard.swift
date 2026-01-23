@@ -81,6 +81,7 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
         case plus60
         case plus30AfterEnd
         case plus60AfterEnd
+        case noData
 
         var label: String {
             switch self {
@@ -89,6 +90,7 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
             case .plus60: return "+60"
             case .plus30AfterEnd: return "E+30"
             case .plus60AfterEnd: return "E+60"
+            case .noData: return ""
             }
         }
     }
@@ -331,7 +333,7 @@ private struct LeadingIcon: View {
 
 private struct HistoryEventGlucoseRow: View {
 
-    let title: String                    // !!! NEW
+    let title: String
     let markers: [HistoryEventRowCardModel.GlucoseMarker]
     let accent: Color
 
@@ -341,7 +343,7 @@ private struct HistoryEventGlucoseRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
 
-            Text(title)                  // !!! UPDATED
+            Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(primaryBlueSecondary)
 
@@ -354,11 +356,13 @@ private struct HistoryEventGlucoseRow: View {
     }
 
     private func glucoseChip(label: String, valueText: String, accent: Color) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: label.isEmpty ? 0 : 6) {                    // ✅ UPDATED
 
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(primaryBlueSecondary)
+            if !label.isEmpty {                                     // ✅ UPDATED
+                Text(label)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(primaryBlueSecondary)
+            }
 
             Text(valueText)
                 .font(.caption2.weight(.semibold))
@@ -394,6 +398,22 @@ private struct HistoryEventGlucoseRow: View {
                     .init(kind: .start, valueText: "128"),
                     .init(kind: .plus30AfterEnd, valueText: "112"),
                     .init(kind: .plus60AfterEnd, valueText: "104")
+                ],
+                contextHint: nil,
+                glucoseRowTitleText: "Glucose (mg/dL)"
+            ),
+            onTapTile: {}
+        )
+
+        // ✅ NEW: No-data marker preview
+        HistoryEventRowCard(
+            model: .init(
+                domain: .metabolic,
+                titleText: "Bolus",
+                detailText: "4.0 U",
+                timeText: "02:10",
+                glucoseMarkers: [
+                    .init(kind: .noData, valueText: "No CGM data")
                 ],
                 contextHint: nil,
                 glucoseRowTitleText: "Glucose (mg/dL)"

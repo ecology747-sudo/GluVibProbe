@@ -790,4 +790,31 @@ extension HealthStore {
 
         return out
     }
-}
+    
+    // ============================================================
+    // MARK: - HYBRID Snapshot Gate (Report / GMI consistency)
+    // ============================================================
+
+ 
+
+        /// Blocks until all HYBRID glucose inputs are guaranteed ready.
+        /// Required for deterministic Report vs Metric consistency.
+        @MainActor
+        func awaitHybridGlucoseReadyV1() async {
+
+            while true {
+                let hasDailyStats = !dailyGlucoseStats90.isEmpty
+                let hasTodayMean  = todayGlucoseMeanMgdl != nil
+                let hasCoverage   = todayGlucoseCoverageMinutes > 0
+
+                if hasDailyStats && hasTodayMean && hasCoverage {
+                    return
+                }
+
+                // short backoff – avoids race with async HealthKit fetches
+                try? await Task.sleep(nanoseconds: 30_000_000) // 30 ms
+            }
+        }
+    }
+    
+

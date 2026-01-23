@@ -55,14 +55,14 @@ final class GlucoseSDViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Display Unit Helpers  // NEW
+    // MARK: - Display Unit Helpers
     // ============================================================
 
     var sdDisplayUnitText: String {
         settings.glucoseUnit == .mmolL ? "mmol/L" : "mg/dL"
     }
 
-    private func sdDisplayValue(fromMgdl mgdl: Double, fractionDigits: Int) -> Double {
+    private func sdDisplayValue(fromMgdl mgdl: Double) -> Double {
         guard mgdl > 0 else { return 0 }
         if settings.glucoseUnit == .mmolL {
             return mgdl / 18.0182
@@ -71,20 +71,20 @@ final class GlucoseSDViewModelV1: ObservableObject {
         }
     }
 
-    private func formattedWhole(_ mgdl: Double) -> String {
+    private func formattedWholeNumberOnly(_ mgdl: Double) -> String {
         guard mgdl > 0 else { return "–" }
         if settings.glucoseUnit == .mmolL {
-            let v = sdDisplayValue(fromMgdl: mgdl, fractionDigits: 1)
+            let v = sdDisplayValue(fromMgdl: mgdl)
             return String(format: "%.1f", v)
         } else {
             return "\(Int(mgdl.rounded()))"
         }
     }
 
-    private func formattedOneDecimal(_ mgdl: Double) -> String {
+    private func formattedOneDecimalNumberOnly(_ mgdl: Double) -> String {
         guard mgdl > 0 else { return "–" }
         if settings.glucoseUnit == .mmolL {
-            let v = sdDisplayValue(fromMgdl: mgdl, fractionDigits: 1)
+            let v = sdDisplayValue(fromMgdl: mgdl)
             return String(format: "%.1f", v)
         } else {
             return String(format: "%.1f", mgdl)
@@ -96,19 +96,19 @@ final class GlucoseSDViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodaySD: String {
-        formatSd(sdMgdl: todaySdMgdl)
+        formatSdWithUnit(sdMgdl: todaySdMgdl)
     }
 
     var formattedLast24hSD: String {
-        formatSd(sdMgdl: last24hSdMgdl)
+        formatSdWithUnit(sdMgdl: last24hSdMgdl)
     }
 
     var formatted90dSD: String {
         let v = averageSDMgdl(last: 90)
-        return v > 0 ? formatSd(sdMgdl: v) : "–"
+        return v > 0 ? formatSdWithUnit(sdMgdl: v) : "–"
     }
 
-    private func formatSd(sdMgdl: Double) -> String {
+    private func formatSdWithUnit(sdMgdl: Double) -> String {
         guard sdMgdl > 0 else { return "–" }
         if settings.glucoseUnit == .mmolL {
             let mmol = sdMgdl / 18.0182
@@ -119,20 +119,44 @@ final class GlucoseSDViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - KPI strings (Bolus-style: valueText only)  // NEW
+    // MARK: - KPI strings (Bolus-style: valueText only)
     // ============================================================
 
     var formattedTodaySDKPI: String {
-        formattedWhole(todaySdMgdl)
+        formattedWholeNumberOnly(todaySdMgdl)
     }
 
     var formattedLast24hSDKPI: String {
-        formattedWhole(last24hSdMgdl)
+        formattedWholeNumberOnly(last24hSdMgdl)
     }
 
     var formatted90dSDKPI: String {
         let v = averageSDMgdl(last: 90)
-        return formattedWhole(v)
+        return formattedWholeNumberOnly(v)
+    }
+
+    // ============================================================
+    // MARK: - Report Access (SSoT passthrough)  // UPDATED
+    // ============================================================
+
+    /// Report expects a numeric SD text WITHOUT unit (unit is rendered in ReportRangeSectionView via sdDisplayUnitText / layout rules).
+    /// - If mmol/L: 1 decimal
+    /// - If mg/dL: whole number
+    func sdTextForReport(windowDays: Int) -> String { // UPDATED
+        let vMgdl: Double
+        switch windowDays {
+        case 7:  vMgdl = averageSDMgdl(last: 7)
+        case 14: vMgdl = averageSDMgdl(last: 14)
+        case 30: vMgdl = averageSDMgdl(last: 30)
+        case 90: vMgdl = averageSDMgdl(last: 90)
+        default: return "–"
+        }
+
+        if settings.glucoseUnit == .mmolL {
+            return formattedOneDecimalNumberOnly(vMgdl) // UPDATED
+        } else {
+            return formattedWholeNumberOnly(vMgdl) // UPDATED
+        }
     }
 
     // ============================================================
@@ -160,7 +184,7 @@ final class GlucoseSDViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Scales (Daily vs Period)  // NEW
+    // MARK: - Scales (Daily vs Period)
     // ============================================================
 
     var dailyScale: MetricScaleResult {

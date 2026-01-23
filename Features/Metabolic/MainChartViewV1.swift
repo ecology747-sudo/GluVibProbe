@@ -52,8 +52,11 @@ struct MainChartViewV1: View {
     // MARK: - UI State
     // ============================================================
 
-    // !!! UPDATED: Day selection is SSoT (HealthStore), not local state
+    // Day selection is SSoT (HealthStore), not local state
     private var dayOffset: Int { healthStore.mainChartSelectedDayOffsetV1 }
+
+    // NEW: Day picker sheet (last 10 days)
+    @State private var showDayPickerSheet: Bool = false
 
     // X Zoom/Scroll (iOS 17+)
     @State private var visibleXSeconds: TimeInterval = 24 * 60 * 60
@@ -137,7 +140,6 @@ struct MainChartViewV1: View {
                 landscapeFullscreenLayout
             }
         }
-        // !!! UPDATED: ensure cache for SSoT-selected day
         .task { await initialEnsureCache() }
         .modifier(RefreshableIfNeeded(isEnabled: interactionMode == .embedded) {
             await handlePullToRefresh()
@@ -148,10 +150,21 @@ struct MainChartViewV1: View {
         .onChange(of: settings.isInsulinTreated) { _ in
             applyTherapyGatingIfNeeded()
         }
-        // !!! NEW: if History (or anyone) changes the SSoT dayOffset, ensure cache for that day
         .onChange(of: healthStore.mainChartSelectedDayOffsetV1) { _ in
             resetZoomStateForNewDay()
             Task { await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset) }
+        }
+        // NEW: last 10 days day-picker
+        .sheet(isPresented: $showDayPickerSheet) {
+            DayPickerLast10DaysSheet(
+                selectedOffset: dayOffset,
+                onSelectOffset: { newOffset in
+                    healthStore.mainChartSelectedDayOffsetV1 = newOffset
+                    showDayPickerSheet = false
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDetents([.fraction(0.75), .large])            .presentationDragIndicator(.visible)
         }
     }
 
@@ -227,10 +240,6 @@ struct MainChartViewV1: View {
     // MARK: - Header Row
     // ============================================================
 
-    // ============================================================
-    // MARK: - Header Row
-    // ============================================================
-
     private var headerRow: some View {
         ZStack {
 
@@ -238,9 +247,15 @@ struct MainChartViewV1: View {
             HStack(spacing: 14) {
                 dayNavButton(isLeft: true)
 
-                Text(dayTitleText)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                // UPDATED: date is tappable -> opens last-10-days picker
+                Button {
+                    showDayPickerSheet = true
+                } label: {
+                    Text(dayTitleText)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                }
+                .buttonStyle(.plain)
 
                 dayNavButton(isLeft: false)
             }
@@ -255,6 +270,7 @@ struct MainChartViewV1: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
     // ============================================================
     // MARK: - Empty State
     // ============================================================
@@ -589,7 +605,6 @@ struct MainChartViewV1: View {
             }()
 
             chartWithXZoom
-                
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 6)
                         .onChanged { g in
@@ -613,7 +628,6 @@ struct MainChartViewV1: View {
 
         } else {
             baseChart
-                
         }
     }
 
@@ -937,7 +951,6 @@ struct MainChartViewV1: View {
 
     private func dayNavButton(isLeft: Bool) -> some View {
         Button {
-            // !!! UPDATED: write day selection into SSoT
             if isLeft {
                 healthStore.mainChartSelectedDayOffsetV1 = max(dayOffset - 1, -9)
             } else {
@@ -964,12 +977,122 @@ struct MainChartViewV1: View {
         return dayOffset < 0
     }
 
-    // !!! NEW: central reset for zoom/drag state when day changes
     private func resetZoomStateForNewDay() {
         visibleXSeconds = 24 * 60 * 60
         yUpperBound = 300
         lastMagnificationValue = 1.0
         lastVerticalDragY = 0
+    }
+}
+
+// ============================================================
+// MARK: - Last 10 Days Sheet (Calendar-like)
+// ============================================================
+
+private struct DayPickerLast10DaysSheet: View {
+
+    let selectedOffset: Int
+    let onSelectOffset: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.calendar) private var calendar
+
+    private struct DayItem: Identifiable {
+        let id: Int               // offset (0...-9)
+        let date: Date            // startOfDay
+        let isToday: Bool
+    }
+
+    private var days: [DayItem] {
+        let todayStart = calendar.startOfDay(for: Date())
+        return (0...9).map { delta in
+            let offset = -delta
+            let date = calendar.date(byAdding: .day, value: offset, to: todayStart) ?? todayStart
+            return DayItem(
+                id: offset,
+                date: date,
+                isToday: offset == 0
+            )
+        }
+    }
+
+    private var titleText: String { "Select Day" }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+
+                Text("Last 10 days")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                    .padding(.top, 4)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(days) { item in
+                        dayCell(item)
+                    }
+                }
+
+                Spacer(minLength: 6)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
+            .navigationTitle(titleText)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func dayCell(_ item: DayItem) -> some View {
+
+        let isSelected = (item.id == selectedOffset)
+        let bg = isSelected ? Color.Glu.primaryBlue.opacity(0.10) : Color.gray.opacity(0.08)
+        let stroke = isSelected ? Color.Glu.primaryBlue.opacity(0.55) : Color.clear
+
+        return Button {
+            onSelectOffset(item.id)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.isToday ? "Today" : weekdayShort(item.date))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.85))
+
+                Text(dateMedium(item.date))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
+            .background(bg, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(stroke, lineWidth: 1.6)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.isToday ? "Today" : dateMedium(item.date))
+        .accessibilityValue(isSelected ? "Selected" : "")
+    }
+
+    private func weekdayShort(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.locale = .current
+        df.setLocalizedDateFormatFromTemplate("EEE")
+        return df.string(from: date)
+    }
+
+    private func dateMedium(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .none
+        return df.string(from: date)
     }
 }
 

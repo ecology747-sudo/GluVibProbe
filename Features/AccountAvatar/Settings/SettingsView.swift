@@ -7,7 +7,7 @@ import SwiftUI
 
 struct SettingsView: View {
 
-    @EnvironmentObject private var appState: AppState          // UPDATED
+    @EnvironmentObject private var appState: AppState
     @ObservedObject private var settings = SettingsModel.shared
     @Environment(\.dismiss) private var dismiss
 
@@ -32,40 +32,6 @@ struct SettingsView: View {
                     domainRow("Nutrition", .nutrition)
                     domainRow("Units", .units)
                 }
-
-                Section {
-                    HStack {
-                        Label("CGM", systemImage: "waveform.path.ecg")
-                            .foregroundStyle(titleColor)
-                        Spacer()
-                        Text(settings.hasCGM ? "On" : "Off")
-                            .foregroundStyle(titleColor.opacity(0.75))
-                    }
-
-                    HStack {
-                        Label("Insulin Therapy", systemImage: "syringe")
-                            .foregroundStyle(titleColor)
-                        Spacer()
-                        Text(settings.isInsulinTreated ? "On" : "Off")
-                            .foregroundStyle(titleColor.opacity(0.75))
-                    }
-                } header: {
-                    HStack {
-                        Text("Current Status")
-                        Spacer()
-                        Text("(Read Only)")
-                            .opacity(0.7)
-                    }
-                    .foregroundStyle(titleColor)
-                    .textCase(nil)
-                } footer: {
-                    Button {
-                        path.append(.metabolic)
-                    } label: {
-                        Text("You can change this in Metabolic settings.")
-                            .foregroundStyle(titleColor.opacity(0.75))
-                    }
-                }
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
@@ -84,7 +50,7 @@ struct SettingsView: View {
 
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") {
-                        handleDone() // UPDATED
+                        handleDone()
                     }
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(titleColor)
@@ -106,14 +72,13 @@ struct SettingsView: View {
     // MARK: - Done behavior (stable, matches your sheet strategy)
 
     private func handleDone() {
-        // 1) If inside Level 3: go back to Settings root list (Ebene 1 innerhalb Settings)
+        // 1) If inside Level 3: go back to Settings root list
         if !path.isEmpty {
             path.removeAll()
             return
         }
 
-        // 2) If already on Settings root: close Settings AND re-open Account sheet (Ebene 1 Account)
-        //    Avoid "double sheet in same tick" => re-open async like your pendingSettings pattern.
+        // 2) If already on Settings root: close Settings AND re-open Account sheet
         dismiss()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             appState.isAccountSheetPresented = true

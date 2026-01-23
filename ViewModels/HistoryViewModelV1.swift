@@ -150,7 +150,8 @@ final class HistoryViewModelV1: ObservableObject {
 
                 let markers: [HistoryEventRowCardModel.GlucoseMarker]
                 if showCGM, let profile {
-                    markers = glucoseMarkersForActivity(samples: profile.cgm, start: start, end: end)
+                    let computed = glucoseMarkersForActivity(samples: profile.cgm, start: start, end: end)
+                    markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: start) : computed   // UPDATED
                 } else {
                     markers = []   // ✅ NO CGM → no glucose row
                 }
@@ -184,7 +185,8 @@ final class HistoryViewModelV1: ObservableObject {
 
                 let markers: [HistoryEventRowCardModel.GlucoseMarker]
                 if showCGM {
-                    markers = glucoseMarkersForPointEvent(samples: profile.cgm, timestamp: e.timestamp)
+                    let computed = glucoseMarkersForPointEvent(samples: profile.cgm, timestamp: e.timestamp)
+                    markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: e.timestamp) : computed   // UPDATED
                 } else {
                     markers = []   // ✅ NO CGM → no glucose row
                 }
@@ -219,7 +221,8 @@ final class HistoryViewModelV1: ObservableObject {
 
                     let markers: [HistoryEventRowCardModel.GlucoseMarker]
                     if showCGM {
-                        markers = glucoseMarkersForPointEvent(samples: profile.cgm, timestamp: b.timestamp)
+                        let computed = glucoseMarkersForPointEvent(samples: profile.cgm, timestamp: b.timestamp)
+                        markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: b.timestamp) : computed   // UPDATED
                     } else {
                         markers = []   // ✅ NO CGM → no glucose row
                     }
@@ -267,6 +270,25 @@ final class HistoryViewModelV1: ObservableObject {
 
         out.sort { $0.timestamp > $1.timestamp }
         self.events = out
+    }
+
+    // ============================================================
+    // MARK: - UPDATED: Placeholder marker (Pending vs No Data)
+    // ============================================================
+
+    private func placeholderCGMMarker(forEventTimestamp ts: Date) -> [HistoryEventRowCardModel.GlucoseMarker] {
+        // "3 hours and 1 minute" window
+        let pendingWindow: TimeInterval = (3 * 3600) + 60
+        let isPending = Date().timeIntervalSince(ts) <= pendingWindow
+
+        let text = isPending ? "CGM Data Pending" : "No CGM Data"
+
+        return [
+            HistoryEventRowCardModel.GlucoseMarker(
+                kind: .noData,
+                valueText: text
+            )
+        ]
     }
 
     // ============================================================

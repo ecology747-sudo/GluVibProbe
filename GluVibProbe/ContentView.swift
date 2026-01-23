@@ -148,11 +148,12 @@ struct ContentView: View {
         // ============================================================
         // MARK: - Account Sheet Presenter (SINGLE ROOT STACK)
         // ============================================================
-        .sheet(isPresented: $appState.isAccountSheetPresented) { // UPDATED
-            AccountSheetRootView() // UPDATED
+        .sheet(isPresented: $appState.isAccountSheetPresented) {
+            AccountSheetRootView()
                 .environmentObject(appState)
-                .environmentObject(healthStore) // UPDATED
+                .environmentObject(healthStore)
                 .environmentObject(settings)
+                .tint(Color("GluPrimaryBlue")) // UPDATED: force correct tint from first frame
                 .presentationDetents([.medium, .large], selection: $accountSheetDetent)
                 .presentationDragIndicator(.visible)
         }

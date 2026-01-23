@@ -120,24 +120,46 @@ final class AppState: ObservableObject {
     @Published var settingsStartDomain: SettingsDomain = .units
 
     // ============================================================
-    // MARK: - Global Sheets (Account + Settings) // UPDATED
+    // MARK: - Global Sheets (Account + Settings)
     // ============================================================
 
-    @Published var isAccountSheetPresented: Bool = false               // UPDATED
-    @Published var isSettingsSheetPresented: Bool = false              // UPDATED
+    @Published var isAccountSheetPresented: Bool = false
+    @Published var isSettingsSheetPresented: Bool = false
 
     /// Pending intent: open Settings after Account sheet has fully dismissed.
     /// This prevents SwiftUI "double sheet in same tick" conflicts.
-    @Published var pendingSettingsStartDomain: SettingsDomain? = nil   // UPDATED
+    @Published var pendingSettingsStartDomain: SettingsDomain? = nil
 
-    func presentAccountSheet() {                                       // UPDATED
+    // ============================================================
+    // MARK: - Account Sheet Deep Links
+    // ============================================================
+
+    // UPDATED
+    enum AccountRoute: Hashable {
+        case help
+        case manage
+        case faq
+        case appInfo
+        case legal
+    }
+
+    // UPDATED: one-shot in-sheet route request (handled by AccountSheetRootView)
+    @Published var pendingAccountRoute: AccountRoute? = nil
+
+    func presentAccountSheet() {
         isAccountSheetPresented = true
     }
 
-    func requestOpenSettings(startDomain: SettingsDomain) {            // UPDATED
-        settingsStartDomain = startDomain                              // UPDATED
-        pendingSettingsStartDomain = startDomain                       // UPDATED
-        isAccountSheetPresented = false                                // UPDATED
+    func requestOpenSettings(startDomain: SettingsDomain) {
+        settingsStartDomain = startDomain
+        pendingSettingsStartDomain = startDomain
+        isAccountSheetPresented = false
+    }
+
+    // UPDATED: open Account Sheet + push destination inside sheet
+    func openAccountRoute(_ route: AccountRoute) {
+        pendingAccountRoute = route
+        isAccountSheetPresented = true
     }
 
     // ============================================================
