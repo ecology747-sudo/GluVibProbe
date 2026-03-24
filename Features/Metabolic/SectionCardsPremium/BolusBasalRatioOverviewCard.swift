@@ -2,19 +2,34 @@
 //  BolusBasalRatioOverviewCard.swift
 //  GluVibProbe
 //
-//  Metabolic V1 — Bolus/Basal Ratio Overview Card (Wrapper for MetabolicRingRowCard)
+//  Metabolic V1 — Bolus/Basal Ratio Overview Card
+//
+//  Purpose
+//  - Wraps the shared MetabolicRingRowCard for the Bolus/Basal Ratio overview section.
+//  - Shows today's bolus/basal ratio and 7d / 14d / 30d / 90d averages.
+//  - Tapping the card routes to the Bolus/Basal Ratio detail screen.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → BolusBasalRatioViewModelV1 → BolusBasalRatioOverviewCard
 //
 
 import SwiftUI
 
-// MARK: - Bolus/Basal Ratio Overview Card (Metabolic) — Wrapper for MetabolicRingRowCard
-
 struct BolusBasalRatioOverviewCard: View {
+
+    // ============================================================
+    // MARK: - State / Dependencies
+    // ============================================================
 
     @StateObject private var viewModel: BolusBasalRatioViewModelV1
 
     let onTap: () -> Void
+
     private let domainColor = Color.Glu.metabolicDomain
+
+    // ============================================================
+    // MARK: - Init
+    // ============================================================
 
     init(
         healthStore: HealthStore,
@@ -24,26 +39,37 @@ struct BolusBasalRatioOverviewCard: View {
         if let viewModel {
             _viewModel = StateObject(wrappedValue: viewModel)
         } else {
-            _viewModel = StateObject(wrappedValue: BolusBasalRatioViewModelV1(healthStore: healthStore))
+            _viewModel = StateObject(
+                wrappedValue: BolusBasalRatioViewModelV1(healthStore: healthStore)
+            )
         }
+
         self.onTap = onTap
     }
 
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
+
     var body: some View {
         MetabolicRingRowCard(
-            title: "Bolus/Basal Ratio",
-            todayLabel: "Today",
+            title: L10n.MetabolicOverviewBolusBasalRatio.cardTitle, // 🟨 UPDATED
+            todayLabel: L10n.MetabolicOverviewBolusBasalRatio.todayLabel, // 🟨 UPDATED
             todayValue: todayRatio,
             rings: [
-                .init(label: "7d",  avgValue: avgRatio(days: 7)),
-                .init(label: "14d", avgValue: avgRatio(days: 14)),
-                .init(label: "30d", avgValue: avgRatio(days: 30)),
-                .init(label: "90d", avgValue: avgRatio(days: 90))
+                .init(label: L10n.Common.period7d, avgValue: avgRatio(days: 7)),   // 🟨 UPDATED
+                .init(label: L10n.Common.period14d, avgValue: avgRatio(days: 14)), // 🟨 UPDATED
+                .init(label: L10n.Common.period30d, avgValue: avgRatio(days: 30)), // 🟨 UPDATED
+                .init(label: L10n.Common.period90d, avgValue: avgRatio(days: 90))  // 🟨 UPDATED
             ],
             accentColor: domainColor,
             onTap: onTap
         )
     }
+
+    // ============================================================
+    // MARK: - Derived Values
+    // ============================================================
 
     private var todayRatio: Double {
         Double(viewModel.todayRatioInt10) / 10.0
@@ -55,14 +81,20 @@ struct BolusBasalRatioOverviewCard: View {
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("BolusBasalRatioOverviewCard") {
     let store = HealthStore.preview()
     let vm = BolusBasalRatioViewModelV1(healthStore: store)
 
     return VStack(spacing: 16) {
-        BolusBasalRatioOverviewCard(healthStore: store, viewModel: vm, onTap: {})
+        BolusBasalRatioOverviewCard(
+            healthStore: store,
+            viewModel: vm,
+            onTap: {}
+        )
     }
     .padding()
     .background(Color.Glu.backgroundNavy)

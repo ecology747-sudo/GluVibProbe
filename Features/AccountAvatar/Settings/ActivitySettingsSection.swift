@@ -2,64 +2,87 @@
 //  ActivitySettingsSection.swift
 //  GluVibProbe
 //
-//  Domain: ACTIVITY – Daily Step Target (V1)
+//  Settings — Activity Section
+//  Purpose:
+//  - Renders the daily step target setting for the activity domain.
+//  - Uses the shared wheel picker flow for a consistent settings experience.
 //
-//  UI scaled to match Units & Body Settings
-//  - Uses the shared WheelPickerSheet (Apple-style, consistent everywhere)
-//  - No tiles / no card frames
+//  Data Flow (SSoT):
+//  - SettingsDomainCardScreen local @State -> binding -> ActivitySettingsSection -> UI
+//
+//  Key Connections:
+//  - WheelPickerSheet
+//  - dailyStepTarget binding
 //
 
 import SwiftUI
 
 struct ActivitySettingsSection: View {
 
-    // MARK: - Bindings (SSoT)
+    // ============================================================
+    // MARK: - Inputs
+    // ============================================================
 
     @Binding var dailyStepTarget: Int
 
-    // MARK: - Sheet Flags
+    // ============================================================
+    // MARK: - Local State
+    // ============================================================
 
     @State private var showStepsPicker: Bool = false
 
-    // MARK: - Units-Style Tokens (MATCH UnitsSettingsSection)
-
-    private let titleColor: Color = Color.Glu.primaryBlue
-    private let sectionTitleFont: Font = .title3.weight(.semibold)
-    private let segmentFont: Font = .body.weight(.bold)
-    private let blockSpacing: CGFloat = 14
-
-    // MARK: - Range
+    // ============================================================
+    // MARK: - Constants
+    // ============================================================
 
     private let minSteps: Int = 1_000
     private let maxSteps: Int = 30_000
     private let step: Int = 500
 
-    // MARK: - Label
+    // ============================================================
+    // MARK: - Styling
+    // ============================================================
 
-    private func stepsLabel(_ v: Int) -> String {
-        "\(v.formatted(.number.grouping(.automatic))) steps"
+    private let titleColor: Color = Color.Glu.systemForeground
+    private let sectionTitleFont: Font = .title3.weight(.semibold)
+    private let segmentFont: Font = .body.weight(.bold)
+    private let sectionSpacing: CGFloat = 18
+
+    // ============================================================
+    // MARK: - Display Mapping
+    // ============================================================
+
+    private func stepsLabel(_ value: Int) -> String { // 🟨 UPDATED
+        L10n.Avatar.ActivitySettings.stepsValue(value)
     }
 
+    // ============================================================
     // MARK: - Body
+    // ============================================================
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-
-            VStack(alignment: .leading, spacing: blockSpacing) {
-                dailyStepsRow
-            }
+        VStack(alignment: .leading, spacing: sectionSpacing) {
+            dailyStepsRow
         }
         .padding(.vertical, 6)
     }
 
-    // MARK: - Row (TYPO MATCH Units/Body)
+    // ============================================================
+    // MARK: - Local Helper Views
+    // ============================================================
 
     private var dailyStepsRow: some View {
         Button { showStepsPicker = true } label: {
             HStack {
-                Text("Daily Step Target")
-                    .font(sectionTitleFont)
-                    .foregroundColor(titleColor)
+                Text(
+                    String(
+                        localized: "Daily Step Target",
+                        defaultValue: "Daily Step Target",
+                        comment: "Section title for daily step target in activity settings"
+                    )
+                ) // 🟨 UPDATED
+                .font(sectionTitleFont)
+                .foregroundColor(titleColor)
 
                 Spacer()
 
@@ -76,11 +99,14 @@ struct ActivitySettingsSection: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showStepsPicker) {
-
             let values = Array(stride(from: minSteps, through: maxSteps, by: step))
 
             WheelPickerSheet<Int>(
-                title: "Daily Step Target",
+                title: String(
+                    localized: "Daily Step Target",
+                    defaultValue: "Daily Step Target",
+                    comment: "Wheel picker title for daily step target in activity settings"
+                ),
                 selection: $dailyStepTarget,
                 values: values,
                 valueLabel: { stepsLabel($0) },
@@ -90,14 +116,15 @@ struct ActivitySettingsSection: View {
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("ActivitySettingsSection – Wheel Picker") {
     NavigationStack {
         Form {
             ActivitySettingsSection(dailyStepTarget: .constant(10_000))
         }
-        .tint(Color.Glu.primaryBlue)
+        .tint(Color.Glu.systemForeground)
     }
 }
-

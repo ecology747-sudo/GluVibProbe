@@ -20,14 +20,14 @@ final class CarbsViewModelV1: ObservableObject {
     // MARK: - Published Outputs (View-facing) — V1 kompatibel
     // ============================================================
 
-    // KPIs
     @Published var todayCarbsGrams: Int = 0
     @Published var dailyCarbsGoalInt: Int = 0
 
-    // Chart Data
     @Published var last90DaysData: [DailyCarbsEntry] = []
     @Published var monthlyCarbsData: [MonthlyMetricEntry] = []
     @Published var carbsDaily365: [DailyCarbsEntry] = []
+
+    @Published var carbsReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies — V1 kompatibel
@@ -74,16 +74,18 @@ final class CarbsViewModelV1: ObservableObject {
             .sink { [weak self] in self?.monthlyCarbsData = $0 }
             .store(in: &cancellables)
 
-        // SSoT (heavy / Secondary)
         healthStore.$carbsDaily365
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.carbsDaily365 = $0 }
             .store(in: &cancellables)
+
+        healthStore.$carbsReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.carbsReadAuthIssueV1 = $0 }
+            .store(in: &cancellables)
     }
 
     private func bindSettings() {
-
-        // ✅ SettingsModel: dailyCarbs (Nutrition Targets)
         settings.$dailyCarbs
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.dailyCarbsGoalInt = $0 }
@@ -96,6 +98,30 @@ final class CarbsViewModelV1: ObservableObject {
         monthlyCarbsData = healthStore.monthlyCarbs
         carbsDaily365 = healthStore.carbsDaily365
         dailyCarbsGoalInt = settings.dailyCarbs
+        carbsReadAuthIssueV1 = healthStore.carbsReadAuthIssueV1
+    }
+
+    // ============================================================
+    // MARK: - Availability (Today)
+    // ============================================================
+
+    private var hasTodayDatapoint: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        let in90 = last90DaysData.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        let in365 = carbsDaily365.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        return in90 || in365
+    }
+
+    private var hasTodayPositiveCarbs: Bool {
+        todayCarbsGrams > 0
     }
 
     // ============================================================
@@ -103,6 +129,7 @@ final class CarbsViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodayCarbs: String {
+        guard hasTodayDatapoint || hasTodayPositiveCarbs else { return "–" }
         let formatted = numberFormatter.string(from: NSNumber(value: todayCarbsGrams)) ?? "\(todayCarbsGrams)"
         return "\(formatted) g"
     }
@@ -113,6 +140,7 @@ final class CarbsViewModelV1: ObservableObject {
     }
 
     var kpiDeltaText: String {
+        guard hasTodayDatapoint || hasTodayPositiveCarbs else { return "–" }
         let diff = todayCarbsGrams - dailyCarbsGoalInt
         let sign: String = diff > 0 ? "+" : diff < 0 ? "−" : "±"
         let absValue = abs(diff)
@@ -121,24 +149,50 @@ final class CarbsViewModelV1: ObservableObject {
     }
 
     var kpiDeltaColor: Color {
+        guard hasTodayDatapoint || hasTodayPositiveCarbs else { return Color.Glu.primaryBlue }
         let diff = todayCarbsGrams - dailyCarbsGoalInt
-        if diff > 0 { return .green }
+        if diff > 0 { return Color.Glu.successGreen }
         if diff < 0 { return .red }
         return Color.Glu.primaryBlue
+    }
+
+    // ============================================================
+    // MARK: - Info Hint (Today) — Goldstandard Nutrition
+    // ============================================================
+
+    var todayInfoText: String? { // 🟨 UPDATED
+
+        if settings.showPermissionWarnings && carbsReadAuthIssueV1 {
+            return L10n.Carbs.hintNoDataOrPermission
+        }
+
+        if hasTodayDatapoint || hasTodayPositiveCarbs {
+            return nil
+        }
+
+        let hasAnyHistoryPositive =
+            last90DaysData.contains { $0.grams > 0 } ||
+            carbsDaily365.contains { $0.grams > 0 }
+
+        if !hasAnyHistoryPositive {
+            return L10n.Carbs.hintNoDataOrPermission
+        }
+
+        return L10n.Carbs.hintNoToday
     }
 
     // ============================================================
     // MARK: - Period Averages — V1 kompatibel
     // ============================================================
 
-    var periodAverages: [PeriodAverageEntry] {
+    var periodAverages: [PeriodAverageEntry] { // 🟨 UPDATED
         [
-            .init(label: "7T",   days: 7,   value: averageCarbs(last: 7)),
-            .init(label: "14T",  days: 14,  value: averageCarbs(last: 14)),
-            .init(label: "30T",  days: 30,  value: averageCarbs(last: 30)),
-            .init(label: "90T",  days: 90,  value: averageCarbs(last: 90)),
-            .init(label: "180T", days: 180, value: averageCarbs(last: 180)),
-            .init(label: "365T", days: 365, value: averageCarbs(last: 365))
+            .init(label: L10n.Common.period7d, days: 7, value: averageCarbs(last: 7)),
+            .init(label: L10n.Common.period14d, days: 14, value: averageCarbs(last: 14)),
+            .init(label: L10n.Common.period30d, days: 30, value: averageCarbs(last: 30)),
+            .init(label: L10n.Common.period90d, days: 90, value: averageCarbs(last: 90)),
+            .init(label: L10n.Common.period180d, days: 180, value: averageCarbs(last: 180)),
+            .init(label: L10n.Common.period365d, days: 365, value: averageCarbs(last: 365))
         ]
     }
 
@@ -164,21 +218,21 @@ final class CarbsViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Chart Label Helper (NO units)                      // !!! NEW
+    // MARK: - Chart Label Helper (NO units)
     // ============================================================
 
-    private func numberOnlyLabel(_ value: Double) -> String {    // !!! NEW
-        "\(Int(value.rounded()))"                                 // !!! NEW
-    }                                                             // !!! NEW
+    private func numberOnlyLabel(_ value: Double) -> String {
+        "\(Int(value.rounded()))"
+    }
 
     // ============================================================
-    // MARK: - Chart Scales — V1 kompatibel (NO "g" in axis/labels) // !!! UPDATED
+    // MARK: - Chart Scales — V1 kompatibel (NO "g" in axis/labels)
     // ============================================================
 
     var dailyScale: MetricScaleResult {
         let values = last90DaysData.map { Double($0.grams) }
-        let base = MetricScaleHelper.scale(values, for: .grams)   // !!! UPDATED: base helper
-        return MetricScaleResult(                                  // !!! UPDATED: labels ohne "g"
+        let base = MetricScaleHelper.scale(values, for: .grams)
+        return MetricScaleResult(
             yAxisTicks: base.yAxisTicks,
             yMax: base.yMax,
             valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
@@ -187,8 +241,8 @@ final class CarbsViewModelV1: ObservableObject {
 
     var periodScale: MetricScaleResult {
         let values = periodAverages.map { Double($0.value) }
-        let base = MetricScaleHelper.scale(values, for: .grams)   // !!! UPDATED
-        return MetricScaleResult(                                  // !!! UPDATED
+        let base = MetricScaleHelper.scale(values, for: .grams)
+        return MetricScaleResult(
             yAxisTicks: base.yAxisTicks,
             yMax: base.yMax,
             valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
@@ -197,8 +251,8 @@ final class CarbsViewModelV1: ObservableObject {
 
     var monthlyScale: MetricScaleResult {
         let values = monthlyCarbsData.map { Double($0.value) }
-        let base = MetricScaleHelper.scale(values, for: .grams)   // !!! UPDATED
-        return MetricScaleResult(                                  // !!! UPDATED
+        let base = MetricScaleHelper.scale(values, for: .grams)
+        return MetricScaleResult(
             yAxisTicks: base.yAxisTicks,
             yMax: base.yMax,
             valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }

@@ -19,6 +19,15 @@ import SwiftUI
 final class GMIViewModelV1: ObservableObject {
 
     // ============================================================
+    // MARK: - Info State
+    // ============================================================
+
+    enum GMIInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
     // MARK: - Published Outputs (View-facing)
     // ============================================================
 
@@ -29,6 +38,9 @@ final class GMIViewModelV1: ObservableObject {
     @Published var gmi14dPercent: Double? = nil
     @Published var gmi30dPercent: Double? = nil
     @Published var gmi90dPercent: Double? = nil
+
+    @Published var glucoseReadAuthIssueV1: Bool = false
+    @Published private(set) var todayCoverageMinutes: Int = 0
 
     // ============================================================
     // MARK: - Dependencies
@@ -54,7 +66,6 @@ final class GMIViewModelV1: ObservableObject {
 
     private func bindHealthStore() {
 
-        // Last 24h (RAW KPI)
         healthStore.$last24hGlucoseMeanMgdl
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mean in
@@ -62,7 +73,6 @@ final class GMIViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Today (RAW KPI; 00:00 → now)
         healthStore.$todayGlucoseMeanMgdl
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mean in
@@ -70,7 +80,20 @@ final class GMIViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // HYBRID Periods derive from (dailyGlucoseStats90 + today RAW)
+        healthStore.$glucoseReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.glucoseReadAuthIssueV1 = $0
+            }
+            .store(in: &cancellables)
+
+        healthStore.$todayGlucoseCoverageMinutes
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.todayCoverageMinutes = max(0, $0)
+            }
+            .store(in: &cancellables)
+
         Publishers.CombineLatest3(
             healthStore.$dailyGlucoseStats90,
             healthStore.$todayGlucoseMeanMgdl,
@@ -86,8 +109,33 @@ final class GMIViewModelV1: ObservableObject {
 
     private func syncFromStores() {
         last24hGmiPercent = Self.computeGmiPercent(fromMeanMgdl: healthStore.last24hGlucoseMeanMgdl)
-        todayGmiPercent   = Self.computeGmiPercent(fromMeanMgdl: healthStore.todayGlucoseMeanMgdl)
+        todayGmiPercent = Self.computeGmiPercent(fromMeanMgdl: healthStore.todayGlucoseMeanMgdl)
+
+        glucoseReadAuthIssueV1 = healthStore.glucoseReadAuthIssueV1
+        todayCoverageMinutes = max(0, healthStore.todayGlucoseCoverageMinutes)
+
         recomputeHybridPeriods()
+    }
+
+    // ============================================================
+    // MARK: - Goldstandard Hint State
+    // ============================================================
+
+    var todayInfoState: GMIInfoState? { // 🟨 NEW
+
+        if glucoseReadAuthIssueV1 {
+            return .noHistory
+        }
+
+        if todayCoverageMinutes > 0 { return nil }
+
+        let hasAnyHistory = healthStore.dailyGlucoseStats90.contains { $0.coverageMinutes > 0 }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
     }
 
     // ============================================================
@@ -104,10 +152,10 @@ final class GMIViewModelV1: ObservableObject {
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",  days: 7,  value: percentToInt10(gmi7dPercent)),
-            .init(label: "14T", days: 14, value: percentToInt10(gmi14dPercent)),
-            .init(label: "30T", days: 30, value: percentToInt10(gmi30dPercent)),
-            .init(label: "90T", days: 90, value: percentToInt10(gmi90dPercent))
+            .init(label: L10n.Common.period7d,  days: 7,  value: percentToInt10(gmi7dPercent)),
+            .init(label: L10n.Common.period14d, days: 14, value: percentToInt10(gmi14dPercent)),
+            .init(label: L10n.Common.period30d, days: 30, value: percentToInt10(gmi30dPercent)),
+            .init(label: L10n.Common.period90d, days: 90, value: percentToInt10(gmi90dPercent))
         ]
     }
 
@@ -116,20 +164,17 @@ final class GMIViewModelV1: ObservableObject {
     // ============================================================
 
     private func recomputeHybridPeriods() {
-        let mean7  = computeHybridMeanMgdl(days: 7)
+        let mean7 = computeHybridMeanMgdl(days: 7)
         let mean14 = computeHybridMeanMgdl(days: 14)
         let mean30 = computeHybridMeanMgdl(days: 30)
         let mean90 = computeHybridMeanMgdl(days: 90)
 
-        gmi7dPercent  = Self.computeGmiPercent(fromMeanMgdl: mean7)
+        gmi7dPercent = Self.computeGmiPercent(fromMeanMgdl: mean7)
         gmi14dPercent = Self.computeGmiPercent(fromMeanMgdl: mean14)
         gmi30dPercent = Self.computeGmiPercent(fromMeanMgdl: mean30)
         gmi90dPercent = Self.computeGmiPercent(fromMeanMgdl: mean90)
     }
 
-    /// HYBRID mean mg/dL:
-    /// - (days-1) full days from dailyGlucoseStats90 (coverage-weighted mean)
-    /// - + today (00:00→now) from todayGlucoseMeanMgdl * todayCoverage
     private func computeHybridMeanMgdl(days: Int) -> Double? {
         guard days >= 1 else { return nil }
 
@@ -147,11 +192,11 @@ final class GMIViewModelV1: ObservableObject {
         var weightedSum: Double = 0
         var coverageSum: Int = 0
 
-        for e in pastEntries {
-            let c = max(0, e.coverageMinutes)
-            guard c > 0, e.meanMgdl > 0 else { continue }
-            weightedSum += e.meanMgdl * Double(c)
-            coverageSum += c
+        for entry in pastEntries {
+            let coverage = max(0, entry.coverageMinutes)
+            guard coverage > 0, entry.meanMgdl > 0 else { continue }
+            weightedSum += entry.meanMgdl * Double(coverage)
+            coverageSum += coverage
         }
 
         if let todayMean = healthStore.todayGlucoseMeanMgdl, todayMean > 0 {
@@ -170,8 +215,6 @@ final class GMIViewModelV1: ObservableObject {
     // MARK: - Report Access (SSoT passthrough)
     // ============================================================
 
-    /// Exposes the exact same HYBRID mean used for GMI.
-    /// Report must call THIS – no own computation.
     func hybridMeanMgdl(days: Int) -> Double? {
         computeHybridMeanMgdl(days: days)
     }
@@ -202,7 +245,6 @@ final class GMIViewModelV1: ObservableObject {
         return f
     }()
 
-    // Standard: GMI% = 3.31 + 0.02392 * mean(mg/dL)
     private static func computeGmiPercent(fromMeanMgdl mean: Double?) -> Double? {
         guard let mean, mean > 0 else { return nil }
         return 3.31 + (0.02392 * mean)

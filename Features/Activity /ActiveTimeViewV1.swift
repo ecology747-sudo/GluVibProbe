@@ -2,34 +2,66 @@
 //  ActiveTimeViewV1.swift
 //  GluVibProbe
 //
-//  V1 Adapter View:
-//  - UI läuft über MetricDetailScaffold
-//  - Datenfluss läuft über ActiveTimeViewModelV1 (kein Fetch im VM)
-//  - Refresh läuft über HealthStore.refreshActivity(...)
+//  Activity V1 — Active Time Detail Screen
+//
+//  Purpose
+//  - Renders the active time metric detail screen for the Activity domain.
+//  - Shows the KPI block, daily / period / monthly charts,
+//    and the shared activity metric chip navigation.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → ActiveTimeViewModelV1 (mapping / formatting) → ActiveTimeViewV1 (render only)
+//
+//  Key Connections
+//  - ActiveTimeViewModelV1: provides formatted values and chart data.
+//  - HealthStore: provides the central activity refresh entry points.
+//  - AppState: handles navigation back to the activity flow.
+//  - ActivitySectionCardScaledV2: shared activity card shell for chips, KPIs and charts.
 //
 
 import SwiftUI
 
 struct ActiveTimeViewV1: View {
 
+    // ============================================================
+    // MARK: - Dependencies (Environment)
+    // ============================================================
+
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
 
+    // ============================================================
+    // MARK: - ViewModel
+    // ============================================================
+
     @StateObject private var viewModel: ActiveTimeViewModelV1
 
+    // ============================================================
+    // MARK: - Inputs
+    // ============================================================
+
     let onMetricSelected: (String) -> Void
+
+    // ============================================================
+    // MARK: - Init
+    // ============================================================
 
     init(
         viewModel: ActiveTimeViewModelV1? = nil,
         onMetricSelected: @escaping (String) -> Void = { _ in }
     ) {
         self.onMetricSelected = onMetricSelected
+
         if let viewModel {
             _viewModel = StateObject(wrappedValue: viewModel)
         } else {
             _viewModel = StateObject(wrappedValue: ActiveTimeViewModelV1())
         }
     }
+
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
 
     var body: some View {
         MetricDetailScaffold(
@@ -54,6 +86,7 @@ struct ActiveTimeViewV1: View {
         ) {
             VStack(alignment: .leading, spacing: 16) {
 
+                // Shared Activity metric card shell
                 ActivitySectionCardScaledV2(
                     sectionTitle: "",
                     title: "Active Time",
@@ -61,7 +94,7 @@ struct ActiveTimeViewV1: View {
                     kpiTargetText: "–",
                     kpiCurrentText: viewModel.formattedTodayActiveTime,
                     kpiDeltaText: "–",
-                    kpiDeltaColor: nil,              // ✅ FIX
+                    kpiDeltaColor: nil,
                     hasTarget: false,
                     last90DaysData: viewModel.last90DaysChartData,
                     periodAverages: viewModel.periodAverages,
@@ -75,8 +108,8 @@ struct ActiveTimeViewV1: View {
                     showsDailyChart: true,
                     showsPeriodChart: true,
                     showsMonthlyChart: true,
-                    customKpiContent: nil,           // ✅ FIX
-                    customChartContent: nil,         // ✅ FIX
+                    customKpiContent: nil,
+                    customChartContent: nil,
                     dailyScaleType: .exerciseMinutes
                 )
             }
@@ -87,7 +120,9 @@ struct ActiveTimeViewV1: View {
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("ActiveTimeViewV1 – Activity") {
     let previewStore = HealthStore.preview()
@@ -97,4 +132,5 @@ struct ActiveTimeViewV1: View {
     return ActiveTimeViewV1(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

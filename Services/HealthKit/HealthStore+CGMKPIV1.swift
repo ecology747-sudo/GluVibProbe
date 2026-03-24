@@ -2,46 +2,46 @@
 //  HealthStore+CGMKPIV1.swift
 //  GluVibProbe
 //
-//  Metabolic V1 — CGM KPI V1 (RAW → Quick KPIs)
+//  CGM V1 — Raw Samples (bloodGlucose)
 //
-//  Diese Datei ist ausschließlich für minutenbasierte CGM-KPIs aus RAW zuständig:
-//
-//  1) RAW INPUT (DayProfile / MainChart Backbone)
-//     - CGM Samples für Today/Yesterday/DayBefore → cgmSamples3Days
-//     - triggert rebuildMainChartCacheFromRaw3DaysV1() nach RAW-Publish
-//
-//  2) QUICK KPIs (RAW-derived, minute-based)
-//     - Today (00:00 → now): todayGlucoseMeanMgdl + todayTIR* + Coverage/Expected/Ratio/isPartial
-//     - Last 24h (ROLLING WINDOW): last24hGlucoseMeanMgdl + last24hTIR* + Coverage/Expected/Ratio/isPartial
-//       !!! UPDATED: Last 24h endet NICHT bei Date()/now, sondern bei der letzten verfügbaren CGM-Messung
-//       (windowEnd = last(cgmSamples3Days).timestamp). Dadurch ist die 24h-Coverage korrekt, auch wenn HealthKit
-//       CGM-Daten zeitverzögert liefert (z. B. ~3h Delay).
-//     - Last 24h SD + CV: last24hGlucoseSdMgdl + last24hGlucoseCvPercent
-//
-//  WICHTIG: Keine Period-KPIs (7/14/30/90), kein Hybrid, keine DailyStats in dieser Datei.
-//           Period/Hybrid lebt in CGM TIR/Range Dateien und DailyStats90.
+//  Zweck:
+//  - RAW3DAYS: cgmSamples3Days (MainChart backbone + KPI updates)
+//  - HISTORY WINDOW: cgmSamplesHistoryWindowV1 (10 Tage, nur Marker; KEIN Cache/KPI Rebuild)
 //
 
 import Foundation
 import HealthKit
+import OSLog // 🟨 UPDATED
 
 extension HealthStore {
 
     // ============================================================
-    // MARK: - RAW3DAYS (DayProfile) — CGM Samples
+    // MARK: - RAW3DAYS (DayProfile) — CGM Samples (MainChart + KPIs)
     // ============================================================
 
     @MainActor
     func fetchCGMSamples3DaysV1() {
-        if isPreview { return }
+        if isPreview {
+            glucoseReadAuthIssueV1 = false
+            GluLog.healthStore.debug("fetchCGMSamples3DaysV1 skipped | preview=true") // 🟨 UPDATED
+            return
+        }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return }
+        GluLog.healthStore.notice("fetchCGMSamples3DaysV1 started")
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else {
+            GluLog.healthStore.error("fetchCGMSamples3DaysV1 failed | quantityTypeUnavailable=true")
+            return
+        }
 
         let calendar = Calendar.current
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
 
-        guard let startDate = calendar.date(byAdding: .day, value: -2, to: todayStart) else { return }
+        guard let startDate = calendar.date(byAdding: .day, value: -2, to: todayStart) else {
+            GluLog.healthStore.error("fetchCGMSamples3DaysV1 failed | startDateUnavailable=true")
+            return
+        }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
@@ -54,10 +54,37 @@ extension HealthStore {
             predicate: predicate,
             limit: HKObjectQueryNoLimit,
             sortDescriptors: [sort]
-        ) { [weak self] _, samples, _ in
+        ) { [weak self] _, samples, error in
             guard let self else { return }
 
             let quantitySamples = (samples as? [HKQuantitySample]) ?? []
+
+            let isAuthIssue: Bool = {
+                if let error = error as NSError? {
+                    if error.domain == HKErrorDomain,
+                       let code = HKError.Code(rawValue: error.code),
+                       (code == .errorAuthorizationDenied || code == .errorAuthorizationNotDetermined) {
+                        return true
+                    }
+                }
+
+                // Fallback: some iOS paths return 0 samples + nil error after revoking permission.
+                if error == nil, quantitySamples.isEmpty {
+                    let status = self.healthStore.authorizationStatus(for: type)
+                    return status == .sharingDenied || status == .notDetermined
+                }
+
+                return false
+            }()
+
+            if isAuthIssue {
+                Task { @MainActor in
+                    self.glucoseReadAuthIssueV1 = true
+                    self.cgmSamples3Days = []
+                    GluLog.healthStore.notice("fetchCGMSamples3DaysV1 finished | authIssue=true")
+                }
+                return
+            }
 
             // Dedup by timestamp (deterministic)
             var byTimestamp: [TimeInterval: CGMSamplePoint] = [:]
@@ -75,6 +102,7 @@ extension HealthStore {
             let points = byTimestamp.values.sorted { $0.timestamp < $1.timestamp }
 
             Task { @MainActor in
+                self.glucoseReadAuthIssueV1 = false
                 self.cgmSamples3Days = points
 
                 // MainChart backbone
@@ -88,7 +116,116 @@ extension HealthStore {
                 self.updateLast24hTIRFromRawV1()
                 self.updateLast24hGlucoseSdFromRawV1()
 
-                // Period KPIs intentionally removed from CGM KPI V1
+                // Rolling SD windows (sample SD, window ends at last available CGM sample)
+                self.updateRollingGlucoseSdFromRawV1(days: 7)
+                self.updateRollingGlucoseSdFromRawV1(days: 14)
+                self.updateRollingGlucoseSdFromRawV1(days: 30)
+                self.updateRollingGlucoseSdFromRawV1(days: 90)
+
+                GluLog.healthStore.notice(
+                    "fetchCGMSamples3DaysV1 finished | samples=\(points.count, privacy: .public) todayCoverage=\(self.todayTIRCoverageMinutes, privacy: .public) last24hCoverage=\(self.last24hTIRCoverageMinutes, privacy: .public)"
+                )
+            }
+        }
+
+        healthStore.execute(query)
+    }
+
+    // ============================================================
+    // MARK: - HISTORY WINDOW (10 Days) — CGM Samples (Marker-only)
+    // ============================================================
+    //
+    // Zweck:
+    // - Liefert CGM-Samples für History Marker (S/+30/+60) über 10 Tage.
+    // - KEIN MainChartCache rebuild.
+    // - KEINE KPI recompute.
+    //
+    @MainActor
+    func fetchCGMSamplesForHistoryWindowV1(days: Int = 10) {
+        if isPreview {
+            glucoseReadAuthIssueV1 = false
+            cgmSamplesHistoryWindowV1 = []
+            GluLog.healthStore.debug("fetchCGMSamplesForHistoryWindowV1 skipped | preview=true") // 🟨 UPDATED
+            return
+        }
+
+        GluLog.healthStore.notice("fetchCGMSamplesForHistoryWindowV1 started | days=\(days, privacy: .public)")
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else {
+            GluLog.healthStore.error("fetchCGMSamplesForHistoryWindowV1 failed | quantityTypeUnavailable=true")
+            return
+        }
+
+        let spanDays = max(1, days)
+
+        let calendar = Calendar.current
+        let now = Date()
+        let todayStart = calendar.startOfDay(for: now)
+        guard let startDate = calendar.date(byAdding: .day, value: -(spanDays - 1), to: todayStart) else {
+            GluLog.healthStore.error("fetchCGMSamplesForHistoryWindowV1 failed | startDateUnavailable=true")
+            return
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        let mgdlUnit = HKUnit.gramUnit(with: .milli).unitDivided(by: .literUnit(with: .deci))
+
+        let query = HKSampleQuery(
+            sampleType: type,
+            predicate: predicate,
+            limit: HKObjectQueryNoLimit,
+            sortDescriptors: [sort]
+        ) { [weak self] _, samples, error in
+            guard let self else { return }
+
+            let quantitySamples = (samples as? [HKQuantitySample]) ?? []
+
+            let isAuthIssue: Bool = {
+                if let error = error as NSError? {
+                    if error.domain == HKErrorDomain,
+                       let code = HKError.Code(rawValue: error.code),
+                       (code == .errorAuthorizationDenied || code == .errorAuthorizationNotDetermined) {
+                        return true
+                    }
+                }
+
+                if error == nil, quantitySamples.isEmpty {
+                    let status = self.healthStore.authorizationStatus(for: type)
+                    return status == .sharingDenied || status == .notDetermined
+                }
+
+                return false
+            }()
+
+            if isAuthIssue {
+                Task { @MainActor in
+                    self.glucoseReadAuthIssueV1 = true
+                    self.cgmSamplesHistoryWindowV1 = []
+                    GluLog.healthStore.notice("fetchCGMSamplesForHistoryWindowV1 finished | authIssue=true")
+                }
+                return
+            }
+
+            // Dedup by timestamp (deterministic)
+            var byTimestamp: [TimeInterval: CGMSamplePoint] = [:]
+            byTimestamp.reserveCapacity(quantitySamples.count)
+
+            for s in quantitySamples {
+                let key = s.startDate.timeIntervalSince1970.rounded()
+                byTimestamp[key] = CGMSamplePoint(
+                    id: UUID(),
+                    timestamp: s.startDate,
+                    glucoseMgdl: s.quantity.doubleValue(for: mgdlUnit)
+                )
+            }
+
+            let points = byTimestamp.values.sorted { $0.timestamp < $1.timestamp }
+
+            Task { @MainActor in
+                self.glucoseReadAuthIssueV1 = false
+                self.cgmSamplesHistoryWindowV1 = points
+                GluLog.healthStore.notice("fetchCGMSamplesForHistoryWindowV1 finished | samples=\(points.count, privacy: .public)")
             }
         }
 
@@ -159,7 +296,6 @@ extension HealthStore {
             }
         }
 
-        // Clamp buckets to coverage
         let tirSum =
             todayTIRVeryLowMinutes
             + todayTIRLowMinutes
@@ -197,7 +333,6 @@ extension HealthStore {
             }
         }
 
-        // Today wrapper summary (optional helper state)
         tirTodaySummary = TIRPeriodSummaryEntry(
             id: UUID(),
             days: 1,
@@ -220,7 +355,6 @@ extension HealthStore {
     @MainActor
     private func updateLast24hGlucoseFromRawV1() {
 
-        // !!! UPDATED: rolling 24h window ends at last available CGM sample timestamp
         let end = lastAvailableCGMWindowEndV1()
         let start = end.addingTimeInterval(-24 * 60 * 60)
 
@@ -256,7 +390,6 @@ extension HealthStore {
     @MainActor
     private func updateLast24hTIRFromRawV1() {
 
-        // !!! UPDATED: rolling 24h window ends at last available CGM sample timestamp
         let end = lastAvailableCGMWindowEndV1()
         let start = end.addingTimeInterval(-24 * 60 * 60)
 
@@ -344,7 +477,6 @@ extension HealthStore {
     @MainActor
     private func updateLast24hGlucoseSdFromRawV1() {
 
-        // !!! UPDATED: rolling 24h window ends at last available CGM sample timestamp
         let end = lastAvailableCGMWindowEndV1()
         let start = end.addingTimeInterval(-24 * 60 * 60)
 
@@ -357,16 +489,62 @@ extension HealthStore {
             return
         }
 
-        let mean = points.reduce(0.0) { $0 + $1.glucoseMgdl } / Double(points.count)
+        let n = Double(points.count)
+        let mean = points.reduce(0.0) { $0 + $1.glucoseMgdl } / n
 
-        let variance = points.reduce(0.0) { acc, p in
+        let sumSq = points.reduce(0.0) { acc, p in
             let d = p.glucoseMgdl - mean
             return acc + (d * d)
-        } / Double(points.count)
+        }
 
+        let variance = sumSq / max(1.0, (n - 1.0))
         let sd = sqrt(variance)
+
         last24hGlucoseSdMgdl = sd
         last24hGlucoseCvPercent = computeCvPercent(meanMgdl: mean, sdMgdl: sd)
+    }
+
+    // ============================================================
+    // MARK: - Rolling SD (Dexcom-like) — RAW only
+    // ============================================================
+
+    @MainActor
+    private func updateRollingGlucoseSdFromRawV1(days: Int) {
+
+        let end = lastAvailableCGMWindowEndV1()
+        let start = Calendar.current.date(byAdding: .day, value: -days, to: end) ?? end.addingTimeInterval(TimeInterval(-days * 86400))
+
+        let points = cgmSamples3Days
+            .filter { $0.timestamp >= start && $0.timestamp <= end }
+
+        guard points.count >= 2 else {
+            setRollingSd(days: days, value: nil)
+            return
+        }
+
+        let n = Double(points.count)
+        let mean = points.reduce(0.0) { $0 + $1.glucoseMgdl } / n
+
+        let sumSq = points.reduce(0.0) { acc, p in
+            let d = p.glucoseMgdl - mean
+            return acc + (d * d)
+        }
+
+        let variance = sumSq / max(1.0, (n - 1.0))
+        let sd = sqrt(variance)
+
+        setRollingSd(days: days, value: sd)
+    }
+
+    @MainActor
+    private func setRollingSd(days: Int, value: Double?) {
+        switch days {
+        case 7:  rollingGlucoseSdMgdl7 = value
+        case 14: rollingGlucoseSdMgdl14 = value
+        case 30: rollingGlucoseSdMgdl30 = value
+        case 90: rollingGlucoseSdMgdl90 = value
+        default: break
+        }
     }
 }
 
@@ -376,7 +554,6 @@ extension HealthStore {
 
 private extension HealthStore {
 
-    // !!! NEW: unified window end for "Last 24h" KPIs (prevents false partial coverage when HealthKit is delayed)
     func lastAvailableCGMWindowEndV1() -> Date {
         cgmSamples3Days.last?.timestamp ?? Date()
     }

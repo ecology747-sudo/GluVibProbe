@@ -5,7 +5,7 @@
 //  V1: Bolus/Basal Ratio ViewModel (Metabolic)
 //  - KEIN Fetch im ViewModel
 //  - SSoT: HealthStore.dailyBolusBasalRatio90 (derived in HealthStore)
-//  - UI-nah: Chart-Adapter (Int*10 via DailyStepsEntry), Period Averages, Formatting
+//  - Basalflow: Auth-Issue kommt aus HealthStore Read-Probe (Insulin Delivery)
 //
 
 import Foundation
@@ -16,11 +16,22 @@ import SwiftUI
 final class BolusBasalRatioViewModelV1: ObservableObject {
 
     // ============================================================
+    // MARK: - Info State
+    // ============================================================
+
+    enum BolusBasalRatioInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
     // MARK: - Published Outputs
     // ============================================================
 
     @Published var todayRatioInt10: Int = 0
-    @Published var last90DaysRatioInt10: [DailyStepsEntry] = []          // Int*10 im steps-Feld
+    @Published var last90DaysRatioInt10: [DailyStepsEntry] = []
+
+    @Published var insulinReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies
@@ -45,7 +56,6 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
 
     private func bindHealthStore() {
 
-        // !!! NEW: Single SSoT stream (derived daily array)
         healthStore.$dailyBolusBasalRatio90
             .receive(on: DispatchQueue.main)
             .sink { [weak self] daily in
@@ -53,10 +63,18 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
                 self.recompute(from: daily)
             }
             .store(in: &cancellables)
+
+        Publishers.CombineLatest(healthStore.$bolusReadAuthIssueV1, healthStore.$basalReadAuthIssueV1)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] bolusIssue, basalIssue in
+                self?.insulinReadAuthIssueV1 = (bolusIssue || basalIssue)
+            }
+            .store(in: &cancellables)
     }
 
     private func syncFromStores() {
-        recompute(from: healthStore.dailyBolusBasalRatio90) // !!! NEW
+        recompute(from: healthStore.dailyBolusBasalRatio90)
+        insulinReadAuthIssueV1 = (healthStore.bolusReadAuthIssueV1 || healthStore.basalReadAuthIssueV1)
     }
 
     // ============================================================
@@ -68,15 +86,15 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
         let calendar = Calendar.current
 
         let mapped: [DailyStepsEntry] = daily
-            .map { e in
-                let day = calendar.startOfDay(for: e.date)
-                let int10 = Int((max(0, e.ratio) * 10.0).rounded())
+            .map { entry in
+                let day = calendar.startOfDay(for: entry.date)
+                let int10 = Int((max(0, entry.ratio) * 10.0).rounded())
                 return DailyStepsEntry(date: day, steps: max(0, int10))
             }
             .sorted { $0.date < $1.date }
 
-        self.last90DaysRatioInt10 = mapped
-        self.todayRatioInt10 = Self.extractTodayInt10(from: mapped)
+        last90DaysRatioInt10 = mapped
+        todayRatioInt10 = Self.extractTodayInt10(from: mapped)
     }
 
     // ============================================================
@@ -84,7 +102,29 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodayRatio: String {
-        format1(Double(todayRatioInt10) / 10.0)
+        guard todayRatioInt10 > 0 else { return "–" }
+        return format1(Double(todayRatioInt10) / 10.0)
+    }
+
+    // ============================================================
+    // MARK: - Goldstandard Hint State
+    // ============================================================
+
+    var todayInfoState: BolusBasalRatioInfoState? { // 🟨 NEW
+
+        if insulinReadAuthIssueV1 {
+            return .noHistory
+        }
+
+        if todayRatioInt10 > 0 { return nil }
+
+        let hasAnyHistory = last90DaysRatioInt10.contains { $0.steps > 0 }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
     }
 
     // ============================================================
@@ -112,8 +152,8 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
         else { return 0 }
 
         let filtered = last90DaysRatioInt10.filter { entry in
-            let d = calendar.startOfDay(for: entry.date)
-            return d >= startDate && d <= endDate && entry.steps > 0
+            let day = calendar.startOfDay(for: entry.date)
+            return day >= startDate && day <= endDate && entry.steps > 0
         }
 
         guard !filtered.isEmpty else { return 0 }
@@ -129,11 +169,17 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
     // ============================================================
 
     var dailyScale: MetricScaleResult {
-        MetricScaleHelper.scale(last90DaysRatioInt10.map { Double($0.steps) }, for: .ratioInt10)   // !!! NEW
+        MetricScaleHelper.scale(
+            last90DaysRatioInt10.map { Double($0.steps) },
+            for: .ratioInt10
+        )
     }
 
     var periodScale: MetricScaleResult {
-        MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .ratioInt10)         // !!! NEW
+        MetricScaleHelper.scale(
+            periodAverages.map { Double($0.value) },
+            for: .ratioInt10
+        )
     }
 
     // ============================================================
@@ -151,10 +197,10 @@ final class BolusBasalRatioViewModelV1: ObservableObject {
     }
 
     private let numberFormatter1: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 1
-        f.minimumFractionDigits = 1
-        return f
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 1
+        formatter.minimumFractionDigits = 1
+        return formatter
     }()
 }

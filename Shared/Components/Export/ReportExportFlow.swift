@@ -15,6 +15,9 @@ struct ReportExportFlow: View {
 
     let fileName: String
 
+    // 🟨 NEW: Render key (forces re-render when inputs change)
+    let renderKey: String
+
     // EITHER one long content (legacy) OR multiple pages (manual breaks)
     let pdfContent: (() -> AnyView)?
     let pdfPages: (() -> [AnyView])?
@@ -31,12 +34,14 @@ struct ReportExportFlow: View {
 
     init(
         fileName: String,
+        renderKey: String = "default", // 🟨 NEW
         pdfContent: @escaping () -> AnyView,
         pageHeader: (() -> AnyView)? = nil,
         pageFooter: (() -> AnyView)? = nil,
         onClose: @escaping () -> Void
     ) {
         self.fileName = fileName
+        self.renderKey = renderKey // 🟨 NEW
         self.pdfContent = pdfContent
         self.pdfPages = nil
         self.pageHeader = pageHeader
@@ -47,12 +52,14 @@ struct ReportExportFlow: View {
     // Manual pages
     init(
         fileName: String,
+        renderKey: String = "default", // 🟨 NEW
         pdfPages: @escaping () -> [AnyView],
         pageHeader: (() -> AnyView)? = nil,
         pageFooter: (() -> AnyView)? = nil,
         onClose: @escaping () -> Void
     ) {
         self.fileName = fileName
+        self.renderKey = renderKey // 🟨 NEW
         self.pdfContent = nil
         self.pdfPages = pdfPages
         self.pageHeader = pageHeader
@@ -127,7 +134,6 @@ struct ReportExportFlow: View {
                                 if hasAcceptedExportConsent {
                                     showShareSheet = true
                                 } else {
-                                    // UPDATED
                                     showExportConsentSheet = true
                                 }
                             } label: {
@@ -139,7 +145,8 @@ struct ReportExportFlow: View {
                             .disabled(pdfData == nil || isRendering)
                         }
                     }
-                    .task { await renderIfNeeded() }
+                    // 🟨 UPDATED: re-render when renderKey changes
+                    .task(id: renderKey) { await renderForKey() }
 
                     // Share Sheet
                     .sheet(isPresented: $showShareSheet) {
@@ -230,11 +237,15 @@ struct ReportExportFlow: View {
     // ============================================================
 
     @MainActor
-    private func renderIfNeeded() async {
-        guard pdfData == nil, !isRendering else { return }
+    private func renderForKey() async {
+        guard !isRendering else { return }
+
+        // 🟨 FIX: always re-render for a new renderKey
+        pdfData = nil
+        exportError = nil
 
         isRendering = true
-        exportError = nil
+        defer { isRendering = false }
 
         do {
             let headerView: AnyView? = {
@@ -305,8 +316,6 @@ struct ReportExportFlow: View {
         } catch {
             exportError = "PDF rendering failed. Please try again."
         }
-
-        isRendering = false
     }
 }
 
@@ -643,22 +652,4 @@ private enum ReportPDFLongContentExporter {
         if pdfData.isEmpty { throw ExportError.renderFailed }
         return pdfData
     }
-}
-
-// MARK: - Preview
-#Preview {
-    ReportExportFlow(
-        fileName: "Test",
-        pdfPages: {
-            [
-                AnyView(Text("Page 1").padding(.top, 200)),
-                AnyView(Text("Page 2").padding(.top, 200))
-            ]
-        },
-        pageHeader: { AnyView(Text("Header").font(.headline).padding(.bottom, 8)) },
-        pageFooter: { AnyView(Text("Footer / Disclaimer").font(.caption).padding(.top, 8)) },
-        onClose: {}
-    )
-    .environmentObject(HealthStore.preview())
-    .environmentObject(SettingsModel.shared)
 }

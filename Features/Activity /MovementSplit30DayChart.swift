@@ -154,9 +154,9 @@ struct MovementSplitDailyChart: View {
 
             // ✅ Legend – jetzt gleiche Größe wie X-Achse
             HStack(spacing: 18) {
-                legendDot(color: sleepColor,     label: "Sleep")
-                legendDot(color: activeColor,    label: "Active")
-                legendDot(color: sedentaryColor, label: "Not Active")
+                legendDot(color: sleepColor,     label: L10n.MovementSplit.legendSleep) // UPDATED
+                legendDot(color: activeColor,    label: L10n.MovementSplit.legendActive)
+                legendDot(color: sedentaryColor, label: L10n.MovementSplit.legendNotActive)
             }
             .font(.system(size: 14, weight: .bold))          // ⭐ MATCH X-AXIS
             .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))

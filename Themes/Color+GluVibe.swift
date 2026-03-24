@@ -13,6 +13,11 @@ extension Color {
         /// Heller Surface-Hintergrund (Dashboard, Karten-Background)
         static let backgroundSurface = Color("GluBackgroundSurface")
 
+        /// 🟨 UPDATED: Zentrale Vordergrundfarbe nur für Sheets und Bottom/Button Bars
+        /// Light: GluPrimaryBlue
+        /// Dark:  #EDEDF2
+        static let systemForeground  = Color("SystemForeground")
+
         // MARK: - Domain-Farben (jede Domain genau eine Farbe)
 
         /// BODY-Domain (Weight, Sleep, HR, Body-Settings)
@@ -34,6 +39,13 @@ extension Color {
         /// UNITS / globale Controls
         /// – läuft über die Primärfarbe
         static let unitsDomain       = primaryBlue
+
+        // MARK: - Semantic Status Colors
+
+        /// Erfolg / Ziel erreicht / positiver Status
+        /// Light: #34C759
+        /// Dark:  #2DA94D
+        static let successGreen      = Color("GluSuccessGreen")
         
         // MARK: - Metabolic / CGM Spezialfarben
 
@@ -41,14 +53,13 @@ extension Color {
         /// Light: #961C1C
         /// Dark:  #B84A4A
         static let acidCGMRed = Color("acidCGMRed")
-        
-        
+
         /// Bolus-Insulin (Acid Dark Green) – Asset-gestützt (Light/Dark automatisch)
         /// Any (Light): #0B4F2A
         /// Dark:        #2AD67B
         static let acidBolusDarkGreen = Color("acidBolusDarkGreen")
         
-        let basalColor: Color = Color("GluBasalMagenta")
+        static let basalColor = Color("GluBasalMagenta")
 
         // MARK: - Legacy-Namen (nur damit dein bestehender Code nicht bricht)
         // Diese kannst du später Schritt für Schritt entfernen,

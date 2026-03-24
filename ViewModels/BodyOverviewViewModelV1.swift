@@ -9,26 +9,21 @@ import Foundation
 import SwiftUI
 import Combine
 
-// !!! UPDATED: Conformance + weightKg non-optional für Protocol-Compliance
-struct BodyWeightTrendPoint: Identifiable {               // !!! UPDATED
+struct BodyWeightTrendPoint: Identifiable {
     let id = UUID()
     let date: Date
 
-    private let weightKgOptional: Double?                                         // !!! NEW (intern)
+    private let weightKgOptional: Double?
     let hasSample: Bool
 
-    // !!! NEW: Protocol-friendly, non-optional
-    var weightKg: Double { max(0.0, weightKgOptional ?? 0.0) }                    // !!! NEW
+    var weightKg: Double { max(0.0, weightKgOptional ?? 0.0) }
+    var weightKgOrNil: Double? { weightKgOptional }
 
-    // !!! NEW: Falls du optional weiterhin brauchst (Logik/Guards)
-    var weightKgOrNil: Double? { weightKgOptional }                               // !!! NEW
-
-    // !!! NEW: Custom init, damit call-sites minimal bleiben
-    init(date: Date, weightKg: Double?, hasSample: Bool) {                        // !!! NEW
-        self.date = date                                                          // !!! NEW
-        self.weightKgOptional = weightKg                                           // !!! NEW
-        self.hasSample = hasSample                                                 // !!! NEW
-    }                                                                             // !!! NEW
+    init(date: Date, weightKg: Double?, hasSample: Bool) {
+        self.date = date
+        self.weightKgOptional = weightKg
+        self.hasSample = hasSample
+    }
 }
 
 @MainActor
@@ -66,26 +61,21 @@ final class BodyOverviewViewModelV1: ObservableObject {
     // MARK: - Published Outputs (für BodyOverviewViewV1)
     // ============================================================
 
-    // Weight
     @Published var todayWeightKg: Double? = nil
     @Published var targetWeightKg: Double = 0.0
     @Published var weightDeltaKg: Double = 0.0
     @Published var weightTrend: [BodyWeightTrendPoint] = []
 
-    // Sleep
     @Published var lastNightSleepMinutes: Int = 0
     @Published var sleepGoalMinutes: Int = 0
     @Published var sleepGoalCompletion: Double = 0.0
 
-    // Heart / HRV
     @Published var restingHeartRateBpm: Int = 0
     @Published var hrvMs: Int = 0
 
-    // Body composition
     @Published var bmi: Double = 0.0
     @Published var bodyFatPercent: Double = 0.0
 
-    // Insight output
     @Published var bodyInsightText: String = ""
 
     // ============================================================
@@ -154,7 +144,6 @@ final class BodyOverviewViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // HISTORY
         healthStore.$sleepDaily365
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleRemap() }
@@ -182,7 +171,6 @@ final class BodyOverviewViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // SETTINGS
         settings.$dailySleepGoalMinutes
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleRemap() }
@@ -307,7 +295,10 @@ final class BodyOverviewViewModelV1: ObservableObject {
             weightDeltaKg = 0.0
         }
 
-        weightTrend = buildLastSevenDaysWeightTrend(endingOn: date, calendar: calendar)
+        weightTrend = buildLastSevenDaysWeightTrendForDisplayedDay(
+            selectedDayOffset: selectedDayOffset,
+            calendar: calendar
+        )
 
         if selectedDayOffset == 0 {
             bodyInsightText = makeBodyInsightText()
@@ -342,51 +333,46 @@ final class BodyOverviewViewModelV1: ObservableObject {
         return max(0.0, lastKnown)
     }
 
-    private func buildLastSevenDaysWeightTrend(
-        endingOn endDate: Date,
+    private func buildLastSevenDaysWeightTrendForDisplayedDay(
+        selectedDayOffset: Int,
         calendar: Calendar
     ) -> [BodyWeightTrendPoint] {
 
-        let endDay = calendar.startOfDay(for: endDate)
-        guard calendar.date(byAdding: .day, value: -6, to: endDay) != nil else { return [] }
+        let todayStart = calendar.startOfDay(for: Date())
 
-        let samples = healthStore.weightDaily365Raw
-            .sorted { $0.date < $1.date }
+        let endOffset = selectedDayOffset - 1
+        let endDayStart = calendar.date(byAdding: .day, value: endOffset, to: todayStart) ?? todayStart
+
+        guard let startDayStart = calendar.date(byAdding: .day, value: -6, to: endDayStart) else { return [] }
+
+        let samples = healthStore.weightDaily365Raw.sorted { $0.date < $1.date }
 
         var measuredByDay: [Date: Double] = [:]
+        measuredByDay.reserveCapacity(min(samples.count, 365))
 
-        for s in samples {
-            let day = calendar.startOfDay(for: s.date)
-            measuredByDay[day] = max(0.0, s.kg)
+        for sample in samples {
+            let day = calendar.startOfDay(for: sample.date)
+            let value = max(0.0, sample.kg)
+            if value > 0 {
+                measuredByDay[day] = value
+            }
         }
 
         var result: [BodyWeightTrendPoint] = []
         result.reserveCapacity(7)
 
-        for offset in (0..<7).reversed() {
-            guard let day = calendar.date(byAdding: .day, value: -offset, to: endDay) else { continue }
-            let dayStart = calendar.startOfDay(for: day)
+        for i in 0..<7 {
+            guard let day = calendar.date(byAdding: .day, value: i, to: startDayStart) else { continue }
+            let normalizedDay = calendar.startOfDay(for: day)
 
-            if let measured = measuredByDay[dayStart], measured > 0 {
-                result.append(
-                    BodyWeightTrendPoint(
-                        date: dayStart,
-                        weightKg: measured,
-                        hasSample: true
-                    )
-                )
+            if let measured = measuredByDay[normalizedDay], measured > 0 {
+                result.append(BodyWeightTrendPoint(date: normalizedDay, weightKg: measured, hasSample: true))
             } else {
-                result.append(
-                    BodyWeightTrendPoint(
-                        date: dayStart,
-                        weightKg: nil,
-                        hasSample: false
-                    )
-                )
+                result.append(BodyWeightTrendPoint(date: normalizedDay, weightKg: nil, hasSample: false))
             }
         }
 
-        return result
+        return result.sorted { $0.date < $1.date }
     }
 
     private func restingHRFromCacheForwardFill(endingOn endDate: Date, calendar: Calendar) -> Int {
@@ -430,24 +416,24 @@ final class BodyOverviewViewModelV1: ObservableObject {
     // ============================================================
 
     private func extractInt<T>(_ entry: T, keys: [String]) -> Int {
-        let m = Mirror(reflecting: entry)
-        for k in keys {
-            if let v = m.children.first(where: { $0.label == k })?.value {
-                if let i = v as? Int { return max(0, i) }
-                if let d = v as? Double { return max(0, Int(d.rounded())) }
-                if let f = v as? Float { return max(0, Int(f.rounded())) }
+        let mirror = Mirror(reflecting: entry)
+        for key in keys {
+            if let value = mirror.children.first(where: { $0.label == key })?.value {
+                if let intValue = value as? Int { return max(0, intValue) }
+                if let doubleValue = value as? Double { return max(0, Int(doubleValue.rounded())) }
+                if let floatValue = value as? Float { return max(0, Int(floatValue.rounded())) }
             }
         }
         return 0
     }
 
     private func extractDouble<T>(_ entry: T, keys: [String]) -> Double {
-        let m = Mirror(reflecting: entry)
-        for k in keys {
-            if let v = m.children.first(where: { $0.label == k })?.value {
-                if let d = v as? Double { return max(0.0, d) }
-                if let i = v as? Int { return max(0.0, Double(i)) }
-                if let f = v as? Float { return max(0.0, Double(f)) }
+        let mirror = Mirror(reflecting: entry)
+        for key in keys {
+            if let value = mirror.children.first(where: { $0.label == key })?.value {
+                if let doubleValue = value as? Double { return max(0.0, doubleValue) }
+                if let intValue = value as? Int { return max(0.0, Double(intValue)) }
+                if let floatValue = value as? Float { return max(0.0, Double(floatValue)) }
             }
         }
         return 0.0
@@ -458,7 +444,7 @@ final class BodyOverviewViewModelV1: ObservableObject {
     // ============================================================
 
     func formattedWeight(_ value: Double?) -> String {
-        guard let value = value else { return "–" }
+        guard let value else { return "–" }
         return settings.weightUnit.formatted(fromKg: value, fractionDigits: 1)
     }
 
@@ -480,23 +466,38 @@ final class BodyOverviewViewModelV1: ObservableObject {
 
     func deltaColor(for delta: Double) -> Color {
         if delta > 0 { return .red }
-        if delta < 0 { return .green }
+        if delta < 0 { return Color.Glu.successGreen }
         return Color.Glu.primaryBlue
     }
 
-    func formattedSleep(minutes: Int) -> String {
+    func formattedSleep(minutes: Int) -> String { // 🟨 UPDATED
         let hours = minutes / 60
         let mins = minutes % 60
-        if hours > 0 { return "\(hours) h \(mins) min" }
-        return "\(mins) min"
+
+        switch (hours, mins) {
+        case (0, let m):
+            return String.localizedStringWithFormat(L10n.BodyOverviewFormat.minutesOnly, Int64(m))
+        case (let h, 0):
+            return String.localizedStringWithFormat(L10n.BodyOverviewFormat.hoursOnly, Int64(h))
+        default:
+            return String.localizedStringWithFormat(
+                L10n.BodyOverviewFormat.hoursMinutes,
+                Int64(hours),
+                Int64(mins)
+            )
+        }
     }
 
-    func bmiCategoryText(for bmi: Double) -> String {
+    func bmiCategoryText(for bmi: Double) -> String { // 🟨 UPDATED
         switch bmi {
-        case ..<18.5: return "Underweight"
-        case 18.5..<25: return "Normal range"
-        case 25..<30: return "Overweight"
-        default: return "Obesity range"
+        case ..<18.5:
+            return L10n.BodyOverviewBMI.underweight
+        case 18.5..<25:
+            return L10n.BodyOverviewBMI.normalRange
+        case 25..<30:
+            return L10n.BodyOverviewBMI.overweight
+        default:
+            return L10n.BodyOverviewBMI.obesityRange
         }
     }
 
@@ -506,30 +507,18 @@ final class BodyOverviewViewModelV1: ObservableObject {
 
     func trendArrowSymbol() -> String {
 
-        // !!! UPDATED: nur echte Messungen betrachten (optional über weightKgOrNil)
         let measured = weightTrend
             .filter { $0.hasSample }
-            .compactMap { p -> (date: Date, kg: Double)? in                       // !!! UPDATED
-                guard let kg = p.weightKgOrNil else { return nil }                // !!! UPDATED
-                return (p.date, kg)
-            }
-            .sorted { $0.date < $1.date }
-
+            .compactMap { point -> Double? in point.weightKgOrNil }
         guard measured.count >= 2 else { return "arrow.right" }
 
-        let count = measured.count
-        let yesterdayIndex = count - 2
-        guard yesterdayIndex > 0 else { return "arrow.right" }
+        let last = measured.last ?? 0.0
+        let previous = measured.dropLast()
+        let slice = previous.suffix(3)
+        guard !slice.isEmpty else { return "arrow.right" }
 
-        let yesterdayWeight = measured[yesterdayIndex].kg
-        let startIndex = max(0, yesterdayIndex - 3)
-        let previousSlice = measured[startIndex..<yesterdayIndex]
-        guard !previousSlice.isEmpty else { return "arrow.right" }
-
-        let sumPrev = previousSlice.reduce(0.0) { $0 + $1.kg }
-        let avgPrev = sumPrev / Double(previousSlice.count)
-
-        let diff = yesterdayWeight - avgPrev
+        let avgPrev = slice.reduce(0.0, +) / Double(slice.count)
+        let diff = last - avgPrev
         let threshold: Double = 0.3
 
         if diff > threshold { return "arrow.up.right" }
@@ -539,30 +528,18 @@ final class BodyOverviewViewModelV1: ObservableObject {
 
     func trendArrowColor() -> Color {
 
-        // !!! UPDATED: nur echte Messungen betrachten (optional über weightKgOrNil)
         let measured = weightTrend
             .filter { $0.hasSample }
-            .compactMap { p -> (date: Date, kg: Double)? in                       // !!! UPDATED
-                guard let kg = p.weightKgOrNil else { return nil }                // !!! UPDATED
-                return (p.date, kg)
-            }
-            .sorted { $0.date < $1.date }
-
+            .compactMap { point -> Double? in point.weightKgOrNil }
         guard measured.count >= 2 else { return Color.Glu.primaryBlue }
 
-        let count = measured.count
-        let yesterdayIndex = count - 2
-        guard yesterdayIndex > 0 else { return Color.Glu.primaryBlue }
+        let last = measured.last ?? 0.0
+        let previous = measured.dropLast()
+        let slice = previous.suffix(3)
+        guard !slice.isEmpty else { return Color.Glu.primaryBlue }
 
-        let yesterdayWeight = measured[yesterdayIndex].kg
-        let startIndex = max(0, yesterdayIndex - 3)
-        let previousSlice = measured[startIndex..<yesterdayIndex]
-        guard !previousSlice.isEmpty else { return Color.Glu.primaryBlue }
-
-        let sumPrev = previousSlice.reduce(0.0) { $0 + $1.kg }
-        let avgPrev = sumPrev / Double(previousSlice.count)
-        let diff = yesterdayWeight - avgPrev
-
+        let avgPrev = slice.reduce(0.0, +) / Double(slice.count)
+        let diff = last - avgPrev
         return deltaColor(for: diff)
     }
 

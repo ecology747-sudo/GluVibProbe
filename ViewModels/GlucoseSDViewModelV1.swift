@@ -10,10 +10,23 @@ import SwiftUI
 @MainActor
 final class GlucoseSDViewModelV1: ObservableObject {
 
+    enum GlucoseSDInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
     @Published var last90DaysDaily: [DailyGlucoseStatsEntry] = []
 
     @Published var todaySdMgdl: Double = 0
     @Published var last24hSdMgdl: Double = 0
+
+    @Published var rollingSd7dMgdl: Double = 0
+    @Published var rollingSd14dMgdl: Double = 0
+    @Published var rollingSd30dMgdl: Double = 0
+    @Published var rollingSd90dMgdl: Double = 0
+
+    @Published var glucoseReadAuthIssueV1: Bool = false
+    @Published private(set) var todayCoverageMinutes: Int = 0
 
     private let healthStore: HealthStore
     private let settings: SettingsModel
@@ -42,8 +55,50 @@ final class GlucoseSDViewModelV1: ObservableObject {
 
         healthStore.$last24hGlucoseSdMgdl
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] v in
-                self?.last24hSdMgdl = max(0, v ?? 0)
+            .sink { [weak self] value in
+                self?.last24hSdMgdl = max(0, value ?? 0)
+            }
+            .store(in: &cancellables)
+
+        healthStore.$rollingGlucoseSdMgdl7
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in
+                self?.rollingSd7dMgdl = max(0, value ?? 0)
+            }
+            .store(in: &cancellables)
+
+        healthStore.$rollingGlucoseSdMgdl14
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in
+                self?.rollingSd14dMgdl = max(0, value ?? 0)
+            }
+            .store(in: &cancellables)
+
+        healthStore.$rollingGlucoseSdMgdl30
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in
+                self?.rollingSd30dMgdl = max(0, value ?? 0)
+            }
+            .store(in: &cancellables)
+
+        healthStore.$rollingGlucoseSdMgdl90
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in
+                self?.rollingSd90dMgdl = max(0, value ?? 0)
+            }
+            .store(in: &cancellables)
+
+        healthStore.$glucoseReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.glucoseReadAuthIssueV1 = $0
+            }
+            .store(in: &cancellables)
+
+        healthStore.$todayGlucoseCoverageMinutes
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.todayCoverageMinutes = max(0, $0)
             }
             .store(in: &cancellables)
     }
@@ -52,6 +107,35 @@ final class GlucoseSDViewModelV1: ObservableObject {
         last90DaysDaily = healthStore.dailyGlucoseStats90
         todaySdMgdl = Self.todaySD(from: healthStore.dailyGlucoseStats90)
         last24hSdMgdl = max(0, healthStore.last24hGlucoseSdMgdl ?? 0)
+
+        rollingSd7dMgdl = max(0, healthStore.rollingGlucoseSdMgdl7 ?? 0)
+        rollingSd14dMgdl = max(0, healthStore.rollingGlucoseSdMgdl14 ?? 0)
+        rollingSd30dMgdl = max(0, healthStore.rollingGlucoseSdMgdl30 ?? 0)
+        rollingSd90dMgdl = max(0, healthStore.rollingGlucoseSdMgdl90 ?? 0)
+
+        glucoseReadAuthIssueV1 = healthStore.glucoseReadAuthIssueV1
+        todayCoverageMinutes = max(0, healthStore.todayGlucoseCoverageMinutes)
+    }
+
+    // ============================================================
+    // MARK: - Goldstandard Hint State
+    // ============================================================
+
+    var todayInfoState: GlucoseSDInfoState? { // 🟨 NEW
+
+        if glucoseReadAuthIssueV1 {
+            return .noHistory
+        }
+
+        if todayCoverageMinutes > 0 { return nil }
+
+        let hasAnyHistory = last90DaysDaily.contains { $0.coverageMinutes > 0 }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
     }
 
     // ============================================================
@@ -74,8 +158,8 @@ final class GlucoseSDViewModelV1: ObservableObject {
     private func formattedWholeNumberOnly(_ mgdl: Double) -> String {
         guard mgdl > 0 else { return "–" }
         if settings.glucoseUnit == .mmolL {
-            let v = sdDisplayValue(fromMgdl: mgdl)
-            return String(format: "%.1f", v)
+            let value = sdDisplayValue(fromMgdl: mgdl)
+            return String(format: "%.1f", value)
         } else {
             return "\(Int(mgdl.rounded()))"
         }
@@ -84,8 +168,8 @@ final class GlucoseSDViewModelV1: ObservableObject {
     private func formattedOneDecimalNumberOnly(_ mgdl: Double) -> String {
         guard mgdl > 0 else { return "–" }
         if settings.glucoseUnit == .mmolL {
-            let v = sdDisplayValue(fromMgdl: mgdl)
-            return String(format: "%.1f", v)
+            let value = sdDisplayValue(fromMgdl: mgdl)
+            return String(format: "%.1f", value)
         } else {
             return String(format: "%.1f", mgdl)
         }
@@ -104,8 +188,8 @@ final class GlucoseSDViewModelV1: ObservableObject {
     }
 
     var formatted90dSD: String {
-        let v = averageSDMgdl(last: 90)
-        return v > 0 ? formatSdWithUnit(sdMgdl: v) : "–"
+        let value = rollingSd90dMgdl
+        return value > 0 ? formatSdWithUnit(sdMgdl: value) : "–"
     }
 
     private func formatSdWithUnit(sdMgdl: Double) -> String {
@@ -131,31 +215,27 @@ final class GlucoseSDViewModelV1: ObservableObject {
     }
 
     var formatted90dSDKPI: String {
-        let v = averageSDMgdl(last: 90)
-        return formattedWholeNumberOnly(v)
+        formattedWholeNumberOnly(rollingSd90dMgdl)
     }
 
     // ============================================================
-    // MARK: - Report Access (SSoT passthrough)  // UPDATED
+    // MARK: - Report Access (SSoT passthrough)
     // ============================================================
 
-    /// Report expects a numeric SD text WITHOUT unit (unit is rendered in ReportRangeSectionView via sdDisplayUnitText / layout rules).
-    /// - If mmol/L: 1 decimal
-    /// - If mg/dL: whole number
-    func sdTextForReport(windowDays: Int) -> String { // UPDATED
-        let vMgdl: Double
+    func sdTextForReport(windowDays: Int) -> String {
+        let valueMgdl: Double
         switch windowDays {
-        case 7:  vMgdl = averageSDMgdl(last: 7)
-        case 14: vMgdl = averageSDMgdl(last: 14)
-        case 30: vMgdl = averageSDMgdl(last: 30)
-        case 90: vMgdl = averageSDMgdl(last: 90)
+        case 7:  valueMgdl = rollingSd7dMgdl
+        case 14: valueMgdl = rollingSd14dMgdl
+        case 30: valueMgdl = rollingSd30dMgdl
+        case 90: valueMgdl = rollingSd90dMgdl
         default: return "–"
         }
 
         if settings.glucoseUnit == .mmolL {
-            return formattedOneDecimalNumberOnly(vMgdl) // UPDATED
+            return formattedOneDecimalNumberOnly(valueMgdl)
         } else {
-            return formattedWholeNumberOnly(vMgdl) // UPDATED
+            return formattedWholeNumberOnly(valueMgdl)
         }
     }
 
@@ -164,9 +244,9 @@ final class GlucoseSDViewModelV1: ObservableObject {
     // ============================================================
 
     var last90DaysChartData: [DailyStepsEntry] {
-        last90DaysDaily.map { e in
-            let vMgdl = max(0, e.standardDeviationMgdl)
-            return DailyStepsEntry(date: e.date, steps: Int(vMgdl.rounded()))
+        last90DaysDaily.map { entry in
+            let valueMgdl = max(0, entry.standardDeviationMgdl)
+            return DailyStepsEntry(date: entry.date, steps: Int(valueMgdl.rounded()))
         }
     }
 
@@ -176,10 +256,10 @@ final class GlucoseSDViewModelV1: ObservableObject {
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",  days: 7,  value: Int(averageSDMgdl(last: 7).rounded())),
-            .init(label: "14T", days: 14, value: Int(averageSDMgdl(last: 14).rounded())),
-            .init(label: "30T", days: 30, value: Int(averageSDMgdl(last: 30).rounded())),
-            .init(label: "90T", days: 90, value: Int(averageSDMgdl(last: 90).rounded()))
+            .init(label: L10n.Common.period7d,  days: 7,  value: Int(rollingSd7dMgdl.rounded())),
+            .init(label: L10n.Common.period14d, days: 14, value: Int(rollingSd14dMgdl.rounded())),
+            .init(label: L10n.Common.period30d, days: 30, value: Int(rollingSd30dMgdl.rounded())),
+            .init(label: L10n.Common.period90d, days: 90, value: Int(rollingSd90dMgdl.rounded()))
         ]
     }
 
@@ -193,12 +273,18 @@ final class GlucoseSDViewModelV1: ObservableObject {
     }
 
     var periodScale: MetricScaleResult {
-        let values = periodAverages.map { Double(max(0, $0.value)) }.filter { $0 > 0 }
+        let values = [
+            max(0, rollingSd7dMgdl),
+            max(0, rollingSd14dMgdl),
+            max(0, rollingSd30dMgdl),
+            max(0, rollingSd90dMgdl)
+        ].filter { $0 > 0 }
+
         return MetricScaleHelper.scale(values.isEmpty ? [0] : values, for: .glucoseSdMgdl)
     }
 
     // ============================================================
-    // MARK: - Internals
+    // MARK: - Internals (kept for compatibility / fallback use)
     // ============================================================
 
     private func averageSDMgdl(last days: Int) -> Double {
@@ -213,10 +299,10 @@ final class GlucoseSDViewModelV1: ObservableObject {
         else { return 0 }
 
         let filtered = last90DaysDaily.filter { entry in
-            let d = cal.startOfDay(for: entry.date)
-            let cov = max(0, entry.coverageMinutes)
-            let v = max(0, entry.standardDeviationMgdl)
-            return d >= startDate && d <= endDate && cov > 0 && v > 0
+            let day = cal.startOfDay(for: entry.date)
+            let coverage = max(0, entry.coverageMinutes)
+            let value = max(0, entry.standardDeviationMgdl)
+            return day >= startDate && day <= endDate && coverage > 0 && value > 0
         }
 
         guard !filtered.isEmpty else { return 0 }
@@ -228,7 +314,7 @@ final class GlucoseSDViewModelV1: ObservableObject {
     private static func todaySD(from daily: [DailyGlucoseStatsEntry]) -> Double {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
-        guard let e = daily.first(where: { cal.isDate($0.date, inSameDayAs: today) }) else { return 0 }
-        return e.coverageMinutes > 0 ? max(0, e.standardDeviationMgdl) : 0
+        guard let entry = daily.first(where: { cal.isDate($0.date, inSameDayAs: today) }) else { return 0 }
+        return entry.coverageMinutes > 0 ? max(0, entry.standardDeviationMgdl) : 0
     }
 }

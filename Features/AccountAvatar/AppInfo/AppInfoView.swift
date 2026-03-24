@@ -2,10 +2,18 @@
 //  AppInfoView.swift
 //  GluVibProbe
 //
-//  App Info (static)
-//  - Static, informational only (no HealthStore, no Settings writes)
-//  - Apple-default List + Sections
-//  - Uses GluPrimaryBlue consistently
+//  Settings / Account — App Info Screen
+//  Purpose:
+//  - Displays static app, device, and link information.
+//  - Read-only informational screen without HealthStore or Settings writes.
+//
+//  Data Flow (SSoT):
+//  - Bundle / UIDevice -> derived display values -> AppInfoView -> UI
+//
+//  Key Connections:
+//  - Bundle.main.infoDictionary
+//  - UIDevice
+//  - external links (website / support mail)
 //
 
 import SwiftUI
@@ -13,22 +21,22 @@ import UIKit
 
 struct AppInfoView: View {
 
-    // MARK: - Theme
+    // ============================================================
+    // MARK: - Styling
+    // ============================================================
 
-    private let titleColor: Color = Color("GluPrimaryBlue")
+    private let titleColor: Color = Color.Glu.systemForeground
 
-    // MARK: - Static Links
+    // ============================================================
+    // MARK: - Constants
+    // ============================================================
 
     private let websiteURL: URL = URL(string: "https://gluvib.com")!
     private let supportEmail: String = "support@gluvib.com"
 
-    // MARK: - Derived (App / System)
-
-    private var appName: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-        ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-        ?? "GluVib"
-    }
+    // ============================================================
+    // MARK: - Derived State
+    // ============================================================
 
     private var versionString: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
@@ -48,85 +56,56 @@ struct AppInfoView: View {
         URL(string: "mailto:\(supportEmail)")
     }
 
-    // MARK: - View
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
 
     var body: some View {
         List {
 
-            // ============================================================
-            // MARK: - About
-            // ============================================================
-
             Section {
-                VStack(alignment: .leading, spacing: 10) {
+                infoRow(
+                    title: String(
+                        localized: "Version",
+                        defaultValue: "Version",
+                        comment: "Label for app version in app info view"
+                    ),
+                    value: versionString
+                ) // 🟨 UPDATED
 
-                    Text("\(appName) is an analysis and visualization tool for personal health data.")
-                        .foregroundStyle(titleColor)
-                        .fixedSize(horizontal: false, vertical: true)
+                infoRow(
+                    title: L10n.Avatar.AppInfo.device,
+                    value: deviceString
+                ) // 🟨 UPDATED
 
-                    // 🔶 Hervorgehobener medizinischer Hinweis
-                    Text("It does not provide medical advice, diagnosis, or therapy recommendations.")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(titleColor)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.vertical, 6)
+                infoRow(
+                    title: L10n.Avatar.AppInfo.system,
+                    value: systemString
+                ) // 🟨 UPDATED
 
             } header: {
-                Text("About GluVib")
-                    .foregroundStyle(titleColor)
+                Text(
+                    String(
+                        localized: "Version",
+                        defaultValue: "Version",
+                        comment: "Section header for version information in app info view"
+                    )
+                ) // 🟨 UPDATED
+                .foregroundStyle(titleColor)
             }
-
-            // ============================================================
-            // MARK: - Version
-            // ============================================================
-
-            Section {
-                infoRow(title: "Version", value: versionString)
-                infoRow(title: "Device", value: deviceString)
-                infoRow(title: "System", value: systemString)
-
-            } header: {
-                Text("Version")
-                    .foregroundStyle(titleColor)
-            }
-
-            // ============================================================
-            // MARK: - Data Source
-            // ============================================================
-
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("GluVib works exclusively with Apple Health.")
-                        .foregroundStyle(titleColor)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("The more consistent and complete your Apple Health data is, the more meaningful the analysis becomes.")
-                        .foregroundStyle(titleColor)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.vertical, 6)
-
-            } header: {
-                Text("Data Source")
-                    .foregroundStyle(titleColor)
-            }
-
-            // ============================================================
-            // MARK: - Links
-            // ============================================================
-
-            // ============================================================
-            // MARK: - Links
-            // ============================================================
 
             Section {
 
-                // Website
                 Link(destination: websiteURL) {
                     HStack(spacing: 10) {
                         Image(systemName: "globe")
-                        Text("gluvib.com")
+                        Text(
+                            String(
+                                localized: "gluvib.com",
+                                defaultValue: "gluvib.com",
+                                comment: "Website link text in app info view"
+                            )
+                        ) // 🟨 UPDATED
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.semibold))
@@ -134,12 +113,17 @@ struct AppInfoView: View {
                     .foregroundStyle(titleColor)
                 }
 
-                // Support Email
                 if let mailtoURL {
                     Link(destination: mailtoURL) {
                         HStack(spacing: 10) {
                             Image(systemName: "envelope")
-                            Text(supportEmail)
+                            Text(
+                                String(
+                                    localized: "support@gluvib.com",
+                                    defaultValue: "support@gluvib.com",
+                                    comment: "Support email text in app info view"
+                                )
+                            ) // 🟨 UPDATED
                             Spacer()
                         }
                         .foregroundStyle(titleColor)
@@ -147,29 +131,49 @@ struct AppInfoView: View {
                 } else {
                     HStack(spacing: 10) {
                         Image(systemName: "envelope")
-                        Text(supportEmail)
+                        Text(
+                            String(
+                                localized: "support@gluvib.com",
+                                defaultValue: "support@gluvib.com",
+                                comment: "Support email text in app info view"
+                            )
+                        ) // 🟨 UPDATED
                         Spacer()
                     }
                     .foregroundStyle(titleColor)
                 }
 
             } header: {
-                Text("Links")
-                    .foregroundStyle(titleColor)
+                Text(
+                    String(
+                        localized: "Links",
+                        defaultValue: "Links",
+                        comment: "Section header for external links in app info view"
+                    )
+                ) // 🟨 UPDATED
+                .foregroundStyle(titleColor)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("App Info")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(titleColor)
+                Text(
+                    String(
+                        localized: "App Info",
+                        defaultValue: "App Info",
+                        comment: "Navigation title for app info view"
+                    )
+                ) // 🟨 UPDATED
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(titleColor)
             }
         }
         .tint(titleColor)
     }
 
-    // MARK: - Row Helper
+    // ============================================================
+    // MARK: - Local Helper Views
+    // ============================================================
 
     private func infoRow(title: String, value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
@@ -184,6 +188,10 @@ struct AppInfoView: View {
         .padding(.vertical, 2)
     }
 }
+
+// ============================================================
+// MARK: - Preview
+// ============================================================
 
 #if DEBUG
 #Preview("AppInfoView") {

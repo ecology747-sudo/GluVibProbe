@@ -2,11 +2,16 @@
 //  BodyInsightEngine.swift
 //  GluVibProbe
 //
-//  Simple rule-based engine for Body overview insights
-//  - TODAY-only usage happens in the ViewModel (selectedDayOffset == 0)
-//  - Engine itself stays focused: no day-offset, no past-day wording, no date logic
-//  - Uses weight trend, sleep vs. goal, BMI, body fat and resting HR
-//  - Returns short, readable English text
+//  Body Overview — Insight Engine
+//
+//  Purpose
+//  - Creates short, rule-based insight text for the Body overview.
+//  - TODAY-only usage is handled by the ViewModel.
+//  - Engine stays focused on interpreting already prepared values.
+//  - Uses weight trend, sleep vs. goal, BMI, body fat and resting HR.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → BodyOverviewViewModelV1 → BodyInsightEngine
 //
 
 import Foundation
@@ -15,12 +20,10 @@ import Foundation
 // MARK: - Minimal model to satisfy compilation (V1 compatible)
 // ============================================================
 
-// !!! NEW: If WeightTrendPoint is missing in the project, this provides it.
-// NOTE: If you already have WeightTrendPoint elsewhere, delete THIS struct to avoid redeclaration.
-struct WeightTrendPoint: Identifiable {                      // !!! NEW
-    let id = UUID()                                          // !!! NEW
-    let date: Date                                           // !!! NEW
-    let weightKg: Double                                     // !!! NEW
+struct WeightTrendPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let weightKg: Double
 }
 
 // ============================================================
@@ -31,12 +34,11 @@ protocol BodyWeightTrendPointing {
     var weightKg: Double { get }
 }
 
-// Make BOTH types compatible (no other file changes needed)
 extension WeightTrendPoint: BodyWeightTrendPointing {}
 extension BodyWeightTrendPoint: BodyWeightTrendPointing {}
 
 // ============================================================
-// MARK: - Input container (generic over trend type)
+// MARK: - Input container
 // ============================================================
 
 struct BodyInsightInput<T: BodyWeightTrendPointing> {
@@ -56,95 +58,133 @@ struct BodyInsightEngine {
 
     func makeInsight<T: BodyWeightTrendPointing>(for input: BodyInsightInput<T>) -> String {
 
-        // ─────────────────────────────────────────────
-        // 1) Data availability
-        // ─────────────────────────────────────────────
+        // ------------------------------------------------------------
+        // MARK: Data availability
+        // ------------------------------------------------------------
 
         guard
             let first = input.weightTrend.first?.weightKg,
-            let last  = input.weightTrend.last?.weightKg
+            let last = input.weightTrend.last?.weightKg
         else {
-            return "There is not enough data yet to generate a meaningful body insight."
+            return L10n.BodyOverviewInsight.notEnoughData
         }
 
-        let diff = last - first   // positive = weight up
+        let diff = last - first
 
-        // Sleep vs. goal
         let sleepRatio: Double = {
             guard input.sleepGoalMinutes > 0 else { return 0 }
             return Double(input.lastNightSleepMinutes) / Double(input.sleepGoalMinutes)
         }()
 
-        // BMI bands
         let bmi = input.bmi
         let isHighBMI = bmi >= 25.0
         let isVeryHighBMI = bmi >= 30.0
 
-        // Body fat / HR (kept, but used lightly → no logic explosion)
         let bodyFat = input.bodyFatPercent
         let rhr = input.restingHeartRateBpm
 
-        // ─────────────────────────────────────────────
-        // 2) Small phrasing helpers (TODAY-only wording)
-        // ─────────────────────────────────────────────
+        // ------------------------------------------------------------
+        // MARK: Phrase helpers
+        // ------------------------------------------------------------
 
         func sleepShortPhrase() -> String {
             if sleepRatio < 0.8 {
-                return "Sleep has been on the short side."
+                return L10n.BodyOverviewInsight.sleepShort
             } else if sleepRatio > 1.1 {
-                return "Sleep looks solid overall."
+                return L10n.BodyOverviewInsight.sleepSolid
             } else {
-                return "Sleep has been roughly on target."
+                return L10n.BodyOverviewInsight.sleepOnTarget
             }
         }
 
         func bmiPhrasePrefix() -> String {
             if isVeryHighBMI {
-                return "Given your current BMI, even small, steady changes can be helpful. "
+                return L10n.BodyOverviewInsight.bmiPrefixVeryHigh
             } else if isHighBMI {
-                return "With your current BMI, gentle trends already matter. "
+                return L10n.BodyOverviewInsight.bmiPrefixHigh
             } else {
                 return ""
             }
         }
 
         func recoveryNudgeIfNeeded() -> String {
-            // very lightweight: only nudge if both signals are "high-ish"
             guard rhr >= 75 || bodyFat >= 30 else { return "" }
-            return " Also keep an eye on recovery and stress."
+            return L10n.BodyOverviewInsight.recoveryNudge
         }
 
-        // ─────────────────────────────────────────────
-        // 3) Core rules (same behavior as before)
-        // ─────────────────────────────────────────────
+        // ------------------------------------------------------------
+        // MARK: Core rules
+        // ------------------------------------------------------------
 
-        // 3.1 Weight roughly stable
         if abs(diff) <= 0.5 {
             if sleepRatio < 0.8 {
-                return "Your weight has been fairly stable over the last days. \(sleepShortPhrase()) A bit more rest can support recovery and appetite control.\(recoveryNudgeIfNeeded())"
+                return String(
+                    localized: "overview.body.insight.weight_stable_sleep_short",
+                    defaultValue: "%1$@ %2$@ A bit more rest can support recovery and appetite control.%3$@",
+                    comment: "Body overview insight when weight is stable and sleep is short"
+                )
+                .replacingOccurrences(of: "%1$@", with: L10n.BodyOverviewInsight.weightStable)
+                .replacingOccurrences(of: "%2$@", with: sleepShortPhrase())
+                .replacingOccurrences(of: "%3$@", with: recoveryNudgeIfNeeded())
             } else {
-                return "Your weight has been fairly stable over the last days. \(sleepShortPhrase()) Staying consistent with your current routine is a good baseline.\(recoveryNudgeIfNeeded())"
+                return String(
+                    localized: "overview.body.insight.weight_stable_sleep_ok",
+                    defaultValue: "%1$@ %2$@ Staying consistent with your current routine is a good baseline.%3$@",
+                    comment: "Body overview insight when weight is stable and sleep is okay"
+                )
+                .replacingOccurrences(of: "%1$@", with: L10n.BodyOverviewInsight.weightStable)
+                .replacingOccurrences(of: "%2$@", with: sleepShortPhrase())
+                .replacingOccurrences(of: "%3$@", with: recoveryNudgeIfNeeded())
             }
         }
 
-        // 3.2 Weight going up
         if diff > 0.5 {
             if sleepRatio < 0.8 {
-                return "Your weight has slightly increased over the last days. \(sleepShortPhrase()) Earlier nights and lighter evening meals can help stabilise your weight.\(recoveryNudgeIfNeeded())"
+                return String(
+                    localized: "overview.body.insight.weight_up_sleep_short",
+                    defaultValue: "%1$@ %2$@ Earlier nights and lighter evening meals can help stabilise your weight.%3$@",
+                    comment: "Body overview insight when weight is up and sleep is short"
+                )
+                .replacingOccurrences(of: "%1$@", with: L10n.BodyOverviewInsight.weightUp)
+                .replacingOccurrences(of: "%2$@", with: sleepShortPhrase())
+                .replacingOccurrences(of: "%3$@", with: recoveryNudgeIfNeeded())
             } else {
-                return "\(bmiPhrasePrefix())Your weight has slightly increased over the last days. Paying attention to portions and evening snacks can help if this trend continues.\(recoveryNudgeIfNeeded())"
+                return String(
+                    localized: "overview.body.insight.weight_up_sleep_ok",
+                    defaultValue: "%1$@%2$@ Paying attention to portions and evening snacks can help if this trend continues.%3$@",
+                    comment: "Body overview insight when weight is up and sleep is okay"
+                )
+                .replacingOccurrences(of: "%1$@", with: bmiPhrasePrefix())
+                .replacingOccurrences(of: "%2$@", with: L10n.BodyOverviewInsight.weightUp)
+                .replacingOccurrences(of: "%3$@", with: recoveryNudgeIfNeeded())
             }
         }
 
-        // 3.3 Weight going down
         if diff < -0.5 {
             if sleepRatio < 0.8 {
-                return "Your weight has slightly decreased over the last days while sleep was a bit short. Try to keep your current routine and add a little more rest where possible.\(recoveryNudgeIfNeeded())"
+                return String(
+                    localized: "overview.body.insight.weight_down_sleep_short",
+                    defaultValue: "%1$@ while sleep was a bit short. Try to keep your current routine and add a little more rest where possible.%2$@",
+                    comment: "Body overview insight when weight is down and sleep is short"
+                )
+                .replacingOccurrences(of: "%1$@", with: L10n.BodyOverviewInsight.weightDown)
+                .replacingOccurrences(of: "%2$@", with: recoveryNudgeIfNeeded())
             } else {
-                return "Your weight has slightly decreased over the last days. Keeping sleep, nutrition and activity consistent can help you maintain this healthy trend.\(recoveryNudgeIfNeeded())"
+                return String(
+                    localized: "overview.body.insight.weight_down_sleep_ok",
+                    defaultValue: "%1$@ Keeping sleep, nutrition and activity consistent can help you maintain this healthy trend.%2$@",
+                    comment: "Body overview insight when weight is down and sleep is okay"
+                )
+                .replacingOccurrences(of: "%1$@", with: L10n.BodyOverviewInsight.weightDown)
+                .replacingOccurrences(of: "%2$@", with: recoveryNudgeIfNeeded())
             }
         }
 
-        return "Your recent weight and sleep pattern looks mostly stable. Small, consistent habits around sleep, movement and meals will keep things on track.\(recoveryNudgeIfNeeded())"
+        return String(
+            localized: "overview.body.insight.fallback",
+            defaultValue: "Your recent weight and sleep pattern looks mostly stable. Small, consistent habits around sleep, movement and meals will keep things on track.%@",
+            comment: "Fallback body overview insight text"
+        )
+        .replacingOccurrences(of: "%@", with: recoveryNudgeIfNeeded()) // 🟨 UPDATED
     }
 }

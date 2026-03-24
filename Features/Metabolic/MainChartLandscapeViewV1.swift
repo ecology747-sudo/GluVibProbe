@@ -22,16 +22,28 @@ struct MainChartLandscapeViewV1: View {
     @EnvironmentObject private var settings: SettingsModel
 
     var body: some View {
+        ZStack { // 🟨 UPDATED
 
-        MainChartViewV1(
-            healthStore: healthStore,
-            chipLayout: .singleRow,
-            interactionMode: .landscape
-        )
-        .environmentObject(settings)
+            Color.Glu.backgroundSurface // 🟨 UPDATED
+                .ignoresSafeArea() // 🟨 UPDATED
+
+            MainChartViewV1(
+                healthStore: healthStore,
+                chipLayout: .singleRow,
+                interactionMode: .landscape
+            )
+            .environmentObject(settings)
+
+            // ✅ UPDATED: ensure the chart can fully occupy the screen (no safe-area clipping)
+            .ignoresSafeArea()
+
+            // ✅ UPDATED: keep parent hit-testing simple; do NOT add gestures here (Charts needs them)
+            .contentShape(Rectangle())
+        }
 
         // TabBar zuverlässig weg
         .toolbar(.hidden, for: .tabBar)
+        .navigationBarBackButtonHidden(true)
         .navigationBarHidden(true)
 
         // verhindert "Swipe down to dismiss"

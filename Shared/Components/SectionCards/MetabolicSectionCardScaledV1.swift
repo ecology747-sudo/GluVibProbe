@@ -7,6 +7,9 @@ import SwiftUI
 
 struct MetabolicSectionCardScaledV1: View {
 
+    // 🟨 UPDATED: global gate lives in SettingsModel
+    @EnvironmentObject private var settings: SettingsModel
+
     // ============================================================
     // MARK: - Inputs
     // ============================================================
@@ -47,6 +50,9 @@ struct MetabolicSectionCardScaledV1: View {
     let customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)?
     let customPeriodChartContent: AnyView?
 
+    // 🟨 UPDATED: warning badge per metric (permission-only, driven by caller)  ✅ Basalflow
+    let showsWarningBadgeForMetric: ((String) -> Bool)?
+
     // ============================================================
     // MARK: - State
     // ============================================================
@@ -86,7 +92,9 @@ struct MetabolicSectionCardScaledV1: View {
         customKpiContent: AnyView? = nil,
         customChartContent: AnyView? = nil,
         customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)? = nil,
-        customPeriodChartContent: AnyView? = nil
+        customPeriodChartContent: AnyView? = nil,
+
+        showsWarningBadgeForMetric: ((String) -> Bool)? = nil // 🟨 UPDATED
     ) {
         self.title = title
 
@@ -115,6 +123,8 @@ struct MetabolicSectionCardScaledV1: View {
         self.customChartContent = customChartContent
         self.customDailyChartBuilder = customDailyChartBuilder
         self.customPeriodChartContent = customPeriodChartContent
+
+        self.showsWarningBadgeForMetric = showsWarningBadgeForMetric // 🟨 UPDATED
     }
 
     // ============================================================
@@ -156,7 +166,7 @@ struct MetabolicSectionCardScaledV1: View {
         return MetricScaleResult(
             yAxisTicks: adaptive.yAxisTicks,
             yMax: adaptive.yMax,
-            valueLabel: dailyScale.valueLabel   // ✅ IMPORTANT: keep unit-aware label (mmol/L)
+            valueLabel: dailyScale.valueLabel
         )
     }
 
@@ -254,7 +264,11 @@ private extension MetabolicSectionCardScaledV1 {
             row2: Array(metrics.dropFirst(4)),
             selected: title,
             accent: color,
-            onSelect: onMetricSelected
+            onSelect: onMetricSelected,
+            showsWarningBadge: { name in
+                guard settings.showPermissionWarnings else { return false }
+                return (showsWarningBadgeForMetric?(name) ?? false)
+            }
         )
     }
 
@@ -281,54 +295,59 @@ private extension MetabolicSectionCardScaledV1 {
     }
 
     var periodPicker: some View {
-        HStack(spacing: 12) {
-            Spacer()
-
-            ForEach(Last90DaysPeriod.allCases, id: \.self) { period in
+        HStack(spacing: 8) { // UPDATED
+            ForEach(Last90DaysPeriod.allCases) { period in
                 let active = (period == selectedPeriod)
-
-                let bg: some ShapeStyle = active
-                    ? LinearGradient(
-                        colors: [color.opacity(0.95), color.opacity(0.75)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    : LinearGradient(
-                        colors: [Color.white.opacity(0.10), color.opacity(0.22)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
 
                 Button {
                     selectedPeriod = period
                 } label: {
-                    Text(period.rawValue)
-                        .font(.caption2.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 22)
-                        .background(Capsule().fill(bg))
-                        .overlay(
-                            Capsule().stroke(
-                                active ? Color.white.opacity(0.90) : Color.white.opacity(0.35),
-                                lineWidth: active ? 1.6 : 0.8
-                            )
+                    Text(
+                        period.days == 7 ? L10n.Common.period7d :
+                        period.days == 14 ? L10n.Common.period14d :
+                        period.days == 30 ? L10n.Common.period30d :
+                        period.days == 90 ? L10n.Common.period90d :
+                        period.rawValue
+                    )
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity) // UPDATED
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)   // UPDATED
+                    .background(
+                        Capsule().fill(
+                            active
+                            ? LinearGradient(
+                                colors: [color.opacity(0.95), color.opacity(0.75)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                              )
+                            : LinearGradient(
+                                colors: [Color.white.opacity(0.10), color.opacity(0.22)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                              )
                         )
-                        .shadow(
-                            color: Color.black.opacity(active ? 0.25 : 0.08),
-                            radius: active ? 4 : 2,
-                            x: 0,
-                            y: active ? 2 : 1
+                    )
+                    .overlay(
+                        Capsule().stroke(
+                            active ? Color.white.opacity(0.90) : Color.white.opacity(0.35),
+                            lineWidth: active ? 1.6 : 0.8
                         )
-                        .foregroundStyle(active ? Color.white : Color.Glu.primaryBlue.opacity(0.95))
-                        .scaleEffect(active ? 1.05 : 1.0)
-                        .animation(.easeOut(duration: 0.15), value: active)
+                    )
+                    .shadow(
+                        color: Color.black.opacity(active ? 0.25 : 0.08),
+                        radius: active ? 4 : 2,
+                        x: 0,
+                        y: active ? 2 : 1
+                    )
+                    .foregroundStyle(active ? Color.white : Color.Glu.primaryBlue.opacity(0.95))
+                    .scaleEffect(active ? 1.05 : 1.0)
+                    .animation(.easeOut(duration: 0.15), value: active)
                 }
                 .buttonStyle(.plain)
             }
-
-            Spacer()
         }
         .padding(.horizontal, 4)
     }

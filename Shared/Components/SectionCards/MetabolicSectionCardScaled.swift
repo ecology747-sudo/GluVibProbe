@@ -292,7 +292,7 @@ private extension MetabolicSectionCardScaled {
         }
 
         if current <= target {
-            return .green
+            return Color.Glu.successGreen
         } else {
             return .red
         }

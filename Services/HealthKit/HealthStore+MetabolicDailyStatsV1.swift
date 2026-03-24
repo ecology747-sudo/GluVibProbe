@@ -4,29 +4,43 @@
 //
 //  Metabolic V1 — DailyStats90 (SSoT)
 //
-//  Aufgaben dieser Datei:
+//  ✅ UPDATED (Single-writer rule):
+//  - This file MUST NOT write glucoseReadAuthIssueV1.
+//  - Auth/Badge is set ONLY by HealthStore+Bootstrap.swift (central read-probe).
+//  - All queries here are data-only. If permission is missing, they simply return empty / nil.
 //
-//  MARK / Metabolic-Metrics (Detail):
-//  - Fetch + publish: dailyTIR90 (tagesbasierte Minute-Buckets)
-//  - Fetch + publish: dailyGlucoseStats90 (mean/SD/CV)
-//  - Mirror: dailyCarbs90
-//  - Derived (no refetch): bolus/basal ratio, carb/bolus ratio
-//  - Trigger: Recompute HYBRID Period KPIs (TIR 7/14/30/90) aus Daily + Today RAW
-//
-//  MARK / Metabolic-Overview (Premium Overview):
-//  - Fetch + publish: overviewTIRDaily7FullDays (yesterday + 6 before)
-//  - Fetch + publish: overviewGlucoseDaily7FullDays (yesterday + 6 before)
-//
-//  MARK / Metabolic-Overview (Therapy Preload Light):
-//  - Fetch + publish: dailyCarbs90 (via nutrition last90 + mirror)
-//  - Fetch + publish: dailyBolus90, dailyBasal90
-//  - Derived (no refetch): ratios
+//  ✅ UPDATED (Batch-style / performance):
+//  - If glucoseReadAuthIssueV1 == true, ALL glucose HK queries short-circuit (return empty).
+//  - awaitHybridGlucoseReadyV1() exits immediately when glucose permission is missing.
 //
 
 import Foundation
 import HealthKit
 
 extension HealthStore {
+
+    // ============================================================
+    // MARK: - Debug Gate (Therapy-only)
+    // ============================================================
+
+    @MainActor
+    private func applyMetabolicTherapyDebugNoDataModeIfNeededV1() -> Bool { // 🟨 NEW
+        guard isDebugSimulatingNoHealthDataV1 else { return false }
+
+        dailyBolus90 = []
+        dailyBasal90 = []
+        dailyBolusBasalRatio90 = []
+        dailyCarbs90 = []
+        dailyCarbBolusRatio90 = []
+
+        bolusEvents3Days = []
+        basalEvents3Days = []
+
+        bolusEventsHistoryWindowV1 = []
+        basalEventsHistoryWindowV1 = []
+
+        return true
+    }
 
     // ============================================================
     // MARK: - Metabolic-Metrics (Detail) — Public API
@@ -36,28 +50,18 @@ extension HealthStore {
     func refreshMetabolicDailyStats90V1(refreshSource: String) async {
         if isPreview { return }
 
-        // 1) CGM Daily TIR (90) — required for HYBRID period summaries
         await fetchDailyTIR90V1Async()
-
-        // HYBRID Period Summaries (7/14/30/90) aus Daily + Today RAW neu berechnen
         recomputeCGMPeriodKPIsHybridV1()
 
-        // 2) CGM Daily Glucose Stats (90) — mean/SD/CV (basis for GMI Hybrid)
         await fetchDailyGlucoseStats90V1Async()
 
-        // 3) Therapy Daily (90) — keep consistent via ONE path
         await refreshMetabolicTherapyDaily90LightV1(refreshSource: refreshSource)
-
-        // 4) Derived Ratios (no refetch)
-        // NOTE: already covered by refreshMetabolicTherapyDaily90LightV1()
     }
 
     // ============================================================
     // MARK: - Metabolic-Overview (Premium Overview) — Public API
     // ============================================================
 
-    // Overview lightweight daily series (7 full days: yesterday + 6 before)
-    // - MUST NOT depend on daily*90 being loaded
     @MainActor
     func refreshMetabolicOverviewDaily7FullDaysV1(refreshSource: String) async {
         if isPreview { return }
@@ -69,116 +73,18 @@ extension HealthStore {
     // MARK: - Metabolic-Overview (Therapy Preload Light) — Public API
     // ============================================================
 
-    /// UPDATED: One canonical, lightweight path for Therapy cards on Premium Overview:
-    /// - NO CGM daily*90
-    /// - only what Therapy cards need: carbs90 + mirror, bolus90, basal90, ratios
     @MainActor
     func refreshMetabolicTherapyDaily90LightV1(refreshSource: String) async {
         if isPreview { return }
+        if applyMetabolicTherapyDebugNoDataModeIfNeededV1() { return } // 🟨 NEW
 
-        // Carbs Daily (90) — from Nutrition pipeline, then mirrored into Metabolic
         await fetchLast90DaysCarbsV1Async()
         mirrorNutritionCarbs90IntoMetabolicV1()
 
-        // Insulin Daily (90)
         await fetchDailyBolus90V1Async()
         await fetchDailyBasal90V1Async()
 
-        // Derived Ratios (no refetch)
         recomputeMetabolicDerivedDailyArraysV1()
-    }
-    
-    // ------------------------------------------------------------
-    // MARK: - Overview GMI(90) Light — Mean mg/dL (90d) [SSoT publish]
-    // ------------------------------------------------------------
-
-    @MainActor
-    func fetchGlucoseMean90dMgdlLightV1Async() async {
-        if isPreview { return }
-
-        let mean = await fetchGlucoseMean90dMgdlLightV1RawAsync()
-        await MainActor.run {
-            self.glucoseMean90dMgdl = (mean ?? 0) > 0 ? mean : nil
-        }
-    }
-
-    private func fetchGlucoseMean90dMgdlLightV1RawAsync() async -> Double? {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return nil }
-
-        let cal = Calendar.current
-        let now = Date()
-        let todayStart = cal.startOfDay(for: now)
-
-        // 90d window: todayStart - 89 days ... now (includes today partial)
-        guard let startDate = cal.date(byAdding: .day, value: -(90 - 1), to: todayStart) else { return nil }
-
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
-        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
-        let unit = mgdlUnitV1()
-
-        let samples: [HKQuantitySample] = await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(
-                sampleType: type,
-                predicate: predicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: [sort]
-            ) { _, s, _ in
-                continuation.resume(returning: (s as? [HKQuantitySample]) ?? [])
-            }
-            self.healthStore.execute(query)
-        }
-
-        guard !samples.isEmpty else { return nil }
-
-        // De-dupe by timestamp (rounded seconds) to match your other CGM fetches
-        var byTimestamp: [TimeInterval: Double] = [:]
-        byTimestamp.reserveCapacity(samples.count)
-
-        for s in samples {
-            let key = s.startDate.timeIntervalSince1970.rounded()
-            byTimestamp[key] = s.quantity.doubleValue(for: unit)
-        }
-
-        let values = Array(byTimestamp.values)
-        guard !values.isEmpty else { return nil }
-
-        let sum = values.reduce(0.0, +)
-        let mean = sum / Double(values.count)
-
-        return mean > 0 ? mean : nil
-    }
-
-    // ============================================================
-    // MARK: - Metabolic-Metrics (Detail) — Recompute Hooks
-    // ============================================================
-
-    @MainActor
-    func recomputeMetabolicDailyStats90AfterThresholdChangeV1() {
-        if isPreview { return }
-
-        Task { @MainActor in
-            await fetchDailyTIR90V1Async()
-            recomputeCGMPeriodKPIsHybridV1()
-
-            // Keep Overview series consistent as well
-            await fetchOverviewDailyTIR7FullDaysV1Async()
-        }
-    }
-
-    @MainActor
-    func recomputeMetabolicDerivedDailyArraysV1() {
-        if isPreview { return }
-        recomputeBolusBasalRatio90V1()
-        recomputeCarbBolusRatio90V1()
-    }
-
-    // ============================================================
-    // MARK: - Helpers
-    // ============================================================
-
-    @MainActor
-    func mirrorNutritionCarbs90IntoMetabolicV1() {
-        dailyCarbs90 = last90DaysCarbs
     }
 
     // ------------------------------------------------------------
@@ -201,7 +107,6 @@ extension HealthStore {
         for bolus in dailyBolus90 {
             let day = calendar.startOfDay(for: bolus.date)
             let basal = basalByDay[day] ?? 0
-
             let ratio: Double = basal > 0 ? (bolus.bolusUnits / basal) : 0
 
             out.append(
@@ -232,7 +137,6 @@ extension HealthStore {
         for bolus in dailyBolus90 {
             let day = calendar.startOfDay(for: bolus.date)
             let carbs = carbsByDay[day] ?? 0
-
             let gramsPerUnit: Double = bolus.bolusUnits > 0 ? (carbs / bolus.bolusUnits) : 0
 
             out.append(
@@ -245,6 +149,83 @@ extension HealthStore {
         }
 
         dailyCarbBolusRatio90 = out.sorted { $0.date < $1.date }
+    }
+
+    // ------------------------------------------------------------
+    // MARK: - Overview GMI(90) Light — Mean mg/dL (90d) [SSoT publish]
+    // ------------------------------------------------------------
+
+    @MainActor
+    func fetchGlucoseMean90dMgdlLightV1Async() async {
+        if isPreview { return }
+
+        let mean = await fetchGlucoseMean90dMgdlLightV1RawAsync()
+        await MainActor.run {
+            self.glucoseMean90dMgdl = (mean ?? 0) > 0 ? mean : nil
+        }
+    }
+
+    private func fetchGlucoseMean90dMgdlLightV1RawAsync() async -> Double? {
+
+        let authMissing = await MainActor.run(resultType: Bool.self) { self.glucoseReadAuthIssueV1 }
+        if authMissing { return nil }
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return nil }
+
+        let cal = Calendar.current
+        let now = Date()
+        let todayStart = cal.startOfDay(for: now)
+
+        guard let startDate = cal.date(byAdding: .day, value: -(90 - 1), to: todayStart) else { return nil }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let unit = mgdlUnitV1()
+
+        let samples: [HKQuantitySample] = await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, s, _ in
+                continuation.resume(returning: (s as? [HKQuantitySample]) ?? [])
+            }
+            self.healthStore.execute(query)
+        }
+
+        guard !samples.isEmpty else { return nil }
+
+        var byTimestamp: [TimeInterval: Double] = [:]
+        byTimestamp.reserveCapacity(samples.count)
+
+        for s in samples {
+            let key = s.startDate.timeIntervalSince1970.rounded()
+            byTimestamp[key] = s.quantity.doubleValue(for: unit)
+        }
+
+        let values = Array(byTimestamp.values)
+        guard !values.isEmpty else { return nil }
+
+        let sum = values.reduce(0.0, +)
+        let mean = sum / Double(values.count)
+        return mean > 0 ? mean : nil
+    }
+
+    // ============================================================
+    // MARK: - Helpers
+    // ============================================================
+
+    @MainActor
+    func mirrorNutritionCarbs90IntoMetabolicV1() {
+        dailyCarbs90 = last90DaysCarbs
+    }
+
+    @MainActor
+    func recomputeMetabolicDerivedDailyArraysV1() {
+        if isPreview { return }
+        recomputeBolusBasalRatio90V1()
+        recomputeCarbBolusRatio90V1()
     }
 
     @MainActor
@@ -261,12 +242,110 @@ extension HealthStore {
         overviewTIRDaily7FullDays = []
     }
 
-    // ============================================================
-    // MARK: - CGM DailyStats — HealthKit Fetch (SSoT publish)
-    // ============================================================
-
     private func mgdlUnitV1() -> HKUnit {
         HKUnit.gramUnit(with: .milli).unitDivided(by: .literUnit(with: .deci))
+    }
+
+    // ------------------------------------------------------------
+    // MARK: - Dexcom-like Rolling SD + CV (RAW window, end = last sample)
+    // ------------------------------------------------------------
+
+    private func fetchGlucoseRaw90DedupedV1Async() async -> [(ts: Date, mgdl: Double)] {
+
+        let authMissing = await MainActor.run(resultType: Bool.self) { self.glucoseReadAuthIssueV1 }
+        if authMissing { return [] }
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return [] }
+
+        let cal = Calendar.current
+        let now = Date()
+        let todayStart = cal.startOfDay(for: now)
+
+        guard let startDate = cal.date(byAdding: .day, value: -(90 - 1), to: todayStart) else { return [] }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let unit = mgdlUnitV1()
+
+        let samples: [HKQuantitySample] = await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, s, _ in
+                continuation.resume(returning: (s as? [HKQuantitySample]) ?? [])
+            }
+            self.healthStore.execute(query)
+        }
+
+        if samples.isEmpty { return [] }
+
+        var byTimestamp: [TimeInterval: (Date, Double)] = [:]
+        byTimestamp.reserveCapacity(samples.count)
+
+        for s in samples {
+            let key = s.startDate.timeIntervalSince1970.rounded()
+            byTimestamp[key] = (s.startDate, s.quantity.doubleValue(for: unit))
+        }
+
+        return byTimestamp.values
+            .map { (ts: $0.0, mgdl: $0.1) }
+            .sorted { $0.ts < $1.ts }
+    }
+
+    private func computeRollingStatsDexcomLikeV1(
+        values: [(ts: Date, mgdl: Double)],
+        windowDays: Int
+    ) -> (mean: Double, sd: Double, cv: Double)? {
+
+        guard values.count >= 2 else { return nil }
+        guard let end = values.last?.ts else { return nil }
+        let start = end.addingTimeInterval(TimeInterval(-windowDays * 24 * 60 * 60))
+
+        let window = values
+            .filter { $0.ts >= start && $0.ts <= end }
+            .map { $0.mgdl }
+
+        guard window.count >= 2 else { return nil }
+
+        let n = Double(window.count)
+        let mean = window.reduce(0.0, +) / n
+
+        let sumSq = window.reduce(0.0) { acc, x in
+            let d = x - mean
+            return acc + (d * d)
+        }
+
+        let variance = sumSq / max(1.0, (n - 1.0))
+        let sd = sqrt(variance)
+
+        guard mean > 0, sd > 0 else { return nil }
+
+        let cv = max(0, (sd / mean) * 100.0)
+        return (mean: mean, sd: sd, cv: cv)
+    }
+
+    @MainActor
+    private func updateRollingStatsDexcomLikeFromRaw90V1() async {
+        let raw = await fetchGlucoseRaw90DedupedV1Async()
+
+        let s7  = computeRollingStatsDexcomLikeV1(values: raw, windowDays: 7)
+        let s14 = computeRollingStatsDexcomLikeV1(values: raw, windowDays: 14)
+        let s30 = computeRollingStatsDexcomLikeV1(values: raw, windowDays: 30)
+        let s90 = computeRollingStatsDexcomLikeV1(values: raw, windowDays: 90)
+
+        await MainActor.run {
+            self.rollingGlucoseSdMgdl7  = s7?.sd
+            self.rollingGlucoseSdMgdl14 = s14?.sd
+            self.rollingGlucoseSdMgdl30 = s30?.sd
+            self.rollingGlucoseSdMgdl90 = s90?.sd
+
+            self.rollingGlucoseCvPercent7  = s7?.cv
+            self.rollingGlucoseCvPercent14 = s14?.cv
+            self.rollingGlucoseCvPercent30 = s30?.cv
+            self.rollingGlucoseCvPercent90 = s90?.cv
+        }
     }
 
     // ------------------------------------------------------------
@@ -284,6 +363,10 @@ extension HealthStore {
     }
 
     private func fetchDailyTIR90V1RawAsync() async -> [DailyTIREntry] {
+
+        let authMissing = await MainActor.run(resultType: Bool.self) { self.glucoseReadAuthIssueV1 }
+        if authMissing { return [] }
+
         guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return [] }
 
         let cal = Calendar.current
@@ -435,9 +518,15 @@ extension HealthStore {
         await MainActor.run {
             self.dailyGlucoseStats90 = out.sorted { $0.date < $1.date }
         }
+
+        await updateRollingStatsDexcomLikeFromRaw90V1()
     }
 
     private func fetchDailyGlucoseStats90V1RawAsync() async -> [DailyGlucoseStatsEntry] {
+
+        let authMissing = await MainActor.run(resultType: Bool.self) { self.glucoseReadAuthIssueV1 }
+        if authMissing { return [] }
+
         guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return [] }
 
         let cal = Calendar.current
@@ -464,7 +553,6 @@ extension HealthStore {
 
         if samples.isEmpty { return [] }
 
-        // De-dupe by timestamp (rounded seconds), then bucket by day
         var byTimestamp: [TimeInterval: (date: Date, mgdl: Double)] = [:]
         byTimestamp.reserveCapacity(samples.count)
 
@@ -509,10 +597,12 @@ extension HealthStore {
                 mean = values.reduce(0.0, +) / Double(values.count)
 
                 if values.count >= 2 {
-                    let variance = values.reduce(0.0) { acc, x in
+                    let n = Double(values.count)
+                    let sumSq = values.reduce(0.0) { acc, x in
                         let d = x - mean
                         return acc + (d * d)
-                    } / Double(values.count) // population variance (consistent with your 7d overview code)
+                    }
+                    let variance = sumSq / max(1.0, (n - 1.0))
                     sd = sqrt(variance)
                 } else {
                     sd = 0
@@ -537,6 +627,7 @@ extension HealthStore {
 
         return out
     }
+
     // ------------------------------------------------------------
     // MARK: - Overview Daily Series (7 full days: yesterday + 6 before)
     // ------------------------------------------------------------
@@ -552,6 +643,10 @@ extension HealthStore {
     }
 
     private func fetchOverviewDailyTIR7FullDaysV1RawAsync() async -> [DailyTIREntry] {
+
+        let authMissing = await MainActor.run(resultType: Bool.self) { self.glucoseReadAuthIssueV1 }
+        if authMissing { return [] }
+
         guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return [] }
 
         let cal = Calendar.current
@@ -574,6 +669,8 @@ extension HealthStore {
             }
             self.healthStore.execute(query)
         }
+
+        if samples.isEmpty { return [] }
 
         var byTimestamp: [TimeInterval: (date: Date, mgdl: Double)] = [:]
         byTimestamp.reserveCapacity(samples.count)
@@ -697,6 +794,10 @@ extension HealthStore {
     }
 
     private func fetchOverviewDailyGlucoseStats7FullDaysV1RawAsync() async -> [DailyGlucoseStatsEntry] {
+
+        let authMissing = await MainActor.run(resultType: Bool.self) { self.glucoseReadAuthIssueV1 }
+        if authMissing { return [] }
+
         guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return [] }
 
         let cal = Calendar.current
@@ -719,6 +820,8 @@ extension HealthStore {
             }
             self.healthStore.execute(query)
         }
+
+        if samples.isEmpty { return [] }
 
         var byTimestamp: [TimeInterval: (date: Date, mgdl: Double)] = [:]
         byTimestamp.reserveCapacity(samples.count)
@@ -762,10 +865,12 @@ extension HealthStore {
                 mean = values.reduce(0.0, +) / Double(values.count)
 
                 if values.count >= 2 {
-                    let variance = values.reduce(0.0) { acc, x in
+                    let n = Double(values.count)
+                    let sumSq = values.reduce(0.0) { acc, x in
                         let d = x - mean
                         return acc + (d * d)
-                    } / Double(values.count)
+                    }
+                    let variance = sumSq / max(1.0, (n - 1.0))
                     sd = sqrt(variance)
                 } else {
                     sd = 0
@@ -790,31 +895,29 @@ extension HealthStore {
 
         return out
     }
-    
+
     // ============================================================
     // MARK: - HYBRID Snapshot Gate (Report / GMI consistency)
     // ============================================================
 
- 
+    @MainActor
+    func awaitHybridGlucoseReadyV1() async {
 
-        /// Blocks until all HYBRID glucose inputs are guaranteed ready.
-        /// Required for deterministic Report vs Metric consistency.
-        @MainActor
-        func awaitHybridGlucoseReadyV1() async {
+        if glucoseReadAuthIssueV1 { return }
 
-            while true {
-                let hasDailyStats = !dailyGlucoseStats90.isEmpty
-                let hasTodayMean  = todayGlucoseMeanMgdl != nil
-                let hasCoverage   = todayGlucoseCoverageMinutes > 0
+        while true {
 
-                if hasDailyStats && hasTodayMean && hasCoverage {
-                    return
-                }
+            if glucoseReadAuthIssueV1 { return }
 
-                // short backoff – avoids race with async HealthKit fetches
-                try? await Task.sleep(nanoseconds: 30_000_000) // 30 ms
+            let hasDailyStats = !dailyGlucoseStats90.isEmpty
+            let hasTodayMean  = todayGlucoseMeanMgdl != nil
+            let hasCoverage   = todayGlucoseCoverageMinutes > 0
+
+            if hasDailyStats && hasTodayMean && hasCoverage {
+                return
             }
+
+            try? await Task.sleep(nanoseconds: 30_000_000)
         }
     }
-    
-
+}

@@ -38,7 +38,7 @@ struct MonthlyScaledBarChart: View {
 
     /// Kleine Luft nach oben, damit Labels nicht abgeschnitten werden
     private var yMaxWithHeadroom: Double {
-        yMax * 1.08
+        yMax * 1.18
     }
 
     /// Reduzierte Tick-Liste für die Anzeige
@@ -104,13 +104,13 @@ struct MonthlyScaledBarChart: View {
                     y: 1.5
                 )
                 // 🔹 Wert direkt über dem Balken – nur Zahl, keine Einheit
-                .annotation(position: .top, alignment: .center) {
-                    Text("\(Int(value.rounded()))")
+                .annotation(position: .top) {
+                    Text(valueLabel(value))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
-                        .padding(.bottom, 2)
-                }
-            }
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }            }
 
             // 🔹 Optional: Monats-Ziellinie
             if let goalValue {
@@ -118,7 +118,7 @@ struct MonthlyScaledBarChart: View {
                     y: .value("MonthlyGoal", goalValue)
                 )
                 .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.Glu.successGreen)
             }
         }
 
@@ -159,7 +159,7 @@ struct MonthlyScaledBarChart: View {
 
                 AxisValueLabel {
                     if let month = value.as(String.self) {
-                        Text(month)
+                        Text(LocalizedDateText.shortMonth(from: month))
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
                     }

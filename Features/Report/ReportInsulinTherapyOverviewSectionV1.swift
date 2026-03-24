@@ -43,6 +43,17 @@ struct ReportInsulinTherapyOverviewSectionV1: View {
     private var axisBaselineColor: Color { blue.opacity(0.35) }
     private var axisBaselineLineWidth: CGFloat { 0.9 }
 
+    // ============================================================
+    // MARK: - Report Bar Width (PDF-safe)
+    // ============================================================
+
+    // UPDATED: PDF-safe fixed bar width via BarMark(width:)
+    private func reportBarWidth(for days: Int) -> CGFloat {
+        if days <= 30 { return 6 }
+        if days <= 60 { return 4 }
+        return 3
+    }
+
     var body: some View {
 
         let bolus = windowedBolus()
@@ -280,10 +291,10 @@ struct ReportInsulinTherapyOverviewSectionV1: View {
         let yMax: Double = max(1, (series.map(\.value).max() ?? 1) * 1.20)
 
         let trend = linearTrend(series)
+        let fixedBarW = reportBarWidth(for: windowDays) // UPDATED
 
         return VStack(alignment: .leading, spacing: 6) {
 
-            // UPDATED: stronger chart title
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(textColor.opacity(0.88))
@@ -293,7 +304,8 @@ struct ReportInsulinTherapyOverviewSectionV1: View {
                 ForEach(series) { p in
                     BarMark(
                         x: .value("Date", p.date),
-                        y: .value("Value", p.value)
+                        y: .value("Value", p.value),
+                        width: .fixed(fixedBarW) // UPDATED: PDF-safe bar width
                     )
                     .foregroundStyle(barColor)
                     .cornerRadius(2)
@@ -318,15 +330,13 @@ struct ReportInsulinTherapyOverviewSectionV1: View {
             .chartLegend(.hidden)
             .chartYScale(domain: yMin...yMax)
             .chartXScale(range: .plotDimension(padding: 12))
-            // UPDATED: remove X axis labels entirely (no ticks/labels/grid)
             .chartXAxis {
                 AxisMarks(values: .automatic) { _ in
                     AxisGridLine().foregroundStyle(Color.clear)
                     AxisTick().foregroundStyle(Color.clear)
-                    AxisValueLabel { EmptyView() } // no X-axis labels
+                    AxisValueLabel { EmptyView() }
                 }
             }
-            // Y axis stays (labels + subtle grid)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.8))
@@ -343,23 +353,24 @@ struct ReportInsulinTherapyOverviewSectionV1: View {
                     }
                 }
             }
-
-            // UPDATED: thin coordinate baselines (X + Y) to keep "coordinate system" feeling
             .chartOverlay { proxy in
                 GeometryReader { geo in
                     let frame = geo[proxy.plotAreaFrame]
                     Path { p in
-                        // Y axis (left)
                         p.move(to: CGPoint(x: frame.minX, y: frame.minY))
                         p.addLine(to: CGPoint(x: frame.minX, y: frame.maxY))
-                        // X axis (bottom)
                         p.move(to: CGPoint(x: frame.minX, y: frame.maxY))
                         p.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY))
                     }
-                    .stroke(axisBaselineColor, style: StrokeStyle(lineWidth: axisBaselineLineWidth, lineCap: .butt))
+                    .stroke(
+                        axisBaselineColor,
+                        style: StrokeStyle(
+                            lineWidth: axisBaselineLineWidth,
+                            lineCap: .butt
+                        )
+                    )
                 }
             }
-
             .frame(height: 120)
         }
     }

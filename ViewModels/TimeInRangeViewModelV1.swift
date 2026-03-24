@@ -4,12 +4,6 @@
 //
 //  Time In Range (Metabolic) — ViewModel (V1)
 //
-//  Macht NUR UI-nahe Ableitungen aus HealthStore-SSoT:
-//  - Today KPI aus tirTodaySummary (00:00 → now, minutenbasiert aus RAW)
-//  - Perioden 7/14/30/90 aus tirXdSummary (HYBRID: (days-1) dailyTIR90 + Today RAW)
-//  - Chart-Daten aus dailyTIR90 (tagesbasiert, 90 Tage)
-//  - Keine Fetches, keine HealthKit-Queries
-//
 
 import Foundation
 import Combine
@@ -19,21 +13,31 @@ import SwiftUI
 final class TimeInRangeViewModelV1: ObservableObject {
 
     // ============================================================
+    // MARK: - Info State
+    // ============================================================
+
+    enum TimeInRangeInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
     // MARK: - Published Outputs (View-facing)
     // ============================================================
 
-    // KPI
     @Published var todayTIRPercent: Int = 0
     @Published var tirTargetPercent: Int = 0
 
-    // Chart Data (SSoT: dailyTIR90)
+    @Published private(set) var todayCoverageMinutes: Int = 0
+
     @Published var last90DaysDaily: [DailyTIREntry] = []
 
-    // Period KPIs (HYBRID summaries → %)
     @Published private(set) var tir7dPercent: Int = 0
     @Published private(set) var tir14dPercent: Int = 0
     @Published private(set) var tir30dPercent: Int = 0
     @Published private(set) var tir90dPercent: Int = 0
+
+    @Published var glucoseReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies
@@ -65,7 +69,6 @@ final class TimeInRangeViewModelV1: ObservableObject {
 
     private func bindHealthStore() {
 
-        // Daily 90 (für Charts)
         healthStore.$dailyTIR90
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
@@ -73,15 +76,14 @@ final class TimeInRangeViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Today Summary (für Today KPI)
         healthStore.$tirTodaySummary
             .receive(on: DispatchQueue.main)
             .sink { [weak self] summary in
                 self?.todayTIRPercent = Self.tirPercentValue(from: summary)
+                self?.todayCoverageMinutes = max(0, summary?.coverageMinutes ?? 0)
             }
             .store(in: &cancellables)
 
-        // !!! UPDATED: Period Averages kommen aus HYBRID-Summaries (nicht aus Daily-Filter wie Steps)
         healthStore.$tir7dSummary
             .receive(on: DispatchQueue.main)
             .sink { [weak self] summary in
@@ -109,6 +111,13 @@ final class TimeInRangeViewModelV1: ObservableObject {
                 self?.tir90dPercent = Self.tirPercentValue(from: summary)
             }
             .store(in: &cancellables)
+
+        healthStore.$glucoseReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.glucoseReadAuthIssueV1 = $0
+            }
+            .store(in: &cancellables)
     }
 
     private func bindSettings() {
@@ -121,13 +130,16 @@ final class TimeInRangeViewModelV1: ObservableObject {
     private func syncFromStores() {
         last90DaysDaily = healthStore.dailyTIR90
         todayTIRPercent = Self.tirPercentValue(from: healthStore.tirTodaySummary)
+        todayCoverageMinutes = max(0, healthStore.tirTodaySummary?.coverageMinutes ?? 0)
+
         tirTargetPercent = settings.tirTargetPercent
 
-        // !!! UPDATED: Perioden aus HYBRID-Summaries
-        tir7dPercent  = Self.tirPercentValue(from: healthStore.tir7dSummary)
+        tir7dPercent = Self.tirPercentValue(from: healthStore.tir7dSummary)
         tir14dPercent = Self.tirPercentValue(from: healthStore.tir14dSummary)
         tir30dPercent = Self.tirPercentValue(from: healthStore.tir30dSummary)
         tir90dPercent = Self.tirPercentValue(from: healthStore.tir90dSummary)
+
+        glucoseReadAuthIssueV1 = healthStore.glucoseReadAuthIssueV1
     }
 
     // ============================================================
@@ -139,7 +151,7 @@ final class TimeInRangeViewModelV1: ObservableObject {
     }
 
     var formattedTodayTIRPercent: String {
-        todayTIRPercent > 0 ? "\(todayTIRPercent)%" : "–"
+        todayCoverageMinutes > 0 ? "\(todayTIRPercent)%" : "–"
     }
 
     var kpiDeltaText: String {
@@ -150,36 +162,60 @@ final class TimeInRangeViewModelV1: ObservableObject {
 
     var kpiDeltaColor: Color {
         let diff = todayTIRPercent - tirTargetPercent
-        if diff > 0 { return .green }
+        if diff > 0 { return Color.Glu.successGreen }
         if diff < 0 { return .red }
         return Color.Glu.primaryBlue
     }
 
     // ============================================================
-    // MARK: - Adapter: DailyTIREntry → DailyStepsEntry (Chart expects Int)
-    // - Wir speichern % als "steps" (0..100)
+    // MARK: - Goldstandard Hint State
     // ============================================================
 
-    var last90DaysChartData: [DailyStepsEntry] {
-        last90DaysDaily.map { entry in
-            DailyStepsEntry(
-                date: entry.date,
-                steps: Self.tirPercentValue(from: entry)
-            )
+    var todayInfoState: TimeInRangeInfoState? { // 🟨 NEW
+
+        if glucoseReadAuthIssueV1 {
+            return .noHistory
         }
+
+        if todayCoverageMinutes > 0 { return nil }
+
+        let hasAnyHistory = last90DaysDaily.contains { $0.coverageMinutes > 0 }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
     }
 
     // ============================================================
-    // MARK: - Period Averages (7/14/30/90) — HYBRID (% Int)
-    // - Leere Perioden (coverage == 0) ergeben 0 und werden im Chart als "0/–" gehandhabt
+    // MARK: - Adapter: DailyTIREntry → DailyStepsEntry
+    // ============================================================
+
+    var last90DaysChartData: [DailyStepsEntry] {
+        let cal = Calendar.current
+        let todayStart = cal.startOfDay(for: Date())
+
+        return last90DaysDaily
+            .filter { cal.startOfDay(for: $0.date) < todayStart }
+            .map { entry in
+                DailyStepsEntry(
+                    date: entry.date,
+                    steps: Self.tirPercentValue(from: entry)
+                )
+            }
+    }
+
+    // ============================================================
+    // MARK: - Period Averages (7/14/30/90)
     // ============================================================
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",  days: 7,  value: tir7dPercent),
-            .init(label: "14T", days: 14, value: tir14dPercent),
-            .init(label: "30T", days: 30, value: tir30dPercent),
-            .init(label: "90T", days: 90, value: tir90dPercent)
+            .init(label: L10n.Common.period7d,  days: 7,  value: tir7dPercent),
+            .init(label: L10n.Common.period14d, days: 14, value: tir14dPercent),
+            .init(label: L10n.Common.period30d, days: 30, value: tir30dPercent),
+            .init(label: L10n.Common.period90d, days: 90, value: tir90dPercent)
         ]
     }
 
@@ -202,7 +238,7 @@ final class TimeInRangeViewModelV1: ObservableObject {
     private static func tirPercentValue(from summary: TIRPeriodSummaryEntry?) -> Int {
         guard let summary else { return 0 }
         let cov = max(0, summary.coverageMinutes)
-        guard cov > 0 else { return 0 }                 // ✅ leere Perioden zählen nicht
+        guard cov > 0 else { return 0 }
         let inRange = max(0, summary.inRangeMinutes)
         let pct = Int((Double(inRange) / Double(cov) * 100.0).rounded())
         return max(0, min(100, pct))
@@ -210,7 +246,7 @@ final class TimeInRangeViewModelV1: ObservableObject {
 
     private static func tirPercentValue(from entry: DailyTIREntry) -> Int {
         let cov = max(0, entry.coverageMinutes)
-        guard cov > 0 else { return 0 }                 // ✅ leere Tage zählen nicht
+        guard cov > 0 else { return 0 }
         let inRange = max(0, entry.inRangeMinutes)
         let pct = Int((Double(inRange) / Double(cov) * 100.0).rounded())
         return max(0, min(100, pct))

@@ -2,29 +2,60 @@
 //  UnitsSettingsSection.swift
 //  GluVibProbe
 //
+//  Settings — Units Section
+//  Purpose:
+//  - Renders the unit selection section for glucose, distance, and body weight.
+//
+//  Data Flow (SSoT):
+//  - SettingsView / SettingsDomain screen -> Binding values -> UnitsSettingsSection -> UI
+//
+//  Key Connections:
+//  - GlucoseUnit
+//  - DistanceUnit
+//  - WeightUnit
+//
 
 import SwiftUI
 
 struct UnitsSettingsSection: View {
 
+    // ============================================================
+    // MARK: - Inputs
+    // ============================================================
+
     @Binding var glucoseUnit: GlucoseUnit
     @Binding var distanceUnit: DistanceUnit
     @Binding var weightUnit: WeightUnit
 
-    private let titleColor: Color = Color.Glu.primaryBlue
+    // ============================================================
+    // MARK: - Styling
+    // ============================================================
+
+    private let titleColor: Color = Color.Glu.systemForeground
     private let sectionTitleFont: Font = .title3.weight(.semibold)
     private let segmentFont: Font = .body.weight(.bold)
+    private let sectionSpacing: CGFloat = 18
     private let blockSpacing: CGFloat = 14
 
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
+
     var body: some View {
-        // UPDATED: no custom card frame / no rounded background
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
 
-            VStack(alignment: .leading, spacing: blockSpacing) {
-                Text("Blood Glucose")
-                    .font(sectionTitleFont)
-                    .foregroundColor(titleColor)
-
+            unitBlock( // 🟨 UPDATED
+                title: String(
+                    localized: "Blood Glucose",
+                    defaultValue: "Blood Glucose",
+                    comment: "Section title for blood glucose unit selection"
+                ),
+                accessibilityLabel: String(
+                    localized: "Blood Glucose Unit",
+                    defaultValue: "Blood Glucose Unit",
+                    comment: "Accessibility label for blood glucose unit picker"
+                )
+            ) {
                 Picker("", selection: $glucoseUnit) {
                     ForEach(GlucoseUnit.allCases) { unit in
                         Text(unit.label)
@@ -32,18 +63,20 @@ struct UnitsSettingsSection: View {
                             .tag(unit)
                     }
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.large)
-                .tint(titleColor)
-                .padding(.vertical, 2)
-                .accessibilityLabel("Blood Glucose Unit")
             }
 
-            VStack(alignment: .leading, spacing: blockSpacing) {
-                Text("Distance")
-                    .font(sectionTitleFont)
-                    .foregroundColor(titleColor)
-
+            unitBlock(
+                title: String(
+                    localized: "Distance",
+                    defaultValue: "Distance",
+                    comment: "Section title for distance unit selection"
+                ),
+                accessibilityLabel: String(
+                    localized: "Distance Unit",
+                    defaultValue: "Distance Unit",
+                    comment: "Accessibility label for distance unit picker"
+                )
+            ) {
                 Picker("", selection: $distanceUnit) {
                     ForEach(DistanceUnit.allCases) { unit in
                         Text(unit.label)
@@ -51,18 +84,20 @@ struct UnitsSettingsSection: View {
                             .tag(unit)
                     }
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.large)
-                .tint(titleColor)
-                .padding(.vertical, 2)
-                .accessibilityLabel("Distance Unit")
             }
 
-            VStack(alignment: .leading, spacing: blockSpacing) {
-                Text("Body Weight")
-                    .font(sectionTitleFont)
-                    .foregroundColor(titleColor)
-
+            unitBlock(
+                title: String(
+                    localized: "Body Weight",
+                    defaultValue: "Body Weight",
+                    comment: "Section title for body weight unit selection"
+                ),
+                accessibilityLabel: String(
+                    localized: "Body Weight Unit",
+                    defaultValue: "Body Weight Unit",
+                    comment: "Accessibility label for body weight unit picker"
+                )
+            ) {
                 Picker("", selection: $weightUnit) {
                     ForEach(WeightUnit.allCases) { unit in
                         Text(unit.label)
@@ -70,18 +105,39 @@ struct UnitsSettingsSection: View {
                             .tag(unit)
                     }
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.large)
-                .tint(titleColor)
-                .padding(.vertical, 2)
-                .accessibilityLabel("Body Weight Unit")
             }
         }
         .padding(.vertical, 6)
     }
+
+    // ============================================================
+    // MARK: - Local Helper Views
+    // ============================================================
+
+    @ViewBuilder
+    private func unitBlock<Content: View>(
+        title: String,
+        accessibilityLabel: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: blockSpacing) {
+            Text(title)
+                .font(sectionTitleFont)
+                .foregroundStyle(titleColor)
+
+            content()
+                .pickerStyle(.segmented)
+                .controlSize(.large)
+                .tint(titleColor)
+                .padding(.vertical, 2)
+                .accessibilityLabel(accessibilityLabel)
+        }
+    }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("UnitsSettingsSection") {
     NavigationStack {
@@ -92,6 +148,6 @@ struct UnitsSettingsSection: View {
                 weightUnit: .constant(.kg)
             )
         }
-        .tint(Color.Glu.primaryBlue)
+        .tint(Color.Glu.systemForeground)
     }
 }

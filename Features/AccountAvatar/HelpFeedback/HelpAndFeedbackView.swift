@@ -2,10 +2,18 @@
 //  HelpAndFeedbackView.swift
 //  GluVibProbe
 //
-//  Help & Feedback (static form → Apple Mail composer)
-//  - Apple-conform: uses MFMailComposeViewController (system UI)
-//  - Prefills recipient, subject and body
-//  - No HealthStore access, no medical advice
+//  Settings / Account — Help & Feedback Screen
+//  Purpose:
+//  - Collects a simple feedback/help message and opens Apple Mail with prefilled content.
+//  - Uses Apple system mail composer when available and mailto fallback otherwise.
+//
+//  Data Flow (SSoT):
+//  - Local view state only -> Mail composer / mailto URL
+//
+//  Key Connections:
+//  - MFMailComposeViewController
+//  - AppDiagnostics
+//  - MailtoBuilder
 //
 
 import SwiftUI
@@ -13,21 +21,33 @@ import MessageUI
 
 struct HelpAndFeedbackView: View {
 
+    // ============================================================
     // MARK: - Constants
+    // ============================================================
 
     private let supportEmail: String = "support@gluvib.com"
 
-    // MARK: - Form State
+    // ============================================================
+    // MARK: - Local State
+    // ============================================================
 
     private enum Category: String, CaseIterable, Identifiable {
-        case feedback = "Feedback"
-        case help = "Help"
-        case other = "Other"
+        case feedback
+        case help
+        case other
 
         var id: String { rawValue }
 
-        var subjectPrefix: String {
-            "GluVib \(rawValue)"
+        var title: String { // 🟨 UPDATED
+            switch self {
+            case .feedback: return L10n.Avatar.HelpFeedback.feedback
+            case .help: return L10n.Avatar.HelpFeedback.help
+            case .other: return L10n.Avatar.HelpFeedback.other
+            }
+        }
+
+        var subjectPrefix: String { // 🟨 UPDATED
+            "GluVib \(title)"
         }
     }
 
@@ -37,20 +57,26 @@ struct HelpAndFeedbackView: View {
     @State private var showMailComposer: Bool = false
     @State private var showMailUnavailableAlert: Bool = false
 
-    // UPDATED: Fallback to mailto: if in-app composer is unavailable
-    @Environment(\.openURL) private var openURL // UPDATED
+    @Environment(\.openURL) private var openURL
 
-    // MARK: - Derived
+    // ============================================================
+    // MARK: - Styling
+    // ============================================================
+
+    private let titleColor: Color = Color.Glu.systemForeground
+
+    // ============================================================
+    // MARK: - Derived State
+    // ============================================================
 
     private var subject: String {
-        "\(category.subjectPrefix)"
+        category.subjectPrefix
     }
 
     private var bodyText: String {
-        // Keep this minimal and non-sensitive. No Health data.
         let appInfo = AppDiagnostics.summaryLine
         return """
-        Category: \(category.rawValue)
+        Category: \(category.title)
 
         Message:
         \(message)
@@ -60,19 +86,37 @@ struct HelpAndFeedbackView: View {
         """
     }
 
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
+
     var body: some View {
         Form {
             Section {
-                Picker("Category", selection: $category) {
+                Picker(
+                    String(
+                        localized: "Feedback Type",
+                        defaultValue: "Feedback Type",
+                        comment: "Picker title for feedback category in help and feedback view"
+                    ),
+                    selection: $category
+                ) {
                     ForEach(Category.allCases) { item in
-                        Text(item.rawValue).tag(item)
+                        Text(item.title)
+                            .tag(item)
                     }
                 }
                 .pickerStyle(.segmented)
 
             } header: {
-                Text("Feedback Type")
-                    .foregroundStyle(Color("GluPrimaryBlue"))
+                Text(
+                    String(
+                        localized: "Feedback Type",
+                        defaultValue: "Feedback Type",
+                        comment: "Section header for feedback category in help and feedback view"
+                    )
+                ) // 🟨 UPDATED
+                .foregroundStyle(titleColor)
             }
 
             Section {
@@ -80,16 +124,28 @@ struct HelpAndFeedbackView: View {
                     .frame(minHeight: 140)
                     .overlay(alignment: .topLeading) {
                         if message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("Write your message…")
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 8)
-                                .padding(.leading, 5)
+                            Text(
+                                String(
+                                    localized: "Write your message…",
+                                    defaultValue: "Write your message…",
+                                    comment: "Placeholder text in help and feedback message editor"
+                                )
+                            ) // 🟨 UPDATED
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                            .padding(.leading, 5)
                         }
                     }
 
             } header: {
-                Text("Message")
-                    .foregroundStyle(Color("GluPrimaryBlue"))
+                Text(
+                    String(
+                        localized: "Message",
+                        defaultValue: "Message",
+                        comment: "Section header for message input in help and feedback view"
+                    )
+                ) // 🟨 UPDATED
+                .foregroundStyle(titleColor)
             }
 
             Section {
@@ -98,39 +154,82 @@ struct HelpAndFeedbackView: View {
                 } label: {
                     HStack {
                         Spacer()
-                        Text("Send")
-                            .font(.headline)
+                        Text(
+                            String(
+                                localized: "Send",
+                                defaultValue: "Send",
+                                comment: "Send button title in help and feedback view"
+                            )
+                        ) // 🟨 UPDATED
+                        .font(.headline)
                         Spacer()
                     }
                 }
                 .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
             } footer: {
-                Text("This will open Apple Mail. GluVib does not send messages automatically.")
+                Text(
+                    String(
+                        localized: "This will open Apple Mail. GluVib does not send messages automatically.",
+                        defaultValue: "This will open Apple Mail. GluVib does not send messages automatically.",
+                        comment: "Footer note in help and feedback view"
+                    )
+                ) // 🟨 UPDATED
             }
         }
-        .navigationTitle("Help & Feedback")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .tint(Color("GluPrimaryBlue"))
-        .toolbar { // UPDATED
-            ToolbarItem(placement: .principal) { // UPDATED
-                Text("Help & Feedback") // UPDATED
-                    .font(.headline.weight(.semibold)) // UPDATED
-                    .foregroundStyle(Color("GluPrimaryBlue")) // UPDATED
+        .tint(titleColor)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(
+                    String(
+                        localized: "Help & Feedback",
+                        defaultValue: "Help & Feedback",
+                        comment: "Navigation title for help and feedback view"
+                    )
+                ) // 🟨 UPDATED
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(titleColor)
             }
-        }        .sheet(isPresented: $showMailComposer) {
+        }
+        .sheet(isPresented: $showMailComposer) {
             MailComposerSheet(
                 recipients: [supportEmail],
                 subject: subject,
                 body: bodyText
             )
         }
-        .alert("Mail is not available", isPresented: $showMailUnavailableAlert) {
-            Button("OK", role: .cancel) { }
+        .alert(
+            String(
+                localized: "Mail is not available",
+                defaultValue: "Mail is not available",
+                comment: "Alert title when mail is unavailable in help and feedback view"
+            ),
+            isPresented: $showMailUnavailableAlert
+        ) {
+            Button(
+                String(
+                    localized: "OK",
+                    defaultValue: "OK",
+                    comment: "Dismiss button title for mail unavailable alert"
+                ),
+                role: .cancel
+            ) { }
         } message: {
-            Text("Please set up Apple Mail on this device to send messages.")
+            Text(
+                String(
+                    localized: "Please set up Apple Mail on this device to send messages.",
+                    defaultValue: "Please set up Apple Mail on this device to send messages.",
+                    comment: "Alert message when mail is unavailable in help and feedback view"
+                )
+            ) // 🟨 UPDATED
         }
     }
+
+    // ============================================================
+    // MARK: - Actions
+    // ============================================================
 
     private func sendTapped() {
         if MailComposerSheet.canSendMail {
@@ -138,7 +237,6 @@ struct HelpAndFeedbackView: View {
             return
         }
 
-        // UPDATED: mailto fallback (opens Mail app)
         if let url = MailtoBuilder.makeURL(
             to: supportEmail,
             subject: subject,
@@ -151,9 +249,12 @@ struct HelpAndFeedbackView: View {
     }
 }
 
-// MARK: - App Diagnostics (non-sensitive)
+// ============================================================
+// MARK: - Local Helpers
+// ============================================================
 
 private enum AppDiagnostics {
+
     static var summaryLine: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "–"
@@ -163,25 +264,19 @@ private enum AppDiagnostics {
     }
 }
 
-// MARK: - mailto URL Builder (fallback)
-
 private enum MailtoBuilder {
 
     static func makeURL(to: String, subject: String, body: String) -> URL? {
         var components = URLComponents()
         components.scheme = "mailto"
         components.path = to
-
         components.queryItems = [
             URLQueryItem(name: "subject", value: subject),
             URLQueryItem(name: "body", value: body)
         ]
-
         return components.url
     }
 }
-
-// MARK: - Mail Composer Sheet (UIKit wrapper)
 
 private struct MailComposerSheet: UIViewControllerRepresentable {
 
@@ -226,6 +321,10 @@ private struct MailComposerSheet: UIViewControllerRepresentable {
         }
     }
 }
+
+// ============================================================
+// MARK: - Preview
+// ============================================================
 
 #if DEBUG
 #Preview("HelpAndFeedbackView") {

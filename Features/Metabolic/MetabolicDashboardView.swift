@@ -2,8 +2,10 @@
 //  MetabolicDashboardView.swift
 //  GluVibProbe
 //
+//  Metabolic Dashboard Router (V1)
 //  - KEINE Overview-View bis Premium/Free sauber steht (bleibt EmptyView)
-//  - Switch ist sauber/exhaustive (ohne default-Nesting)
+//  - Switch ist sauber/exhaustive (ohne default)
+//  - MetabolicDashboardView ist NUR für Metabolic-Screens zuständig
 //
 
 import SwiftUI
@@ -42,8 +44,8 @@ struct MetabolicDashboardView: View {
         case .timeInRange:
             TimeInRangeViewV1(onMetricSelected: handleMetricSelection)
 
-        case .ig:                                               // !!! NEW
-            IGViewV1(onMetricSelected: handleMetricSelection)    // !!! NEW
+        case .ig:
+            IGViewV1(onMetricSelected: handleMetricSelection)
 
         case .gmi:
             GMIViewV1(onMetricSelected: handleMetricSelection)
@@ -61,7 +63,7 @@ struct MetabolicDashboardView: View {
         // Andere Domains → hier NICHT zuständig
         // -----------------------------------------------------
         case .nutritionOverview,
-             .carbs, .protein, .fat, .calories,
+             .carbs, .carbsDayparts, .sugar, .protein, .fat, .calories,   // 🟨 UPDATED: add carbsDayparts
 
              .steps, .activityEnergy, .activityExerciseMinutes,
              .movementSplit, .moveTime, .workoutMinutes,
@@ -85,7 +87,7 @@ struct MetabolicDashboardView: View {
 #Preview("MetabolicDashboardView") {
     let previewStore = HealthStore.preview()
     let previewState = AppState()
-    previewState.currentStatsScreen = .ig   // !!! UPDATED
+    previewState.currentStatsScreen = .ig
 
     return MetabolicDashboardView()
         .environmentObject(previewStore)

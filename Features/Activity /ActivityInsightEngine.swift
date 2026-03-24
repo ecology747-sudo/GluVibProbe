@@ -223,12 +223,12 @@ private extension ActivityInsightEngine {
         switch context.dayPart {
         case .afternoon:
             return ActivityInsightOutput(
-                primaryText: "So far your day has been quite sedentary: many inactive minutes and not much movement yet. Short standing or walking breaks this afternoon can help you align your activity level with your recent days.",
+                primaryText: L10n.ActivityOverview.insightSedentaryAfternoon, // UPDATED
                 category: .sedentary
             )
         case .evening:
             return ActivityInsightOutput(
-                primaryText: "Today has been mostly sedentary and you are below your usual range for steps and exercise minutes. If it fits your schedule, a short walk or light workout can nicely round off the day.",
+                primaryText: L10n.ActivityOverview.insightSedentaryEvening,
                 category: .sedentary
             )
         case .morning:
@@ -257,7 +257,7 @@ private extension ActivityInsightEngine {
         guard highSteps || highExercise || highEnergy else { return nil }
 
         return ActivityInsightOutput(
-            primaryText: "You are clearly above your 7-day average in activity and energy expenditure today. Strong movement day – make sure to plan enough rest and recovery later on.",
+            primaryText: L10n.ActivityOverview.insightStrongWorkout,
             category: .exercise
         )
     }
@@ -286,7 +286,7 @@ private extension ActivityInsightEngine {
         guard nearOrAboveStepsAvg && lowExerciseCompared else { return nil }
 
         return ActivityInsightOutput(
-            primaryText: "Your everyday movement is solid today and roughly in line with your usual level. There is still room for focused training – even a short workout would nicely complement this positive trend.",
+            primaryText: L10n.ActivityOverview.insightEverydayMovement,
             category: .steps
         )
     }
@@ -315,11 +315,11 @@ private extension ActivityInsightEngine {
         let text: String
         switch daysSinceWorkout {
         case 3:
-            text = "Your last workout was about three days ago. If it fits your schedule, today or tomorrow would be a good moment to plan a new session."
+            text = L10n.ActivityOverview.insightLastWorkout3Days
         case 4...6:
-            text = "Your last workout was a few days ago. A moderate training session can help you get back into your usual rhythm."
+            text = L10n.ActivityOverview.insightLastWorkoutFewDays
         default:
-            text = "Your last workout was quite some time ago. Maybe you can plan a small restart in the next few days – even a short session sends a strong signal to your body."
+            text = L10n.ActivityOverview.insightLastWorkoutLongAgo
         }
 
         return ActivityInsightOutput(
@@ -357,7 +357,7 @@ private extension ActivityInsightEngine {
         guard veryLowSteps && veryLowExercise else { return nil }
 
         return ActivityInsightOutput(
-            primaryText: "The day has just started – there has not been much need for movement yet. Short activity bursts distributed over the day help you reach your usual level of steps and exercise minutes in a relaxed way.",
+            primaryText: L10n.ActivityOverview.insightEarlyDayLowActivity,
             category: .neutral
         )
     }
@@ -383,17 +383,17 @@ private extension ActivityInsightEngine {
 
         if closeToTypical {
             return ActivityInsightOutput(
-                primaryText: "Your activity today is currently close to your usual range over the last week. Keep your current pace or plan an extra session if it feels right.",
+                primaryText: L10n.ActivityOverview.insightNeutralTypical,
                 category: .neutral
             )
         } else if stepsRatio < 0.8 || exerciseRatio < 0.7 {
             return ActivityInsightOutput(
-                primaryText: "You are currently a bit below your typical activity level. A little extra activity later today can help you move closer to your 7-day average.",
+                primaryText: L10n.ActivityOverview.insightNeutralBelowTypical,
                 category: .neutral
             )
         } else {
             return ActivityInsightOutput(
-                primaryText: "You are slightly more active today than on most recent days. Keep this good feeling and at the same time pay attention to sufficient recovery.",
+                primaryText: L10n.ActivityOverview.insightNeutralAboveTypical,
                 category: .neutral
             )
         }

@@ -4,6 +4,8 @@
 //
 
 import SwiftUI
+import UIKit
+import OSLog
 
 struct ContentView: View {
 
@@ -11,21 +13,25 @@ struct ContentView: View {
     @EnvironmentObject var healthStore: HealthStore
     @EnvironmentObject private var settings: SettingsModel
 
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var selectedTab: GluTab
+    @State private var showStartupScreen = true
+    @State private var hasFinishedStartupDelay = false
 
     @Environment(\.verticalSizeClass) private var vSizeClass
     private var isLandscape: Bool { vSizeClass == .compact }
 
-    private var showsHomeTab: Bool { settings.hasCGM }
+    private var showsHomeTab: Bool { settings.hasCGM && settings.hasMetabolicPremiumEffective }
 
     private var shouldShowMainChartLandscape: Bool {
         isLandscape &&
         selectedTab == .home &&
         appState.currentStatsScreen == .none &&
-        showsHomeTab
+        showsHomeTab &&
+        !appState.isMetabolicReportPresented
     }
 
-    // UPDATED: kept locally for sheet detent selection (single account sheet presenter)
     @State private var accountSheetDetent: PresentationDetent = .large
 
     init(startTab: GluTab = .home) {
@@ -34,160 +40,191 @@ struct ContentView: View {
 
     var body: some View {
 
-        Group { // UPDATED: ensures modifiers attach to a concrete view instance
+        ZStack {
 
-            if shouldShowMainChartLandscape {
+            Group {
 
-                MainChartLandscapeViewV1()
-                    .environmentObject(settings)
-                    .tint(Color.Glu.primaryBlue)
+                if !settings.hasCompletedOnboarding {
+                    OnboardingFlowView()
+                } else {
 
-            } else {
+                    if shouldShowMainChartLandscape {
 
-                VStack(spacing: 0) {
+                        MainChartLandscapeViewV1()
+                            .environmentObject(settings)
+                            .tint(Color.Glu.primaryBlue)
 
-                    // ====================================================
-                    // MARK: - Main Content Routing
-                    // ====================================================
+                    } else {
 
-                    ZStack {
+                        VStack(spacing: 0) {
 
-                        switch appState.currentStatsScreen {
+                            ZStack {
 
-                        // Metabolic Detail / Overview
-                        case .metabolicOverview,
-                             .bolus,
-                             .basal,
-                             .bolusBasalRatio,
-                             .carbsBolusRatio,
-                             .timeInRange,
-                             .range,
-                             .gmi,
-                             .SD,
-                             .ig,
-                             .CV:
-                            MetabolicDashboardView()
+                                switch appState.currentStatsScreen {
 
-                        // Root per Tab
-                        default:
-                            switch selectedTab {
+                                case .metabolicOverview,
+                                     .bolus,
+                                     .basal,
+                                     .bolusBasalRatio,
+                                     .carbsBolusRatio,
+                                     .timeInRange,
+                                     .range,
+                                     .gmi,
+                                     .SD,
+                                     .ig,
+                                     .CV:
+                                    MetabolicDashboardView()
 
-                            case .activity:
-                                activityRootView
+                                default:
+                                    switch selectedTab {
 
-                            case .body:
-                                bodyRootView
+                                    case .activity:
+                                        activityRootView
 
-                            case .nutrition:
-                                nutritionRootView
+                                    case .body:
+                                        bodyRootView
 
-                            case .home:
-                                if showsHomeTab {
-                                    PremiumOverviewViewV1()
-                                } else {
-                                    activityRootView
+                                    case .nutrition:
+                                        nutritionRootView
+
+                                    case .home:
+                                        if showsHomeTab {
+                                            PremiumOverviewViewV1()
+                                        } else {
+                                            activityRootView
+                                        }
+
+                                    case .history:
+                                        HistoryOverviewViewV1()
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                            .onChange(of: settings.hasCGM) { _ in
+                                GluLog.ui.notice("settings.hasCGM changed | showsHomeTab=\(showsHomeTab, privacy: .public)")
+                                if !showsHomeTab, selectedTab == .home {
+                                    selectedTab = .activity
+                                    appState.currentStatsScreen = .none
+                                    GluLog.ui.notice("home tab fallback applied | reason=hasCGMChanged")
+                                }
+                            }
+
+                            .onChange(of: settings.isPremiumEnabled) { _ in
+                                GluLog.ui.notice("settings.isPremiumEnabled changed | showsHomeTab=\(showsHomeTab, privacy: .public)")
+                                if !showsHomeTab, selectedTab == .home {
+                                    selectedTab = .activity
+                                    appState.currentStatsScreen = .none
+                                    GluLog.ui.notice("home tab fallback applied | reason=isPremiumEnabledChanged")
+                                }
+                            }
+
+                            .onChange(of: settings.trialStartDate) { _ in
+                                GluLog.ui.notice("settings.trialStartDate changed | showsHomeTab=\(showsHomeTab, privacy: .public)")
+                                if !showsHomeTab, selectedTab == .home {
+                                    selectedTab = .activity
+                                    appState.currentStatsScreen = .none
+                                    GluLog.ui.notice("home tab fallback applied | reason=trialStartDateChanged")
+                                }
+                            }
+
+                            .onChange(of: appState.requestedTab) { newTab in
+                                guard let newTab else { return }
+
+                                GluLog.ui.notice("requestedTab received | tab=\(String(describing: newTab), privacy: .public)")
+
+                                if newTab == .home, !showsHomeTab {
+                                    selectedTab = .activity
+                                    appState.currentStatsScreen = .none
+                                    appState.requestedTab = nil
+                                    GluLog.ui.notice("requestedTab rerouted | requested=home actual=activity")
+                                    return
                                 }
 
-                            case .history:
-                                HistoryOverviewViewV1()
+                                selectedTab = newTab
+
+                                if appState.currentStatsScreen == .none {
+                                    switch newTab {
+                                    case .nutrition:
+                                        appState.currentStatsScreen = .nutritionOverview
+                                    case .activity, .body, .home, .history:
+                                        appState.currentStatsScreen = .none
+                                    }
+                                }
+
+                                appState.requestedTab = nil
+                                GluLog.ui.notice("requestedTab applied | selectedTab=\(String(describing: selectedTab), privacy: .public)")
                             }
+
+                        }
+                        .tint(Color.Glu.systemForeground)
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            GluBottomTabBar(
+                                selectedTab: Binding(
+                                    get: { selectedTab },
+                                    set: { handleTabSelection($0) }
+                                ),
+                                showsHomeTab: showsHomeTab
+                            )
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    // ====================================================
-                    // MARK: - Reactive Tab Adjustments
-                    // ====================================================
-
-                    .onChange(of: settings.hasCGM) { hasCGM in
-                        if !hasCGM, selectedTab == .home {
-                            selectedTab = .activity
-                            appState.currentStatsScreen = .none
-                        }
-                    }
-
-                    .onChange(of: appState.requestedTab) { newTab in
-                        guard let newTab else { return }
-
-                        if newTab == .home, !showsHomeTab {
-                            selectedTab = .activity
-                            appState.currentStatsScreen = .none
-                            appState.requestedTab = nil
-                            return
-                        }
-
-                        selectedTab = newTab
-
-                        if appState.currentStatsScreen == .none {
-                            switch newTab {
-                            case .nutrition:
-                                appState.currentStatsScreen = .nutritionOverview
-                            case .activity, .body, .home, .history:
-                                appState.currentStatsScreen = .none
-                            }
-                        }
-
-                        appState.requestedTab = nil
-                    }
-
-                    // ====================================================
-                    // MARK: - Bottom Tab Bar (NO Settings)
-                    // ====================================================
-
-                    GluBottomTabBar(
-                        selectedTab: Binding(
-                            get: { selectedTab },
-                            set: { handleTabSelection($0) }
-                        ),
-                        showsHomeTab: showsHomeTab
-                    )
                 }
-                .tint(Color.Glu.primaryBlue)
+            }
+
+            if showStartupScreen {
+                AppStartupScreenView()
+                    .transition(.opacity)
+                    .zIndex(1000)
             }
         }
-        // ============================================================
-        // MARK: - Account Sheet Presenter (SINGLE ROOT STACK)
-        // ============================================================
+        .task {
+            try? await Task.sleep(nanoseconds: 3_200_000_000)
+            hasFinishedStartupDelay = true
+
+            withAnimation(.easeInOut(duration: 1.10)) {
+                showStartupScreen = false
+            }
+        }
+
+        .onAppear {
+            guard settings.hasCompletedOnboarding else {
+                GluLog.ui.notice("ContentView appeared | onboardingIncomplete=true")
+                return
+            }
+            GluLog.ui.notice("ContentView appeared | onboardingComplete=true selectedTab=\(String(describing: selectedTab), privacy: .public)")
+            settings.ensureTrialStartedIfEligible()
+        }
+
         .sheet(isPresented: $appState.isAccountSheetPresented) {
             AccountSheetRootView()
                 .environmentObject(appState)
                 .environmentObject(healthStore)
                 .environmentObject(settings)
-                .tint(Color("GluPrimaryBlue")) // UPDATED: force correct tint from first frame
+                .tint(Color.Glu.systemForeground)
                 .presentationDetents([.medium, .large], selection: $accountSheetDetent)
                 .presentationDragIndicator(.visible)
         }
 
-        // ============================================================
-        // MARK: - Serial Handoff: Account -> Settings (prevents "everything disappears")
-        // ============================================================
-        .onChange(of: appState.isAccountSheetPresented) { isPresented in // UPDATED
-            guard isPresented == false else { return }                  // UPDATED
-            guard let pending = appState.pendingSettingsStartDomain else { return } // UPDATED
+        .onChange(of: appState.isAccountSheetPresented) { isPresented in
+            guard isPresented == false else { return }
+            guard let pending = appState.pendingSettingsStartDomain else { return }
 
-            appState.settingsStartDomain = pending                      // UPDATED
-            appState.pendingSettingsStartDomain = nil                   // UPDATED
+            appState.settingsStartDomain = pending
+            appState.pendingSettingsStartDomain = nil
 
-            DispatchQueue.main.async {                                  // UPDATED
-                appState.isSettingsSheetPresented = true                // UPDATED
+            DispatchQueue.main.async {
+                appState.isSettingsSheetPresented = true
             }
         }
 
-        // ============================================================
-        // MARK: - Settings Sheet Presenter (SINGLE ROOT STACK)
-        // ============================================================
         .sheet(isPresented: $appState.isSettingsSheetPresented) {
-            SettingsView()                             // ✅ keine Parameter
+            SettingsView()
                 .environmentObject(appState)
                 .environmentObject(healthStore)
                 .environmentObject(settings)
-                .tint(Color.Glu.primaryBlue)
+                .tint(Color.Glu.systemForeground)
         }
     }
-
-    // ============================================================
-    // MARK: - Activity Root
-    // ============================================================
 
     @ViewBuilder
     private var activityRootView: some View {
@@ -206,10 +243,6 @@ struct ContentView: View {
         }
     }
 
-    // ============================================================
-    // MARK: - Body Root
-    // ============================================================
-
     @ViewBuilder
     private var bodyRootView: some View {
         switch appState.currentStatsScreen {
@@ -226,10 +259,6 @@ struct ContentView: View {
         }
     }
 
-    // ============================================================
-    // MARK: - Nutrition Root
-    // ============================================================
-
     @ViewBuilder
     private var nutritionRootView: some View {
         switch appState.currentStatsScreen {
@@ -237,7 +266,7 @@ struct ContentView: View {
         case .nutritionOverview, .none:
             NutritionOverviewViewV1()
 
-        case .carbs, .protein, .fat, .calories:
+        case .carbs, .carbsDayparts, .sugar, .protein, .fat, .calories:
             NutritionDashboardView()
 
         default:
@@ -245,15 +274,14 @@ struct ContentView: View {
         }
     }
 
-    // ============================================================
-    // MARK: - Tab Handling
-    // ============================================================
-
     private func handleTabSelection(_ newTab: GluTab) {
+
+        GluLog.ui.notice("tab selection requested | tab=\(String(describing: newTab), privacy: .public)")
 
         if newTab == .home, !showsHomeTab {
             selectedTab = .activity
             appState.currentStatsScreen = .none
+            GluLog.ui.notice("tab selection rerouted | requested=home actual=activity")
             return
         }
 
@@ -265,6 +293,8 @@ struct ContentView: View {
         case .activity, .body, .home, .history:
             appState.currentStatsScreen = .none
         }
+
+        GluLog.ui.notice("tab selection applied | selectedTab=\(String(describing: selectedTab), privacy: .public) currentStatsScreen=\(String(describing: appState.currentStatsScreen), privacy: .public)")
     }
 }
 
@@ -272,12 +302,69 @@ struct ContentView: View {
 // MARK: - Preview
 // ============================================================
 
-#Preview("ContentView – Home Tab") {
+#Preview("ContentView – Activity") { // 🟨 UPDATED
     let previewStore = HealthStore.preview()
-    let previewState = AppState()
+    let previewAppState = AppState()
+    let previewSettings = SettingsModel.shared
 
-    ContentView(startTab: .home)
+    previewSettings.hasCompletedOnboarding = true
+
+    return ContentView(startTab: .activity)
         .environmentObject(previewStore)
-        .environmentObject(previewState)
-        .environmentObject(SettingsModel.shared)
+        .environmentObject(previewAppState)
+        .environmentObject(previewSettings)
+}
+
+#Preview("ContentView – Body") { // 🟨 UPDATED
+    let previewStore = HealthStore.preview()
+    let previewAppState = AppState()
+    let previewSettings = SettingsModel.shared
+
+    previewSettings.hasCompletedOnboarding = true
+
+    return ContentView(startTab: .body)
+        .environmentObject(previewStore)
+        .environmentObject(previewAppState)
+        .environmentObject(previewSettings)
+}
+
+#Preview("ContentView – Nutrition") { // 🟨 UPDATED
+    let previewStore = HealthStore.preview()
+    let previewAppState = AppState()
+    let previewSettings = SettingsModel.shared
+
+    previewSettings.hasCompletedOnboarding = true
+
+    return ContentView(startTab: .nutrition)
+        .environmentObject(previewStore)
+        .environmentObject(previewAppState)
+        .environmentObject(previewSettings)
+}
+
+#Preview("ContentView – History") { // 🟨 UPDATED
+    let previewStore = HealthStore.preview()
+    let previewAppState = AppState()
+    let previewSettings = SettingsModel.shared
+
+    previewSettings.hasCompletedOnboarding = true
+
+    return ContentView(startTab: .history)
+        .environmentObject(previewStore)
+        .environmentObject(previewAppState)
+        .environmentObject(previewSettings)
+}
+
+#Preview("ContentView – Home Premium") { // 🟨 UPDATED
+    let previewStore = HealthStore.preview()
+    let previewAppState = AppState()
+    let previewSettings = SettingsModel.shared
+
+    previewSettings.hasCompletedOnboarding = true
+    previewSettings.hasCGM = true
+    previewSettings.isPremiumEnabled = true
+
+    return ContentView(startTab: .home)
+        .environmentObject(previewStore)
+        .environmentObject(previewAppState)
+        .environmentObject(previewSettings)
 }

@@ -2,24 +2,19 @@
 //  WeightViewModelV1.swift
 //  GluVibProbe
 //
-//  V1: Weight ViewModel
-//  - SSoT: HealthStore
-//  - Weight is Double (kg)
-//  - Targets aus SettingsModel (Display/Goal only)
-//  - KEIN Fetch im ViewModel (Views trigger refresh via HealthStore/Bootstrap)
-//
+//  Body V1 — Weight ViewModel
+//  - No fetch in ViewModel
+//  - Single Source of Truth: HealthStore
+//  - Target from SettingsModel
+//  - Goldstandard body hint / KPI / chart mapping
 //
 
 import Foundation
 import Combine
 import SwiftUI
 
-// ============================================================
-// MARK: - Local Double Chart Entry (V1)
-// ============================================================
-
 struct DailyDoubleEntry: Identifiable, Equatable {
-    var id: Date { date }                       // !!! UPDATED (stable id; no UUID churn)
+    var id: Date { date }
     let date: Date
     let value: Double
 }
@@ -28,30 +23,17 @@ struct DailyDoubleEntry: Identifiable, Equatable {
 final class WeightViewModelV1: ObservableObject {
 
     // ============================================================
-    // MARK: - Published Outputs
+    // MARK: - Published Outputs (View-facing)
     // ============================================================
 
     @Published var todayWeightKg: Double = 0
-    @Published var targetWeightKg: Double = 0                        // !!! UPDATED (Settings -> Double)
+    @Published var targetWeightKg: Double = 0
+
+    @Published var last90DaysData: [DailyWeightEntry] = []
+    @Published var monthlyWeightData: [MonthlyMetricEntry] = []
     @Published var weightDaily365Raw: [DailyWeightEntry] = []
 
-    // Chart-ready series (Double) — DISPLAY UNIT values (kg/lbs)      // !!! UPDATED
-    @Published var last90DaysForChart: [DailyDoubleEntry] = []        // !!! UPDATED
-    @Published var monthlyForChart: [MonthlyMetricEntry] = []         // (unchanged; depends on your existing pipeline)
-
-    // Period averages — DISPLAY UNIT values (rounded Int)             // !!! UPDATED
-    @Published var periodAverages: [PeriodAverageEntry] = []          // !!! UPDATED
-
-    // Scaling — based on DISPLAY UNIT values                           // !!! UPDATED
-    @Published var dailyScale: MetricScaleResult = MetricScaleHelper.scale([0], for: .weightKg)
-    @Published var periodScale: MetricScaleResult = MetricScaleHelper.scale([0], for: .weightKg)
-    @Published var monthlyScale: MetricScaleResult = MetricScaleHelper.scale([0], for: .weightKg)
-
-    // KPI strings (unit in KPI)
-    @Published var currentText: String = "–"
-    @Published var targetText: String = "–"
-    @Published var deltaText: String = "–"
-    @Published var deltaColor: Color = Color.Glu.primaryBlue
+    @Published var weightReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies
@@ -72,161 +54,246 @@ final class WeightViewModelV1: ObservableObject {
         self.healthStore = healthStore
         self.settings = settings
 
-        bind()
-        syncInitial()
+        bindHealthStore()
+        bindSettings()
+        syncFromStores()
     }
 
     // ============================================================
-    // MARK: - Bindings (trigger remap only)
+    // MARK: - Bindings (SSoT → ViewModel)
     // ============================================================
 
-    private func bind() {
+    private func bindHealthStore() {
 
-        // ✅ Weight today (Double)
         healthStore.$todayWeightKgRaw
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.remap()
-            }
+            .sink { [weak self] in self?.todayWeightKg = max(0, $0) }
             .store(in: &cancellables)
 
-        // ✅ 365 raw series (measured days only)
+        healthStore.$last90DaysWeight
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.last90DaysData = $0 }
+            .store(in: &cancellables)
+
+        healthStore.$monthlyWeight
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.monthlyWeightData = $0 }
+            .store(in: &cancellables)
+
         healthStore.$weightDaily365Raw
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.remap()
-            }
+            .sink { [weak self] in self?.weightDaily365Raw = $0 }
             .store(in: &cancellables)
 
-        // ✅ Target from SettingsModel (Steps-Pattern: Settings -> VM mirror)
+        healthStore.$weightReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.weightReadAuthIssueV1 = $0 }
+            .store(in: &cancellables)
+    }
+
+    private func bindSettings() {
         settings.$targetWeightKg
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.remap()
-            }
+            .sink { [weak self] in self?.targetWeightKg = Double($0) }
             .store(in: &cancellables)
 
-        // ✅ Display Unit preference — must remap chart values + scales
-        settings.$weightUnit                                           // !!! UPDATED
-            .receive(on: DispatchQueue.main)                           // !!! UPDATED
-            .sink { [weak self] _ in                                   // !!! UPDATED
-                self?.remap()                                          // !!! UPDATED
-            }                                                          // !!! UPDATED
-            .store(in: &cancellables)                                  // !!! UPDATED
+        settings.$weightUnit
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
-    private func syncInitial() {
-        remap()
-    }
-
-    // ============================================================
-    // MARK: - Core Mapping
-    // ============================================================
-
-    private func remap() {
-
-        let unit = settings.weightUnit                                 // !!! UPDATED
-
-        // 1) Pull from SSoT (BASE = kg)
+    private func syncFromStores() {
         todayWeightKg = max(0, healthStore.todayWeightKgRaw)
+        last90DaysData = healthStore.last90DaysWeight
+        monthlyWeightData = healthStore.monthlyWeight
         weightDaily365Raw = healthStore.weightDaily365Raw
+        targetWeightKg = Double(settings.targetWeightKg)
+        weightReadAuthIssueV1 = healthStore.weightReadAuthIssueV1
+    }
 
-        // !!! UPDATED: Fallback -> latest measured weight if todayWeightKgRaw not ready yet
-        if todayWeightKg <= 0, let latest = weightDaily365Raw.last(where: { $0.kg > 0 })?.kg {
-            todayWeightKg = max(0, latest)
+    // ============================================================
+    // MARK: - Availability (Today)
+    // ============================================================
+
+    private var hasTodayDatapoint: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        let in90 = last90DaysData.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
         }
 
-        // ✅ Steps-Pattern: Target from Settings (Int -> Double, BASE = kg)
-        targetWeightKg = max(0, Double(settings.targetWeightKg))
+        let in365 = weightDaily365Raw.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
 
-        // 2) Build last 90 days chart series (DISPLAY UNIT values)
-        let calendar = Calendar.current
-        let todayStart = calendar.startOfDay(for: Date())
-        let start90 = calendar.date(byAdding: .day, value: -89, to: todayStart) ?? todayStart
+        return in90 || in365
+    }
 
-        let last90Raw = weightDaily365Raw
-            .filter { $0.date >= start90 && $0.date <= todayStart }
-            .sorted { $0.date < $1.date }
+    private var hasTodayPositiveWeight: Bool {
+        todayWeightKg > 0
+    }
 
-        last90DaysForChart = last90Raw.map { entry in                   // !!! UPDATED
+    // ============================================================
+    // MARK: - KPI Formatting
+    // ============================================================
+
+    var currentText: String {
+        guard hasTodayDatapoint || hasTodayPositiveWeight else { return "–" }
+        return settings.weightUnit.formatted(fromKg: todayWeightKg, fractionDigits: 1)
+    }
+
+    var targetText: String {
+        settings.weightUnit.formatted(fromKg: targetWeightKg, fractionDigits: 1)
+    }
+
+    var deltaText: String {
+        guard hasTodayDatapoint || hasTodayPositiveWeight else { return "–" }
+
+        let delta = todayWeightKg - targetWeightKg
+        let sign: String = delta > 0 ? "+" : delta < 0 ? "−" : "±"
+        let absString = settings.weightUnit.formattedNumber(
+            fromKg: abs(delta),
+            fractionDigits: 1
+        )
+        return "\(sign) \(absString) \(settings.weightUnit.label)"
+    }
+
+    var deltaColor: Color {
+        guard hasTodayDatapoint || hasTodayPositiveWeight else { return Color.Glu.primaryBlue }
+
+        let delta = todayWeightKg - targetWeightKg
+        if delta > 0 { return .red }
+        if delta < 0 { return Color.Glu.successGreen }
+        return Color.Glu.primaryBlue
+    }
+
+    // ============================================================
+    // MARK: - Info Hint (Today) — Goldstandard Body
+    // ============================================================
+
+    var todayInfoText: String? { // 🟨 UPDATED
+
+        if settings.showPermissionWarnings && weightReadAuthIssueV1 {
+            return L10n.Weight.hintNoDataOrPermission
+        }
+
+        if hasTodayDatapoint || hasTodayPositiveWeight {
+            return nil
+        }
+
+        let hasAnyHistoryPositive =
+            last90DaysData.contains { $0.kg > 0 } ||
+            weightDaily365Raw.contains { $0.kg > 0 }
+
+        if !hasAnyHistoryPositive {
+            return L10n.Weight.hintNoDataOrPermission
+        }
+
+        return L10n.Weight.hintNoToday
+    }
+
+    // ============================================================
+    // MARK: - Chart Mapping
+    // ============================================================
+
+    var last90DaysForChart: [DailyDoubleEntry] {
+        last90DaysData.map {
             DailyDoubleEntry(
-                date: entry.date,
-                value: max(0, unit.convertedValue(fromKg: entry.kg))    // !!! UPDATED (DISPLAY)
+                date: $0.date,
+                value: max(0, settings.weightUnit.convertedValue(fromKg: $0.kg))
             )
         }
+    }
 
-        // 3) Period averages (compute in kg, store DISPLAY UNIT Int)    // !!! UPDATED
-        periodAverages = makePeriodAverages(from: weightDaily365Raw, unit: unit) // !!! UPDATED
-
-        // 4) Scaling (use helper output, but feed DISPLAY values)       // !!! UPDATED
-        dailyScale = MetricScaleHelper.scale(last90DaysForChart.map { $0.value }, for: .weightKg) // !!! UPDATED
-        periodScale = MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .weightKg) // !!! UPDATED
-        monthlyScale = MetricScaleHelper.scale(monthlyForChart.map { Double($0.value) }, for: .weightKg)
-
-        // 5) KPI strings (DISPLAY via Settings.weightUnit)
-        currentText = formatWeightDisplay(fromKg: todayWeightKg)
-        targetText = formatWeightDisplay(fromKg: targetWeightKg)
-
-        let deltaKg = todayWeightKg - targetWeightKg
-        deltaText = formatDeltaDisplay(fromKgDelta: deltaKg)
-        deltaColor = deltaKg == 0 ? Color.Glu.primaryBlue : (deltaKg < 0 ? .green : .red)
+    var monthlyForChart: [MonthlyMetricEntry] {
+        monthlyWeightData
     }
 
     // ============================================================
-    // MARK: - Helpers
+    // MARK: - Period Averages
     // ============================================================
 
-    private func makePeriodAverages(                                     // !!! UPDATED
-        from entries: [DailyWeightEntry],
-        unit: WeightUnit
-    ) -> [PeriodAverageEntry] {
-
-        // NOTE: PeriodAverageEntry.value is Int in your project.
-        // We compute avg in kg (Double) and convert for DISPLAY at the end.
-
-        func avgKg(lastDays days: Int) -> Double {                        // !!! UPDATED
-            let calendar = Calendar.current
-            let todayStart = calendar.startOfDay(for: Date())
-            guard let start = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else { return 0 }
-
-            let slice = entries
-                .filter { $0.date >= start && $0.date <= todayStart && $0.kg > 0 }
-
-            guard !slice.isEmpty else { return 0 }
-
-            let sum = slice.reduce(0.0) { $0 + $1.kg }
-            return sum / Double(slice.count)
-        }
-
-        func displayRoundedInt(fromKg kg: Double) -> Int {                // !!! UPDATED
-            let display = unit.convertedValue(fromKg: kg)                 // !!! UPDATED
-            return Int(round(display))                                    // !!! UPDATED
-        }
-
-        return [
-            .init(label: "7T",   days: 7,   value: displayRoundedInt(fromKg: avgKg(lastDays: 7))),   // !!! UPDATED
-            .init(label: "14T",  days: 14,  value: displayRoundedInt(fromKg: avgKg(lastDays: 14))),  // !!! UPDATED
-            .init(label: "30T",  days: 30,  value: displayRoundedInt(fromKg: avgKg(lastDays: 30))),  // !!! UPDATED
-            .init(label: "90T",  days: 90,  value: displayRoundedInt(fromKg: avgKg(lastDays: 90))),  // !!! UPDATED
-            .init(label: "180T", days: 180, value: displayRoundedInt(fromKg: avgKg(lastDays: 180))), // !!! UPDATED
-            .init(label: "365T", days: 365, value: displayRoundedInt(fromKg: avgKg(lastDays: 365)))  // !!! UPDATED
+    var periodAverages: [PeriodAverageEntry] { // 🟨 UPDATED
+        [
+            .init(label: L10n.Common.period7d, days: 7, value: averageWeight(last: 7)),
+            .init(label: L10n.Common.period14d, days: 14, value: averageWeight(last: 14)),
+            .init(label: L10n.Common.period30d, days: 30, value: averageWeight(last: 30)),
+            .init(label: L10n.Common.period90d, days: 90, value: averageWeight(last: 90)),
+            .init(label: L10n.Common.period180d, days: 180, value: averageWeight(last: 180)),
+            .init(label: L10n.Common.period365d, days: 365, value: averageWeight(last: 365))
         ]
     }
 
-    private func formatWeightDisplay(fromKg kg: Double) -> String {
-        guard kg > 0 else { return "–" }
-        return settings.weightUnit.formatted(fromKg: kg, fractionDigits: 1)
-    }
+    private func averageWeight(last days: Int) -> Int {
+        let source = weightDaily365Raw.isEmpty ? last90DaysData : weightDaily365Raw
+        guard !source.isEmpty else { return 0 }
 
-    private func formatDeltaDisplay(fromKgDelta deltaKg: Double) -> String {
-        let unit = settings.weightUnit
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
 
-        if deltaKg == 0 {
-            return "±\(unit.formattedNumber(fromKg: 0, fractionDigits: 1)) \(unit.label)"
+        guard
+            let endDate = calendar.date(byAdding: .day, value: -1, to: today),
+            let startDate = calendar.date(byAdding: .day, value: -days, to: today)
+        else { return 0 }
+
+        let filtered = source.filter {
+            let d = calendar.startOfDay(for: $0.date)
+            return d >= startDate && d <= endDate && $0.kg > 0
         }
 
-        let sign = deltaKg > 0 ? "+" : "−"
-        let absString = unit.formattedNumber(fromKg: abs(deltaKg), fractionDigits: 1)
-        return "\(sign)\(absString) \(unit.label)"
+        guard !filtered.isEmpty else { return 0 }
+
+        let avgKg = filtered.reduce(0.0) { $0 + $1.kg } / Double(filtered.count)
+        return Int(round(settings.weightUnit.convertedValue(fromKg: avgKg)))
+    }
+
+    // ============================================================
+    // MARK: - Chart Label Helper (NO units)
+    // ============================================================
+
+    private func numberOnlyLabel(_ value: Double) -> String {
+        if settings.weightUnit == .kg {
+            return String(format: "%.1f", value)
+        } else {
+            return "\(Int(value.rounded()))"
+        }
+    }
+
+    // ============================================================
+    // MARK: - Chart Scales (NO units in axis/labels)
+    // ============================================================
+
+    var dailyScale: MetricScaleResult {
+        let values = last90DaysForChart.map(\.value)
+        let base = MetricScaleHelper.scale(values, for: .weightKg)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
+    }
+
+    var periodScale: MetricScaleResult {
+        let values = periodAverages.map { Double($0.value) }
+        let base = MetricScaleHelper.scale(values, for: .weightKg)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
+    }
+
+    var monthlyScale: MetricScaleResult {
+        let values = monthlyForChart.map { Double($0.value) }
+        let base = MetricScaleHelper.scale(values, for: .weightKg)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
     }
 }

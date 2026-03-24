@@ -2,16 +2,27 @@
 //  BodyOverviewViewV1.swift
 //  GluVibProbe
 //
-//  V1: Body Overview
-//  - Design/Hierarchie basiert 1:1 auf alter BodyOverviewView (Cards/Content)
-//  - Mechanik (Pager/InitialLoad/Refresh) 1:1 wie ActivityOverviewViewV1
-//  - Daten kommen aus BodyOverviewViewModelV1 (SSoT: HealthStore)
+//  Body — Overview (V1)
+//
+//  Purpose
+//  - UI-only overview for the Body domain (Sleep, Weight, Heart, BMI, Body Fat).
+//  - Uses the standard GluVib Overview pattern: gradient background, sticky header, 3-day pager (DayBefore/Yesterday/Today),
+//    page dots, and pull-to-refresh (TODAY only; guarded inside the ViewModel).
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → BodyOverviewViewModelV1 (mapping/formatting) → BodyOverviewViewV1 (render only)
+//
+//  Notes
+//  - Views never access HealthKit directly.
+//  - This file is intentionally structured into readable sections (Pager/Header/Sections/Cards) without altering design or behavior.
 //
 
 import SwiftUI
 import Charts
 
-// MARK: - Scroll Offset Preference (für Sticky-Header)
+// ============================================================
+// MARK: - Scroll Offset Preference (Sticky Header)
+// ============================================================
 
 private struct BodyScrollOffsetKeyV1: PreferenceKey {
     static var defaultValue: CGFloat = 0
@@ -20,29 +31,43 @@ private struct BodyScrollOffsetKeyV1: PreferenceKey {
     }
 }
 
+// ============================================================
+// MARK: - Body Overview (V1)
+// ============================================================
+
 struct BodyOverviewViewV1: View {
 
-    // MARK: - Environment
+    // ============================================================
+    // MARK: Dependencies (Environment)
+    // ============================================================
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
+    @EnvironmentObject var settings: SettingsModel
 
-    // MARK: - ViewModel
+    // ============================================================
+    // MARK: ViewModel
+    // ============================================================
 
     @StateObject private var viewModel: BodyOverviewViewModelV1
 
-    // MARK: - Sticky Header
+    // ============================================================
+    // MARK: Sticky Header State
+    // ============================================================
 
     @State private var hasScrolled: Bool = false
 
-    // MARK: - Pager State
+    // ============================================================
+    // MARK: Pager State (3 days)
+    // ============================================================
 
-    /// 0 = DayBefore (-2), 1 = Yesterday (-1), 2 = Today (0)
     @State private var selectedPage: Int = 2
     @State private var didInitialLoad = false
-    @State private var isProgrammaticPageUpdate = false                // !!! NEW (wie Activity)
+    @State private var isProgrammaticPageUpdate = false
 
-    // MARK: - Init
+    // ============================================================
+    // MARK: Init
+    // ============================================================
 
     init(viewModel: BodyOverviewViewModelV1? = nil) {
         if let vm = viewModel {
@@ -57,19 +82,14 @@ struct BodyOverviewViewV1: View {
         }
     }
 
-    // MARK: - Body
+    // ============================================================
+    // MARK: Body
+    // ============================================================
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    .white,
-                    Color.Glu.bodyDomain.opacity(0.55)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            backgroundGradient
+                .ignoresSafeArea()
 
             ZStack(alignment: .top) {
 
@@ -85,33 +105,35 @@ struct BodyOverviewViewV1: View {
                         .tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .background(Color.clear)
+                .ignoresSafeArea(edges: .bottom)
                 .onPreferenceChange(BodyScrollOffsetKeyV1.self) { offset in
                     withAnimation(.easeInOut(duration: 0.22)) {
                         hasScrolled = offset < 0
                     }
                 }
                 .onChange(of: selectedPage) { newIndex in
-                    guard !isProgrammaticPageUpdate else { return }     // !!! NEW (wie Activity)
+                    guard !isProgrammaticPageUpdate else { return }
                     let newOffset = dayOffset(for: newIndex)
                     Task { @MainActor in
                         await viewModel.applySelectedDayOffset(newOffset)
                     }
                 }
                 .onAppear {
-                    // ✅ Initiales Setzen der Page darf KEIN onChange-Remap auslösen // !!! NEW (wie Activity)
-                    isProgrammaticPageUpdate = true                     // !!! NEW
+                    isProgrammaticPageUpdate = true
                     selectedPage = pageIndex(for: viewModel.selectedDayOffset)
 
-                    DispatchQueue.main.async {                          // !!! NEW
-                        isProgrammaticPageUpdate = false                // !!! NEW
+                    DispatchQueue.main.async {
+                        isProgrammaticPageUpdate = false
                     }
                 }
 
                 OverviewHeader(
-                    title: "Body Overview",
+                    title: L10n.BodyOverview.title, // 🟨 UPDATED
                     subtitle: headerSubtitle,
                     tintColor: Color.Glu.bodyDomain,
-                    hasScrolled: hasScrolled
+                    hasScrolled: hasScrolled,
+                    permissionBadgeScope: .body
                 )
 
                 VStack {
@@ -128,28 +150,36 @@ struct BodyOverviewViewV1: View {
         .task {
             guard !didInitialLoad else { return }
             didInitialLoad = true
-            await viewModel.refreshOnNavigation()                       // !!! NEW (wie Activity)
+            await viewModel.refreshOnNavigation()
         }
     }
+}
 
-    // MARK: - Header Subtitle
+// ============================================================
+// MARK: - Header Subtitle / Pager Helpers
+// ============================================================
 
-    private var headerSubtitle: String {
+private extension BodyOverviewViewV1 {
+
+    var headerSubtitle: String {
         switch viewModel.selectedDayOffset {
-        case 0: return "TODAY"
-        case -1: return "YESTERDAY"
-        default: return dateString(for: viewModel.selectedDate)
+        case 0:
+            return L10n.Common.todayUpper // 🟨 UPDATED
+        case -1:
+            return L10n.Common.yesterdayUpper // 🟨 UPDATED
+        default:
+            return dateString(for: viewModel.selectedDate)
         }
     }
 
-    private func dateString(for date: Date) -> String {
+    func dateString(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
     }
 
-    private func dayOffset(for pageIndex: Int) -> Int {
+    func dayOffset(for pageIndex: Int) -> Int {
         switch pageIndex {
         case 0: return -2
         case 1: return -1
@@ -157,7 +187,7 @@ struct BodyOverviewViewV1: View {
         }
     }
 
-    private func pageIndex(for offset: Int) -> Int {
+    func pageIndex(for offset: Int) -> Int {
         switch offset {
         case -2: return 0
         case -1: return 1
@@ -166,7 +196,27 @@ struct BodyOverviewViewV1: View {
     }
 }
 
-// MARK: - Day ScrollView
+// ============================================================
+// MARK: - Background
+// ============================================================
+
+private extension BodyOverviewViewV1 {
+
+    var backgroundGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                .white,
+                Color.Glu.bodyDomain.opacity(0.75)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+// ============================================================
+// MARK: - Day ScrollView (Content)
+// ============================================================
 
 private extension BodyOverviewViewV1 {
 
@@ -174,55 +224,94 @@ private extension BodyOverviewViewV1 {
         ScrollView {
             VStack(spacing: 16) {
 
-                GeometryReader { geo in
-                    Color.clear
-                        .preference(
-                            key: BodyScrollOffsetKeyV1.self,
-                            value: geo.frame(in: .global).minY
-                        )
-                }
-                .frame(height: 0)
+                scrollOffsetProbe
 
-                // 1:1 Content aus alter BodyOverviewView (nur mit V1-VM)
-
-                WeightMainCard(viewModel: viewModel)
-                    .contentShape(Rectangle())
-                    .onTapGesture { appState.currentStatsScreen = .weight }
-
-                HStack(spacing: 12) {
-                    SleepSmallCard(viewModel: viewModel)
-                        .contentShape(Rectangle())
-                        .onTapGesture { appState.currentStatsScreen = .sleep }
-
-                    HeartSmallCard(viewModel: viewModel)
-                        .contentShape(Rectangle())
-                        .onTapGesture { appState.currentStatsScreen = .restingHeartRate }
-                }
-
-                HStack(spacing: 12) {
-                    BMISmallCard(viewModel: viewModel)
-                        .contentShape(Rectangle())
-                        .onTapGesture { appState.currentStatsScreen = .bmi }
-
-                    BodyFatSmallCard(viewModel: viewModel)
-                        .contentShape(Rectangle())
-                        .onTapGesture { appState.currentStatsScreen = .bodyFat }
-                }
-
-                BodyInsightCardV1(viewModel: viewModel)                              // !!! CHANGED
-                    .contentShape(Rectangle())
+                weightSection
+                kpiTilesSection
+                insightSection
             }
-            .padding(.top, 52)            // 1:1 wie alte BodyOverviewView
-            .padding(.horizontal, 16)     // 1:1 wie alte BodyOverviewView
-            .padding(.bottom, 60)         // 1:1 wie alte BodyOverviewView (Platz für Dots)
+            .padding(.top, 52)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 60)
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 90)
         }
         .refreshable {
-            await viewModel.refresh()     // ✅ Pull-to-refresh wird im VM TODAY-guarded (wie Activity)
+            await viewModel.refresh()
         }
     }
 }
 
-// MARK: - PageDots (1:1 aus alter BodyOverviewView)
+// ============================================================
+// MARK: - Day ScrollView Building Blocks
+// ============================================================
+
+private extension BodyOverviewViewV1 {
+
+    var scrollOffsetProbe: some View {
+        GeometryReader { geo in
+            Color.clear
+                .preference(
+                    key: BodyScrollOffsetKeyV1.self,
+                    value: geo.frame(in: .global).minY
+                )
+        }
+        .frame(height: 0)
+    }
+
+    var weightSection: some View {
+        WeightMainCard(viewModel: viewModel)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                appState.handleMetricTap(metricName: L10n.Weight.title, settings: settings)
+            }
+    }
+
+    var kpiTilesSection: some View {
+        VStack(spacing: 12) {
+
+            HStack(spacing: 12) {
+                SleepSmallCard(viewModel: viewModel)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        appState.handleMetricTap(metricName: L10n.Sleep.title, settings: settings)
+                    }
+
+                HeartSmallCard(viewModel: viewModel)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        appState.handleMetricTap(metricName: L10n.RestingHeartRate.title, settings: settings)
+                    }
+            }
+
+            HStack(spacing: 12) {
+                BMISmallCard(viewModel: viewModel)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        appState.handleMetricTap(metricName: L10n.BMI.title, settings: settings)
+                    }
+
+                BodyFatSmallCard(viewModel: viewModel)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        appState.handleMetricTap(metricName: L10n.BodyFat.title, settings: settings)
+                    }
+            }
+        }
+    }
+
+    var insightSection: some View {
+        BodyInsightCardV1(viewModel: viewModel)
+            .contentShape(Rectangle())
+    }
+}
+
+// ============================================================
+// MARK: - PageDots (Legacy 1:1)
+// ============================================================
 
 private struct PageDots: View {
     let selected: Int
@@ -242,23 +331,19 @@ private struct PageDots: View {
 }
 
 // ============================================================
-// MARK: - Cards (1:1 aus alter BodyOverviewView, nur VM-Typ angepasst)
+// MARK: - Cards (Legacy 1:1, only VM type adapted)
 // ============================================================
-
-// MARK: - Weight main card
 
 private struct WeightMainCard: View {
 
     @ObservedObject var viewModel: BodyOverviewViewModelV1
-
-    private let accent = Color.Glu.bodyDomain
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
 
             HStack {
                 Label {
-                    Text("Weight")
+                    Text(L10n.Weight.title) // 🟨 UPDATED
                         .font(.headline.weight(.semibold))
                         .foregroundColor(Color.Glu.primaryBlue)
                 } icon: {
@@ -280,10 +365,17 @@ private struct WeightMainCard: View {
                     .foregroundColor(Color.Glu.primaryBlue)
 
                 HStack(spacing: 8) {
-                    Text("Target: \(viewModel.formattedWeight(viewModel.targetWeightKg))")
-                        .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                    Text(
+                        String.localizedStringWithFormat(
+                            L10n.BodyOverviewFormat.targetValue,
+                            viewModel.formattedWeight(viewModel.targetWeightKg)
+                        )
+                    ) // 🟨 UPDATED
+                    .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+
                     Text("·")
                         .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+
                     Text(viewModel.formattedDeltaKg(viewModel.weightDeltaKg))
                         .foregroundColor(viewModel.deltaColor(for: viewModel.weightDeltaKg))
                 }
@@ -293,17 +385,18 @@ private struct WeightMainCard: View {
             }
 
             if !viewModel.weightTrend.isEmpty {
-                WeightMiniBarChart(data: viewModel.weightTrend)
-                    .frame(height: 60)
+                WeightMiniBarChart(
+                    data: viewModel.weightTrend,
+                    targetWeightKg: viewModel.targetWeightKg
+                )
+                .frame(height: 60)
             }
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .gluVibCardFrame(domainColor: Color.Glu.bodyDomain) // ✅ Regel: zentraler Modifier
+        .gluVibCardFrame(domainColor: Color.Glu.bodyDomain)
     }
 }
-
-// MARK: - Sleep small tile
 
 private struct SleepSmallCard: View {
 
@@ -318,7 +411,7 @@ private struct SleepSmallCard: View {
                     Image(systemName: "moon.zzz.fill")
                         .foregroundColor(accent)
 
-                    Text("Sleep")
+                    Text(L10n.Sleep.title) // 🟨 UPDATED
                         .foregroundColor(Color.Glu.primaryBlue)
                 }
                 .font(.subheadline.weight(.semibold))
@@ -331,7 +424,7 @@ private struct SleepSmallCard: View {
                     .font(.title3.bold())
                     .foregroundColor(Color.Glu.primaryBlue)
 
-                Text("Last night")
+                Text(L10n.BodyOverview.lastNight) // 🟨 UPDATED
                     .font(.footnote.weight(.semibold))
                     .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
             }
@@ -344,19 +437,18 @@ private struct SleepSmallCard: View {
                 let ratio = max(0.0, min(rawRatio, 1.0))
                 let percent = Int(rawRatio * 100)
 
-                let goalMinutes = viewModel.sleepGoalMinutes
-                let goalHours = Double(goalMinutes) / 60.0
-
-                let goalString = goalHours.truncatingRemainder(dividingBy: 1) == 0
-                    ? String(format: "%.0f h", goalHours)
-                    : String(format: "%.1f h", goalHours)
-
                 ProgressView(value: ratio, total: 1.0)
                     .tint(accent)
 
-                Text("\(percent)% of \(goalString)")
-                    .font(.footnote)
-                    .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                Text(
+                    String.localizedStringWithFormat(
+                        L10n.BodyOverview.sleepGoalProgressFormat,
+                        Int64(percent),
+                        viewModel.formattedSleep(minutes: viewModel.sleepGoalMinutes)
+                    )
+                ) // 🟨 UPDATED
+                .font(.footnote)
+                .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
             }
         }
         .padding(12)
@@ -365,8 +457,6 @@ private struct SleepSmallCard: View {
         .gluVibCardFrame(domainColor: Color.Glu.bodyDomain)
     }
 }
-
-// MARK: - Heart small tile
 
 private struct HeartSmallCard: View {
 
@@ -381,7 +471,7 @@ private struct HeartSmallCard: View {
                     Image(systemName: "heart.fill")
                         .foregroundColor(.red)
 
-                    Text("Heart")
+                    Text(L10n.RestingHeartRate.title) // 🟨 UPDATED
                         .foregroundColor(Color.Glu.primaryBlue)
                 }
                 .font(.subheadline.weight(.semibold))
@@ -394,9 +484,9 @@ private struct HeartSmallCard: View {
                     .font(.title3.bold())
                     .foregroundColor(Color.Glu.primaryBlue)
 
-                Text("Resting heart rate")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                //Text(L10n.BodyOverview.restingHeartRateSubtitle) // 🟨 UPDATED
+                  //  .font(.footnote.weight(.semibold))
+                    //.foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -405,11 +495,16 @@ private struct HeartSmallCard: View {
                     .tint(accent)
                     .opacity(0)
 
-                Text("\(viewModel.hrvMs) ms · HRV today")
-                    .font(.footnote)
-                    .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                Text(
+                    String.localizedStringWithFormat(
+                        L10n.BodyOverview.hrvTodayFormat,
+                        Int64(viewModel.hrvMs)
+                    )
+                ) // 🟨 UPDATED
+                .font(.footnote)
+                .foregroundColor(Color.Glu.primaryBlue.opacity(0.25))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             }
         }
         .padding(12)
@@ -419,12 +514,9 @@ private struct HeartSmallCard: View {
     }
 }
 
-// MARK: - BMI tile
-
 private struct BMISmallCard: View {
 
     @ObservedObject var viewModel: BodyOverviewViewModelV1
-    private let accent = Color.Glu.metabolicDomain
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -434,7 +526,7 @@ private struct BMISmallCard: View {
                     Image(systemName: "figure.arms.open")
                         .foregroundColor(Color.Glu.nutritionDomain)
 
-                    Text("BMI")
+                    Text(L10n.BMI.title) // 🟨 UPDATED
                         .foregroundColor(Color.Glu.primaryBlue)
                 }
                 .font(.subheadline.weight(.semibold))
@@ -447,9 +539,9 @@ private struct BMISmallCard: View {
                     .font(.title3.bold())
                     .foregroundColor(Color.Glu.primaryBlue)
 
-                Text(viewModel.bmiCategoryText(for: viewModel.bmi))
-                    .font(.footnote.weight(.semibold))
-                    .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                //Text(viewModel.bmiCategoryText(for: viewModel.bmi))
+                  //  .font(.footnote.weight(.semibold))
+                    //.foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
             }
         }
         .padding(12)
@@ -458,8 +550,6 @@ private struct BMISmallCard: View {
         .gluVibCardFrame(domainColor: Color.Glu.bodyDomain)
     }
 }
-
-// MARK: - Body fat tile
 
 private struct BodyFatSmallCard: View {
 
@@ -474,7 +564,7 @@ private struct BodyFatSmallCard: View {
                     Image(systemName: "figure.walk")
                         .foregroundColor(accent)
 
-                    Text("Body fat")
+                    Text(L10n.BodyFat.title) // 🟨 UPDATED
                         .foregroundColor(Color.Glu.primaryBlue)
                 }
                 .font(.subheadline.weight(.semibold))
@@ -487,9 +577,9 @@ private struct BodyFatSmallCard: View {
                     .font(.title3.bold())
                     .foregroundColor(Color.Glu.primaryBlue)
 
-                Text("Estimated body fat")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                //Text(L10n.BodyOverview.estimatedBodyFat) // 🟨 UPDATED
+                  //  .font(.footnote.weight(.semibold))
+                    //.foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
             }
         }
         .padding(12)
@@ -499,29 +589,26 @@ private struct BodyFatSmallCard: View {
     }
 }
 
-// MARK: - Insight card
-
 private struct BodyInsightCardV1: View {
 
-    @ObservedObject var viewModel: BodyOverviewViewModelV1            // !!! NEW
+    @ObservedObject var viewModel: BodyOverviewViewModelV1
 
     var body: some View {
 
-        // ✅ Insight nur TODAY anzeigen (0 = today)                   // !!! NEW
-        guard viewModel.selectedDayOffset == 0 else {                 // !!! NEW
-            return AnyView(EmptyView())                               // !!! NEW
-        }                                                             // !!! NEW
+        guard viewModel.selectedDayOffset == 0 else {
+            return AnyView(EmptyView())
+        }
 
-        return AnyView(                                               // !!! NEW
+        return AnyView(
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Insight")
+                    Text(L10n.BodyOverview.insightTitle) // 🟨 UPDATED
                         .font(.headline)
                         .foregroundColor(Color.Glu.primaryBlue)
                     Spacer()
                 }
 
-                Text(viewModel.bodyInsightText)                       // !!! CHANGED
+                Text(viewModel.bodyInsightText)
                     .font(.subheadline)
                     .foregroundColor(Color.Glu.primaryBlue)
                     .fixedSize(horizontal: false, vertical: true)
@@ -532,42 +619,87 @@ private struct BodyInsightCardV1: View {
     }
 }
 
-// MARK: - Mini bar chart for weight (7 fixed days, gaps visible)
+// ============================================================
+// MARK: - Weight Mini Bar Chart (7 Days, Full Days Only)
+// ============================================================
 
 private struct WeightMiniBarChart: View {
 
     let data: [BodyWeightTrendPoint]
+    let targetWeightKg: Double
 
     var body: some View {
         Chart {
-            ForEach(data.sorted { $0.date < $1.date }) { point in
+            ForEach(data) { point in
                 BarMark(
                     x: .value("Day", point.date, unit: .day),
-                    y: .value("Weight", point.weightKg ?? 0)     // !!! FIX: 0 für Tage ohne Messung
+                    y: .value("Weight", point.weightKg)
                 )
                 .cornerRadius(4)
-                .opacity(point.hasSample ? 1.0 : 0.0)            // !!! FIX: Lücke bleibt sichtbar
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [
-                            Color.Glu.bodyDomain.opacity(0.25),
-                            Color.Glu.bodyDomain
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .opacity(point.hasSample ? 1.0 : 0.0)
+                .foregroundStyle(barGradient(for: point.weightKg))
+                .annotation(position: .top, alignment: .center) {
+                    if point.hasSample, let kg = point.weightKgOrNil, kg > 0 {
+                        Text(formatKgOneDecimal(kg))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(Color.Glu.primaryBlue)
+                            .padding(.bottom, 2)
+                    }
+                }
             }
         }
-        .chartXAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day)) { value in
+                AxisGridLine().foregroundStyle(Color.clear)
+                AxisTick().foregroundStyle(Color.clear)
+                AxisValueLabel(centered: true) { // 🟨 UPDATED
+                    if let date = value.as(Date.self) {
+                        Text(weekday2(date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                    }
+                }
+            }
+        }
         .chartYAxis(.hidden)
         .chartPlotStyle { plotArea in
             plotArea.background(Color.clear)
         }
     }
+
+    private func barGradient(for kg: Double) -> LinearGradient {
+        let isOnOrBelowTarget = targetWeightKg > 0 && kg > 0 && kg <= targetWeightKg
+        let color = isOnOrBelowTarget ? Color.Glu.successGreen : Color.Glu.bodyDomain
+
+        return LinearGradient(
+            colors: [
+                color.opacity(0.25),
+                color
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private func weekday2(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "EE"
+        return formatter.string(from: date).replacingOccurrences(of: ".", with: "")
+    }
+
+    private func formatKgOneDecimal(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
 }
 
-// MARK: - Preview (minimal, ohne zusätzliche Layout-Mods)
+// ============================================================
+// MARK: - Preview (minimal, no extra layout modifiers)
+// ============================================================
 
 #Preview("Body Overview V1 – Live VM") {
     let previewStore = HealthStore.preview()
@@ -580,4 +712,5 @@ private struct WeightMiniBarChart: View {
     return BodyOverviewViewV1(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

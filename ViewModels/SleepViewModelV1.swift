@@ -2,6 +2,16 @@
 //  SleepViewModelV1.swift
 //  GluVibProbe
 //
+//  Body V1 — Sleep ViewModel
+//
+//  Purpose
+//  - Maps HealthStore sleep data into UI-facing KPI, chart and hint outputs.
+//  - Does not fetch data.
+//  - Uses localized Body-domain sleep texts and shared period labels.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → SleepViewModelV1 → SleepViewV1
+//
 
 import Foundation
 import Combine
@@ -10,24 +20,29 @@ import SwiftUI
 @MainActor
 final class SleepViewModelV1: ObservableObject {
 
-    // MARK: - Published Outputs (View)
+    // ============================================================
+    // MARK: - Published Outputs (View-facing)
+    // ============================================================
 
     @Published var todaySleepMinutes: Int = 0
-
-    // !!! UPDATED: these represent "session ending that day" from V1 HealthStore properties
-    @Published var last90DaysRaw: [DailySleepEntry] = []                      // !!! UPDATED
+    @Published var last90DaysRaw: [DailySleepEntry] = []
     @Published var monthlyRaw: [MonthlyMetricEntry] = []
-    @Published var daily365Raw: [DailySleepEntry] = []                        // !!! UPDATED
+    @Published var daily365Raw: [DailySleepEntry] = []
 
     @Published var targetSleepMinutes: Int = 8 * 60
+    @Published var sleepReadAuthIssueV1: Bool = false
 
+    // ============================================================
     // MARK: - Dependencies
+    // ============================================================
 
     private let healthStore: HealthStore
     private let settings: SettingsModel
     private var cancellables = Set<AnyCancellable>()
 
+    // ============================================================
     // MARK: - Init
+    // ============================================================
 
     init(
         healthStore: HealthStore = .shared,
@@ -41,89 +56,164 @@ final class SleepViewModelV1: ObservableObject {
         syncFromStores()
     }
 
+    // ============================================================
     // MARK: - Bindings
+    // ============================================================
 
     private func bindSettings() {
         settings.$dailySleepGoalMinutes
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.targetSleepMinutes = $0 }
             .store(in: &cancellables)
     }
 
     private func bindHealthStore() {
-
         healthStore.$todaySleepMinutes
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.todaySleepMinutes = $0 }
             .store(in: &cancellables)
 
-        // ---------------------------------------------------------
-        // !!! UPDATED: bind to the ACTUAL V1 HealthStore properties
-        // ---------------------------------------------------------
-
-        healthStore.$last90DaysSleep                                           // !!! UPDATED
+        healthStore.$last90DaysSleepSessionsEndingDay
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.last90DaysRaw = $0 }                   // !!! UPDATED
+            .sink { [weak self] in self?.last90DaysRaw = $0 } // 🟨 UPDATED
             .store(in: &cancellables)
 
-        healthStore.$sleepDaily365                                              // !!! UPDATED
+        healthStore.$sleepDaily365SessionsEndingDay
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.daily365Raw = $0 }                     // !!! UPDATED
+            .sink { [weak self] in self?.daily365Raw = $0 } // 🟨 UPDATED
             .store(in: &cancellables)
 
         healthStore.$monthlySleep
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.monthlyRaw = $0 }
             .store(in: &cancellables)
+
+        healthStore.$sleepReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.sleepReadAuthIssueV1 = $0 }
+            .store(in: &cancellables)
     }
 
     private func syncFromStores() {
         todaySleepMinutes = healthStore.todaySleepMinutes
-
-        // !!! UPDATED: pull from actual V1 properties
-        last90DaysRaw = healthStore.last90DaysSleep                             // !!! UPDATED
-        daily365Raw = healthStore.sleepDaily365                                 // !!! UPDATED
-
+        last90DaysRaw = healthStore.last90DaysSleepSessionsEndingDay // 🟨 UPDATED
+        daily365Raw = healthStore.sleepDaily365SessionsEndingDay // 🟨 UPDATED
         monthlyRaw = healthStore.monthlySleep
         targetSleepMinutes = settings.dailySleepGoalMinutes
+        sleepReadAuthIssueV1 = healthStore.sleepReadAuthIssueV1
     }
 
+    // ============================================================
+    // MARK: - Availability (Today)
+    // ============================================================
+
+    private var hasTodayDatapoint: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        let in90 = last90DaysRaw.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        let in365 = daily365Raw.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        return in90 || in365
+    }
+
+    private var hasTodayPositiveSleep: Bool {
+        todaySleepMinutes > 0
+    }
+
+    // ============================================================
     // MARK: - KPI Formatting
+    // ============================================================
 
-    var formattedTargetSleep: String { Self.formatMinutes(targetSleepMinutes) }
-    var formattedTodaySleep: String { Self.formatMinutes(todaySleepMinutes) }
+    var formattedTargetSleep: String {
+        Self.formatMinutes(targetSleepMinutes)
+    }
 
-    var deltaSleepMinutes: Int { todaySleepMinutes - targetSleepMinutes }
-    var formattedDeltaSleep: String { Self.formatDeltaMinutes(deltaSleepMinutes) }
+    var formattedTodaySleep: String {
+        guard hasTodayDatapoint || hasTodayPositiveSleep else { return "–" }
+        return Self.formatMinutes(todaySleepMinutes)
+    }
+
+    var deltaSleepMinutes: Int {
+        guard hasTodayDatapoint || hasTodayPositiveSleep else { return 0 }
+        return todaySleepMinutes - targetSleepMinutes
+    }
+
+    var formattedDeltaSleep: String {
+        guard hasTodayDatapoint || hasTodayPositiveSleep else { return "–" }
+        return Self.formatDeltaMinutes(deltaSleepMinutes)
+    }
 
     var deltaColor: Color {
-        if deltaSleepMinutes > 0 { return .green }
+        guard hasTodayDatapoint || hasTodayPositiveSleep else { return Color.Glu.primaryBlue }
+        if deltaSleepMinutes > 0 { return Color.Glu.successGreen }
         if deltaSleepMinutes < 0 { return .red }
         return Color.Glu.primaryBlue
     }
 
-    // MARK: - Chart Goal
+    // ============================================================
+    // MARK: - Info Hint (Today) — Goldstandard Body
+    // ============================================================
 
-    var goalValueForChart: Int { targetSleepMinutes }
+    var todayInfoText: String? {
+        if settings.showPermissionWarnings && sleepReadAuthIssueV1 {
+            return L10n.Sleep.hintNoDataOrPermission
+        }
 
-    // MARK: - Chart Adapters
+        if hasTodayDatapoint || hasTodayPositiveSleep {
+            return nil
+        }
 
-    var last90DaysDataForChart: [DailyStepsEntry] {
-        let sorted = last90DaysRaw.sorted { $0.date < $1.date }
-        return sorted.map { DailyStepsEntry(date: $0.date, steps: $0.minutes) }
+        let hasAnyHistoryPositive =
+            last90DaysRaw.contains { $0.minutes > 0 } ||
+            daily365Raw.contains { $0.minutes > 0 }
+
+        if !hasAnyHistoryPositive {
+            return L10n.Sleep.hintNoDataOrPermission
+        }
+
+        return L10n.Sleep.hintNoToday
     }
 
-    var monthlyData: [MonthlyMetricEntry] { monthlyRaw }
+    // ============================================================
+    // MARK: - Chart Goal
+    // ============================================================
 
+    var goalValueForChart: Int {
+        targetSleepMinutes
+    }
+
+    // ============================================================
+    // MARK: - Chart Adapters
+    // ============================================================
+
+    var last90DaysDataForChart: [DailyStepsEntry] {
+        last90DaysRaw
+            .sorted { $0.date < $1.date }
+            .map { DailyStepsEntry(date: $0.date, steps: $0.minutes) }
+    }
+
+    var monthlyData: [MonthlyMetricEntry] {
+        monthlyRaw
+    }
+
+    // ============================================================
     // MARK: - Period Averages
+    // ============================================================
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",   days: 7,   value: averageMinutes(last: 7)),
-            .init(label: "14T",  days: 14,  value: averageMinutes(last: 14)),
-            .init(label: "30T",  days: 30,  value: averageMinutes(last: 30)),
-            .init(label: "90T",  days: 90,  value: averageMinutes(last: 90)),
-            .init(label: "180T", days: 180, value: averageMinutes(last: 180)),
-            .init(label: "365T", days: 365, value: averageMinutes(last: 365))
+            .init(label: L10n.Common.period7d, days: 7, value: averageMinutes(last: 7)),
+            .init(label: L10n.Common.period14d, days: 14, value: averageMinutes(last: 14)),
+            .init(label: L10n.Common.period30d, days: 30, value: averageMinutes(last: 30)),
+            .init(label: L10n.Common.period90d, days: 90, value: averageMinutes(last: 90)),
+            .init(label: L10n.Common.period180d, days: 180, value: averageMinutes(last: 180)),
+            .init(label: L10n.Common.period365d, days: 365, value: averageMinutes(last: 365))
         ]
     }
 
@@ -151,22 +241,25 @@ final class SleepViewModelV1: ObservableObject {
         guard !filtered.isEmpty else { return 0 }
 
         let sum = filtered.reduce(0) { $0 + $1.minutes }
-        let avg = Double(sum) / Double(filtered.count)
-        return Int(avg.rounded())
+        return Int((Double(sum) / Double(filtered.count)).rounded())
     }
 
-    // MARK: - Axis Label Helper (HOURS, NO unit)
+    // ============================================================
+    // MARK: - Axis Label Helper (hours only)
+    // ============================================================
 
     private func hoursOnlyLabel(_ valueInMinutes: Double) -> String {
         let hours = valueInMinutes / 60.0
         return "\(Int(hours.rounded()))"
     }
 
-    // MARK: - Scales (ticks minutes, labels hours-only)
+    // ============================================================
+    // MARK: - Scales
+    // ============================================================
 
     var dailyScale: MetricScaleResult {
         let values = last90DaysDataForChart.map { Double($0.steps) }
-        let base = MetricScaleHelper.scale(values, for: .sleepMinutes)
+        let base = MetricScaleHelper.scale(values.isEmpty ? [0] : values, for: .sleepMinutes)
 
         return MetricScaleResult(
             yAxisTicks: base.yAxisTicks,
@@ -179,7 +272,7 @@ final class SleepViewModelV1: ObservableObject {
 
     var periodScale: MetricScaleResult {
         let values = periodAverages.map { Double($0.value) }
-        let base = MetricScaleHelper.scale(values, for: .sleepMinutes)
+        let base = MetricScaleHelper.scale(values.isEmpty ? [0] : values, for: .sleepMinutes)
 
         return MetricScaleResult(
             yAxisTicks: base.yAxisTicks,
@@ -192,7 +285,7 @@ final class SleepViewModelV1: ObservableObject {
 
     var monthlyScale: MetricScaleResult {
         let values = monthlyData.map { Double($0.value) }
-        let base = MetricScaleHelper.scale(values, for: .sleepMinutes)
+        let base = MetricScaleHelper.scale(values.isEmpty ? [0] : values, for: .sleepMinutes)
 
         return MetricScaleResult(
             yAxisTicks: base.yAxisTicks,
@@ -203,12 +296,15 @@ final class SleepViewModelV1: ObservableObject {
         )
     }
 
+    // ============================================================
     // MARK: - Formatting Helpers
+    // ============================================================
 
     static func formatMinutes(_ minutes: Int) -> String {
         guard minutes > 0 else { return "–" }
         let hours = minutes / 60
-        let mins  = minutes % 60
+        let mins = minutes % 60
+
         switch (hours, mins) {
         case (0, let m): return "\(m)m"
         case (let h, 0): return "\(h)h"
@@ -218,10 +314,12 @@ final class SleepViewModelV1: ObservableObject {
 
     static func formatDeltaMinutes(_ delta: Int) -> String {
         if delta == 0 { return "0m" }
+
         let sign = delta > 0 ? "+" : "-"
         let absMinutes = abs(delta)
         let hours = absMinutes / 60
-        let mins  = absMinutes % 60
+        let mins = absMinutes % 60
+
         switch (hours, mins) {
         case (0, let m): return "\(sign)\(m)m"
         case (let h, 0): return "\(sign)\(h)h"

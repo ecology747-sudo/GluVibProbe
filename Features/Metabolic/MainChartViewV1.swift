@@ -20,8 +20,8 @@ struct MainChartViewV1: View {
     }
 
     enum InteractionMode {
-        case embedded       // Portrait/Home: Refresh erlaubt + Card-Design
-        case landscape      // Landscape Fullscreen: KEIN Refresh, KEINE Card, Y-Zoom per Drag
+        case embedded
+        case landscape
     }
 
     // ============================================================
@@ -30,6 +30,7 @@ struct MainChartViewV1: View {
 
     @ObservedObject var healthStore: HealthStore
     @EnvironmentObject private var settings: SettingsModel
+    @EnvironmentObject private var appState: AppState
 
     // ============================================================
     // MARK: - Inputs
@@ -52,27 +53,15 @@ struct MainChartViewV1: View {
     // MARK: - UI State
     // ============================================================
 
-    // Day selection is SSoT (HealthStore), not local state
     private var dayOffset: Int { healthStore.mainChartSelectedDayOffsetV1 }
 
-    // NEW: Day picker sheet (last 10 days)
     @State private var showDayPickerSheet: Bool = false
 
-    // X Zoom/Scroll (iOS 17+)
     @State private var visibleXSeconds: TimeInterval = 24 * 60 * 60
     @State private var lastMagnificationValue: CGFloat = 1.0
 
-    // Y Zoom (iOS 17+ via Vertical Drag)
     @State private var yUpperBound: Double = 300
     @State private var lastVerticalDragY: CGFloat = 0
-
-    // Overlay toggles
-    @State private var showActivity: Bool = true
-    @State private var showCarbs: Bool = true
-    @State private var showProtein: Bool = true
-    @State private var showBolus: Bool = true
-    @State private var showBasal: Bool = true
-    @State private var showCGM: Bool = true
 
     // ============================================================
     // MARK: - Derived (Cache Read)
@@ -87,12 +76,12 @@ struct MainChartViewV1: View {
     // ============================================================
 
     private let fixedYDomain: ClosedRange<Double> = 0 ... 300
+    private let nutritionOverlayMaxY: Double = 250
 
     // ============================================================
     // MARK: - Gating (Premium rules)
     // ============================================================
 
-    /// Insulin-Overlays sind NUR sinnvoll, wenn CGM aktiv ist UND Insulinpflicht aktiv ist.
     private var isTherapyEnabled: Bool {
         settings.hasCGM && settings.isInsulinTreated
     }
@@ -144,6 +133,9 @@ struct MainChartViewV1: View {
         .modifier(RefreshableIfNeeded(isEnabled: interactionMode == .embedded) {
             await handlePullToRefresh()
         })
+        .onAppear {
+            applyTherapyGatingIfNeeded()
+        }
         .onChange(of: settings.hasCGM) { _ in
             applyTherapyGatingIfNeeded()
         }
@@ -154,7 +146,6 @@ struct MainChartViewV1: View {
             resetZoomStateForNewDay()
             Task { await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset) }
         }
-        // NEW: last 10 days day-picker
         .sheet(isPresented: $showDayPickerSheet) {
             DayPickerLast10DaysSheet(
                 selectedOffset: dayOffset,
@@ -163,8 +154,8 @@ struct MainChartViewV1: View {
                     showDayPickerSheet = false
                 }
             )
-            .presentationDetents([.medium, .large])
-            .presentationDetents([.fraction(0.75), .large])            .presentationDragIndicator(.visible)
+            .presentationDetents([.fraction(0.75), .large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -183,16 +174,7 @@ struct MainChartViewV1: View {
 
             headerRow
 
-            Group {
-                if let p = profile {
-                    mainChart(profile: p)
-                        .frame(height: 260)
-                } else {
-                    emptyState
-                        .frame(maxWidth: .infinity, minHeight: 260, alignment: .center)
-                        .padding(.horizontal, 16)
-                }
-            }
+            chartTapArea
 
             overlayChipBar
         }
@@ -200,6 +182,28 @@ struct MainChartViewV1: View {
         .padding(.horizontal, 14)
         .padding(.bottom, 8)
         .gluVibCardFrame(domainColor: Color.Glu.metabolicDomain)
+    }
+
+    // ============================================================
+    // MARK: - Embedded Chart Tap Area
+    // ============================================================
+
+    private var chartTapArea: some View {
+        Group {
+            if let p = profile {
+                mainChart(profile: p)
+                    .frame(height: 260)
+            } else {
+                emptyState
+                    .frame(maxWidth: .infinity, minHeight: 260, alignment: .center)
+                    .padding(.horizontal, 16)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard interactionMode == .embedded else { return }
+            appState.currentStatsScreen = .ig
+        }
     }
 
     // ============================================================
@@ -243,11 +247,9 @@ struct MainChartViewV1: View {
     private var headerRow: some View {
         ZStack {
 
-            // Center cluster: arrows stay close to the date
             HStack(spacing: 14) {
                 dayNavButton(isLeft: true)
 
-                // UPDATED: date is tappable -> opens last-10-days picker
                 Button {
                     showDayPickerSheet = true
                 } label: {
@@ -261,13 +263,12 @@ struct MainChartViewV1: View {
             }
             .frame(maxWidth: .infinity, alignment: .center)
 
-            // Leading badge: does NOT affect center spacing
             HStack {
-                unitBadge
-                    .padding(.leading, 2)     // <-- move badge left/right here
                 Spacer()
+                unitBadge
+                    .padding(.trailing, 2)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
@@ -277,9 +278,9 @@ struct MainChartViewV1: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Text("No cached profile")
+            Text(L10n.MainChart.emptyTitle)
                 .font(.headline)
-            Text("Cache wird befüllt, wenn ensureMainChartCachedV1() gelaufen ist.")
+            Text(L10n.MainChart.emptyMessage)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -305,29 +306,29 @@ struct MainChartViewV1: View {
                     VStack(alignment: .leading, spacing: 12) {
 
                         HStack(spacing: spacing) {
-                            overlayChipMetricStyle("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
+                            overlayChipMetricStyle(L10n.Common.activity, isOn: $settings.mainChartShowActivity, accent: Color.Glu.activityDomain)
                                 .frame(width: chipWidth)
-                            overlayChipMetricStyle("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
+                            overlayChipMetricStyle(L10n.MainChart.carbsChip, isOn: $settings.mainChartShowCarbs, accent: Color.Glu.nutritionDomain)
                                 .frame(width: chipWidth)
-                            overlayChipMetricStyle("Protein", isOn: $showProtein, accent: Color.Glu.bodyDomain)
+                            overlayChipMetricStyle(L10n.Protein.title, isOn: $settings.mainChartShowProtein, accent: Color.Glu.bodyDomain)
                                 .frame(width: chipWidth)
                         }
 
                         HStack(spacing: spacing) {
 
                             if isTherapyEnabled {
-                                overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
+                                overlayChipMetricStyle(L10n.Bolus.title, isOn: $settings.mainChartShowBolus, accent: bolusChipAccent)
                                     .frame(width: chipWidth)
 
-                                overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                                overlayChipMetricStyle(L10n.Basal.title, isOn: $settings.mainChartShowBasal, accent: Color("GluBasalMagenta").opacity(0.5))
                                     .frame(width: chipWidth)
 
-                                overlayChipMetricStyle("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                overlayChipMetricStyle(L10n.MainChart.sensorChip, isOn: $settings.mainChartShowCGM, accent: Color.Glu.acidCGMRed)
                                     .frame(width: chipWidth)
 
                             } else {
                                 Color.clear.frame(width: chipWidth, height: 1)
-                                overlayChipMetricStyle("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                overlayChipMetricStyle(L10n.MainChart.sensorChip, isOn: $settings.mainChartShowCGM, accent: Color.Glu.acidCGMRed)
                                     .frame(width: chipWidth)
                                 Color.clear.frame(width: chipWidth, height: 1)
                             }
@@ -347,21 +348,21 @@ struct MainChartViewV1: View {
                         let chipWidth = (geo.size.width - spacing * (count - 1)) / count
 
                         HStack(spacing: spacing) {
-                            overlayChipMetricStyle("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
+                            overlayChipMetricStyle(L10n.Common.activity, isOn: $settings.mainChartShowActivity, accent: Color.Glu.activityDomain)
                                 .frame(width: chipWidth)
-                            overlayChipMetricStyle("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
+                            overlayChipMetricStyle(L10n.MainChart.carbsChip, isOn: $settings.mainChartShowCarbs, accent: Color.Glu.nutritionDomain)
                                 .frame(width: chipWidth)
-                            overlayChipMetricStyle("Protein", isOn: $showProtein, accent: Color.Glu.bodyDomain)
+                            overlayChipMetricStyle(L10n.Protein.title, isOn: $settings.mainChartShowProtein, accent: Color.Glu.bodyDomain)
                                 .frame(width: chipWidth)
 
                             if isTherapyEnabled {
-                                overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
+                                overlayChipMetricStyle(L10n.Bolus.title, isOn: $settings.mainChartShowBolus, accent: bolusChipAccent)
                                     .frame(width: chipWidth)
-                                overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                                overlayChipMetricStyle(L10n.Basal.title, isOn: $settings.mainChartShowBasal, accent: Color("GluBasalMagenta").opacity(0.5))
                                     .frame(width: chipWidth)
                             }
 
-                            overlayChipMetricStyle("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                            overlayChipMetricStyle(L10n.MainChart.sensorChip, isOn: $settings.mainChartShowCGM, accent: Color.Glu.acidCGMRed)
                                 .frame(width: chipWidth)
                         }
                         .frame(width: geo.size.width, alignment: .leading)
@@ -371,14 +372,14 @@ struct MainChartViewV1: View {
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
-                            overlayChipMetricStyle("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
-                            overlayChipMetricStyle("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
-                            overlayChipMetricStyle("Protein", isOn: $showProtein, accent: Color.Glu.bodyDomain)
+                            overlayChipMetricStyle(L10n.Common.activity, isOn: $settings.mainChartShowActivity, accent: Color.Glu.activityDomain)
+                            overlayChipMetricStyle(L10n.MainChart.carbsChip, isOn: $settings.mainChartShowCarbs, accent: Color.Glu.nutritionDomain)
+                            overlayChipMetricStyle(L10n.Protein.title, isOn: $settings.mainChartShowProtein, accent: Color.Glu.bodyDomain)
                             if isTherapyEnabled {
-                                overlayChipMetricStyle("Bolus", isOn: $showBolus, accent: bolusChipAccent)
-                                overlayChipMetricStyle("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                                overlayChipMetricStyle(L10n.Bolus.title, isOn: $settings.mainChartShowBolus, accent: bolusChipAccent)
+                                overlayChipMetricStyle(L10n.Basal.title, isOn: $settings.mainChartShowBasal, accent: Color("GluBasalMagenta").opacity(0.5))
                             }
-                            overlayChipMetricStyle("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                            overlayChipMetricStyle(L10n.MainChart.sensorChip, isOn: $settings.mainChartShowCGM, accent: Color.Glu.acidCGMRed)
                         }
                         .padding(.horizontal, 2)
                     }
@@ -388,7 +389,6 @@ struct MainChartViewV1: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 5)
         .padding(.bottom, 0)
-        .onAppear { applyTherapyGatingIfNeeded() }
     }
 
     private var bolusChipAccent: Color { Color("acidBolusDarkGreen") }
@@ -483,33 +483,38 @@ struct MainChartViewV1: View {
         let bandLower = min(targetMin, targetMax)
         let bandUpper = max(targetMin, targetMax)
 
-        let yDomain: ClosedRange<Double> = 0 ... max(120, min(600, yUpperBound))
+        // 🟨 UPDATED
+        let autoUpper = autoYUpperBound(for: profile, window: window)
+        let effectiveUpper = interactionMode == .landscape
+        ? max(autoUpper, max(120, min(600, yUpperBound)))
+        : autoUpper
+        let yDomain: ClosedRange<Double> = 0 ... effectiveUpper
 
         let baseChart = Chart {
 
             targetRangeBand(window: window, bandLower: bandLower, bandUpper: bandUpper)
 
-            if showCGM {
+            if settings.mainChartShowCGM {
                 cgmLineMarks(profile: profile, window: window)
             }
 
-            if showActivity {
+            if settings.mainChartShowActivity {
                 activityBars(profile: profile, window: window, baseY: baseY, height: activityBarHeight)
             }
 
-            if showCarbs {
+            if settings.mainChartShowCarbs {
                 nutritionStems(profile: profile, window: window, kind: .carbs, baseY: baseY)
             }
 
-            if showProtein {
+            if settings.mainChartShowProtein {
                 nutritionStems(profile: profile, window: window, kind: .protein, baseY: baseY)
             }
 
-            if isTherapyEnabled && showBolus {
+            if isTherapyEnabled && settings.mainChartShowBolus {
                 bolusStems(profile: profile, window: window, baseY: baseY, insulinMaxUnits: insulinMaxUnits)
             }
 
-            if isTherapyEnabled && showBasal {
+            if isTherapyEnabled && settings.mainChartShowBasal {
                 basalStems(profile: profile, window: window, baseY: baseY, insulinMaxUnits: insulinMaxUnits)
             }
         }
@@ -521,7 +526,7 @@ struct MainChartViewV1: View {
                 AxisTick()
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
-                        Text(date, format: .dateTime.hour(.defaultDigits(amPM: .omitted)))
+                        Text(xAxisHourText(date))
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
                     }
@@ -529,7 +534,8 @@ struct MainChartViewV1: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading, values: yAxisValues()) { value in
+            // 🟨 UPDATED
+            AxisMarks(position: .leading, values: yAxisValues(upperMgdl: effectiveUpper)) { value in
                 AxisGridLine().foregroundStyle(Color.gray.opacity(0.22))
                 AxisTick()
                 if let v = value.as(Double.self) {
@@ -559,80 +565,56 @@ struct MainChartViewV1: View {
                 }
             }
 
-            let chartWithXZoom: AnyView = {
-                if interactionMode == .landscape {
-                    let xZoomGesture = MagnifyGesture(minimumScaleDelta: 0.01)
-                        .onChanged { value in
-                            let current = value.magnification
-                            let delta = current / max(0.0001, lastMagnificationValue)
-                            lastMagnificationValue = current
+            if interactionMode == .embedded {
+                chartWithOptionalScroll
+            } else {
 
-                            let proposed = visibleXSeconds / Double(delta)
+                let xZoomGesture = MagnifyGesture(minimumScaleDelta: 0.01)
+                    .onChanged { value in
+                        let current = value.magnification
+                        let delta = current / max(0.0001, lastMagnificationValue)
+                        lastMagnificationValue = current
 
-                            let minSeconds: TimeInterval = 1 * 60 * 60
-                            let maxSeconds: TimeInterval = availableSeconds
-                            visibleXSeconds = min(maxSeconds, max(minSeconds, proposed))
-                        }
-                        .onEnded { _ in
-                            lastMagnificationValue = 1.0
-                        }
+                        let proposed = visibleXSeconds / Double(delta)
 
-                    return AnyView(
-                        chartWithOptionalScroll
-                            .highPriorityGesture(xZoomGesture)
+                        let minSeconds: TimeInterval = 1 * 60 * 60
+                        let maxSeconds: TimeInterval = availableSeconds
+                        visibleXSeconds = min(maxSeconds, max(minSeconds, proposed))
+                    }
+                    .onEnded { _ in
+                        lastMagnificationValue = 1.0
+                    }
+
+                chartWithOptionalScroll
+                    .highPriorityGesture(xZoomGesture)
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 6)
+                            .onChanged { g in
+                                let dx = g.translation.width
+                                let dy = g.translation.height
+                                guard abs(dy) > abs(dx) else { return }
+
+                                let deltaY = dy - lastVerticalDragY
+                                lastVerticalDragY = dy
+
+                                let sensitivity: Double = 0.9
+                                let proposed = yUpperBound + Double(deltaY) * sensitivity
+                                yUpperBound = min(600, max(120, proposed))
+                            }
+                            .onEnded { _ in
+                                lastVerticalDragY = 0
+                            }
                     )
-                } else {
-                    return AnyView(
-                        chartWithOptionalScroll
-                            .gesture(
-                                MagnificationGesture()
-                                    .onChanged { value in
-                                        let delta = value / max(0.0001, lastMagnificationValue)
-                                        lastMagnificationValue = value
-
-                                        let proposed = visibleXSeconds / Double(delta)
-
-                                        let minSeconds: TimeInterval = 1 * 60 * 60
-                                        let maxSeconds: TimeInterval = availableSeconds
-                                        visibleXSeconds = min(maxSeconds, max(minSeconds, proposed))
-                                    }
-                                    .onEnded { _ in
-                                        lastMagnificationValue = 1.0
-                                    }
-                            )
-                    )
-                }
-            }()
-
-            chartWithXZoom
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 6)
-                        .onChanged { g in
-                            guard interactionMode == .landscape else { return }
-
-                            let dx = g.translation.width
-                            let dy = g.translation.height
-                            guard abs(dy) > abs(dx) else { return }
-
-                            let deltaY = dy - lastVerticalDragY
-                            lastVerticalDragY = dy
-
-                            let sensitivity: Double = 0.9
-                            let proposed = yUpperBound + Double(deltaY) * sensitivity
-                            yUpperBound = min(600, max(120, proposed))
-                        }
-                        .onEnded { _ in
-                            lastVerticalDragY = 0
-                        }
-                )
+            }
 
         } else {
             baseChart
         }
     }
 
-    private func yAxisValues() -> [Double] {
-        let upperMgdl = max(120, min(600, yUpperBound))
+    // 🟨 UPDATED
+    private func yAxisValues(upperMgdl: Double) -> [Double] {
+        let upperMgdl = max(120, min(600, upperMgdl))
 
         switch settings.glucoseUnit {
 
@@ -661,6 +643,9 @@ struct MainChartViewV1: View {
 
     @MainActor
     private func handlePullToRefresh() async {
+        if settings.hasCGM && settings.isInsulinTreated {
+            await healthStore.refreshMetabolicRaw3DaysTherapyOnlyV1(refreshSource: "mainchart-pull")
+        }
         await healthStore.ensureMainChartCachedV1(dayOffset: dayOffset, forceRefetch: true)
     }
 
@@ -670,9 +655,13 @@ struct MainChartViewV1: View {
 
     @MainActor
     private func applyTherapyGatingIfNeeded() {
-        guard !isTherapyEnabled else { return }
-        showBolus = false
-        showBasal = false
+
+        if isTherapyEnabled {
+            return
+        }
+
+        settings.mainChartShowBolus = false
+        settings.mainChartShowBasal = false
     }
 
     // ============================================================
@@ -709,7 +698,7 @@ struct MainChartViewV1: View {
             yStart: .value("Target Min", bandLower),
             yEnd:   .value("Target Max", bandUpper)
         )
-        .foregroundStyle(Color.green.opacity(0.14))
+        .foregroundStyle(Color.green.opacity(0.15))
         .opacity(1.0)
     }
 
@@ -897,6 +886,23 @@ struct MainChartViewV1: View {
             .sorted { $0.timestamp < $1.timestamp }
     }
 
+    // 🟨 UPDATED
+    private func autoYUpperBound(for profile: MainChartDayProfileV1, window: TimeWindow) -> Double {
+        let visibleCGMMax = filteredCGMPoints(profile: profile, window: window)
+            .map(\.glucoseMgdl)
+            .max() ?? 0
+
+        let headroom: Double = 20
+        let rawUpper = max(
+            300,
+            Double(settings.glucoseMax),
+            visibleCGMMax + headroom
+        )
+
+        let snapped = ceil(rawUpper / 50) * 50
+        return min(600, max(300, snapped))
+    }
+
     // ============================================================
     // MARK: - Mapping: Nutrition (grams -> mg/dL height)
     // ============================================================
@@ -908,7 +914,7 @@ struct MainChartViewV1: View {
         let anchorMgdl: Double = 100
 
         let y = (g / max(1, anchorGrams)) * anchorMgdl
-        return min(fixedYDomain.upperBound, max(0, y))
+        return min(nutritionOverlayMaxY, max(0, y))
     }
 
     // ============================================================
@@ -934,14 +940,22 @@ struct MainChartViewV1: View {
         guard maxUnits > 0 else { return 0 }
 
         let y = (u / maxUnits) * targetPeakMgdl
-        return min(fixedYDomain.upperBound, max(0, y))
+        return min(nutritionOverlayMaxY, max(0, y))
     }
 
     // ============================================================
     // MARK: - Helpers (UI)
     // ============================================================
 
+    private func xAxisHourText(_ date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        return String(format: "%02d", hour)
+    }
+
     private var dayTitleText: String {
+        if dayOffset == 0 { return L10n.MainChart.today }
+        if dayOffset == -1 { return L10n.MainChart.yesterday }
+
         guard let p = profile else { return "—" }
         let df = DateFormatter()
         df.dateStyle = .medium
@@ -979,9 +993,16 @@ struct MainChartViewV1: View {
 
     private func resetZoomStateForNewDay() {
         visibleXSeconds = 24 * 60 * 60
-        yUpperBound = 300
         lastMagnificationValue = 1.0
         lastVerticalDragY = 0
+
+        // 🟨 UPDATED
+        if let profile {
+            let window = xDomainWindow(for: profile)
+            yUpperBound = autoYUpperBound(for: profile, window: window)
+        } else {
+            yUpperBound = 300
+        }
     }
 }
 
@@ -996,11 +1017,13 @@ private struct DayPickerLast10DaysSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.calendar) private var calendar
+    @Environment(\.colorScheme) private var colorScheme
 
     private struct DayItem: Identifiable {
-        let id: Int               // offset (0...-9)
-        let date: Date            // startOfDay
+        let id: Int
+        let date: Date
         let isToday: Bool
+        let isYesterday: Bool
     }
 
     private var days: [DayItem] {
@@ -1011,21 +1034,17 @@ private struct DayPickerLast10DaysSheet: View {
             return DayItem(
                 id: offset,
                 date: date,
-                isToday: offset == 0
+                isToday: offset == 0,
+                isYesterday: offset == -1
             )
         }
     }
 
-    private var titleText: String { "Select Day" }
+    private var titleText: String { L10n.MainChart.dayPickerTitle }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-
-                Text("Last 10 days")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
-                    .padding(.top, 4)
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(days) { item in
@@ -1037,33 +1056,47 @@ private struct DayPickerLast10DaysSheet: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 14)
-            .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(titleText)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(
+                            colorScheme == .light
+                            ? Color.Glu.primaryBlue
+                            : Color.Glu.systemForeground
+                        )
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button(L10n.MainChart.done) { dismiss() }
                 }
             }
+            .tint(Color.Glu.systemForeground)
+            .background(Color(.systemBackground))
         }
+        .tint(Color.Glu.systemForeground)
+        .presentationBackground(Color(.systemBackground))
     }
 
     private func dayCell(_ item: DayItem) -> some View {
 
         let isSelected = (item.id == selectedOffset)
         let bg = isSelected ? Color.Glu.primaryBlue.opacity(0.10) : Color.gray.opacity(0.08)
-        let stroke = isSelected ? Color.Glu.primaryBlue.opacity(0.55) : Color.clear
+        let stroke = isSelected ? Color.Glu.systemForeground.opacity(0.55) : Color.clear
 
         return Button {
             onSelectOffset(item.id)
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.isToday ? "Today" : weekdayShort(item.date))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.85))
 
-                Text(dateMedium(item.date))
+                Text(weekdayShort(item.date))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.Glu.systemForeground.opacity(0.85))
+
+                Text(item.id == 0 ? L10n.MainChart.today : (item.id == -1 ? L10n.MainChart.yesterday : dateMedium(item.date)))
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.95))
+                    .foregroundStyle(Color.Glu.systemForeground.opacity(0.95))
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
@@ -1077,8 +1110,8 @@ private struct DayPickerLast10DaysSheet: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(item.isToday ? "Today" : dateMedium(item.date))
-        .accessibilityValue(isSelected ? "Selected" : "")
+        .accessibilityLabel(item.id == 0 ? L10n.MainChart.today : (item.id == -1 ? L10n.MainChart.yesterday : dateMedium(item.date)))
+        .accessibilityValue(isSelected ? L10n.MainChart.selected : "")
     }
 
     private func weekdayShort(_ date: Date) -> String {

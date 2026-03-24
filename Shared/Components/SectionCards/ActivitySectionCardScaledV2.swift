@@ -20,15 +20,18 @@ struct ActivitySectionCardScaledV2: View {
     let kpiDeltaColor: Color?
     let hasTarget: Bool
 
+    // UPDATED
+    let monthlyChartTitle: String?
+
     // Daten
     let last90DaysData: [DailyStepsEntry]
     let periodAverages: [PeriodAverageEntry]
     let monthlyData: [MonthlyMetricEntry]
 
     // Skalen
-    let dailyScale: MetricScaleResult
-    let periodScale: MetricScaleResult
-    let monthlyScale: MetricScaleResult
+    let dailyScale: MetricScaleHelper.MetricScaleResult // UPDATED
+    let periodScale: MetricScaleHelper.MetricScaleResult // UPDATED
+    let monthlyScale: MetricScaleHelper.MetricScaleResult // UPDATED
 
     // Zielwert (optional)
     let goalValue: Int?
@@ -37,28 +40,29 @@ struct ActivitySectionCardScaledV2: View {
     let onMetricSelected: (String) -> Void
     let metrics: [String]
 
+    // Optional gating (UI-only)
+    let isMetricLocked: ((String) -> Bool)?
+    let onLockedMetricSelected: ((String) -> Void)?
+
+    // optional warning badge per metric (UI-only)
+    let showsWarningBadgeForMetric: ((String) -> Bool)?
+
     // Slots (V2)
     let showsDailyChart: Bool
     let showsPeriodChart: Bool
     let showsMonthlyChart: Bool
 
-    // ✅ Optionaler KPI-Block (z.B. Movement Split: 3 KPIs in "Current")
     let customKpiContent: AnyView?
-
-    // ✅ Optionaler Custom-Chart-Block (Legacy: ohne Period Picker)
     let customChartContent: AnyView?
 
-    // ✅ NEW: Optionaler Custom Daily Chart Builder (MIT Period Picker wie Steps)     // !!! NEW
-    let customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)? // !!! NEW
-
-    // ✅ Skala-Typ für adaptive Y-Achse je nach Periodenwahl
+    let customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)?
     let dailyScaleType: MetricScaleHelper.MetricScaleType?
 
     private let color = Color.Glu.activityAccent
-
     @State private var selectedPeriod: Last90DaysPeriod = .days30
 
     // MARK: - Init
+
     init(
         sectionTitle: String,
         title: String,
@@ -68,12 +72,13 @@ struct ActivitySectionCardScaledV2: View {
         kpiDeltaText: String,
         kpiDeltaColor: SwiftUI.Color?,
         hasTarget: Swift.Bool,
-        last90DaysData: [GluVibProbe.DailyStepsEntry],
-        periodAverages: [GluVibProbe.PeriodAverageEntry],
-        monthlyData: [GluVibProbe.MonthlyMetricEntry],
-        dailyScale: GluVibProbe.MetricScaleHelper.MetricScaleResult,
-        periodScale: GluVibProbe.MetricScaleHelper.MetricScaleResult,
-        monthlyScale: GluVibProbe.MetricScaleHelper.MetricScaleResult,
+        monthlyChartTitle: String? = nil,
+        last90DaysData: [GluVib.DailyStepsEntry],
+        periodAverages: [GluVib.PeriodAverageEntry],
+        monthlyData: [GluVib.MonthlyMetricEntry],
+        dailyScale: GluVib.MetricScaleHelper.MetricScaleResult,
+        periodScale: GluVib.MetricScaleHelper.MetricScaleResult,
+        monthlyScale: GluVib.MetricScaleHelper.MetricScaleResult,
         goalValue: Swift.Int?,
         onMetricSelected: @escaping (Swift.String) -> (),
         metrics: [Swift.String],
@@ -82,8 +87,11 @@ struct ActivitySectionCardScaledV2: View {
         showsMonthlyChart: Swift.Bool,
         customKpiContent: SwiftUI.AnyView?,
         customChartContent: SwiftUI.AnyView?,
-        customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)? = nil, // !!! NEW
-        dailyScaleType: GluVibProbe.MetricScaleHelper.MetricScaleType? = nil
+        customDailyChartBuilder: ((Last90DaysPeriod, [DailyStepsEntry]) -> AnyView)? = nil,
+        dailyScaleType: GluVib.MetricScaleHelper.MetricScaleType? = nil,
+        isMetricLocked: ((String) -> Bool)? = nil,
+        onLockedMetricSelected: ((String) -> Void)? = nil,
+        showsWarningBadgeForMetric: ((String) -> Bool)? = nil
     ) {
         self.sectionTitle = sectionTitle
         self.title = title
@@ -94,6 +102,8 @@ struct ActivitySectionCardScaledV2: View {
         self.kpiDeltaText = kpiDeltaText
         self.kpiDeltaColor = kpiDeltaColor
         self.hasTarget = hasTarget
+
+        self.monthlyChartTitle = monthlyChartTitle
 
         self.last90DaysData = last90DaysData
         self.periodAverages = periodAverages
@@ -114,8 +124,13 @@ struct ActivitySectionCardScaledV2: View {
         self.customKpiContent = customKpiContent
         self.customChartContent = customChartContent
 
-        self.customDailyChartBuilder = customDailyChartBuilder            // !!! NEW
+        self.customDailyChartBuilder = customDailyChartBuilder
         self.dailyScaleType = dailyScaleType
+
+        self.isMetricLocked = isMetricLocked
+        self.onLockedMetricSelected = onLockedMetricSelected
+
+        self.showsWarningBadgeForMetric = showsWarningBadgeForMetric
     }
 
     // MARK: - Derived
@@ -144,15 +159,15 @@ struct ActivitySectionCardScaledV2: View {
         }
     }
 
-    // MARK: - Adaptive Skala für die aktuell gewählte Periode (Daily Chart)
-
-    private var dailyScaleForSelectedPeriod: MetricScaleResult {
+    private var dailyScaleForSelectedPeriod: MetricScaleHelper.MetricScaleResult { // UPDATED
         let values = filteredLast90DaysData.map { Double($0.steps) }
-
         guard !values.isEmpty else { return dailyScale }
         guard let dailyScaleType else { return dailyScale }
-
         return MetricScaleHelper.scale(values, for: dailyScaleType)
+    }
+
+    private var resolvedMonthlyChartTitle: String {
+        monthlyChartTitle ?? "\(title) / \(L10n.Common.month)"
     }
 
     // MARK: - Body
@@ -168,11 +183,8 @@ struct ActivitySectionCardScaledV2: View {
                 kpiHeader
             }
 
-            // ✅ Legacy Custom Chart Slot (ohne Period Picker)
             if let customChartContent {
-                ChartCard(borderColor: color) {
-                    customChartContent
-                }
+                ChartCard(borderColor: color) { customChartContent }
             }
 
             if showsDailyChart {
@@ -181,9 +193,8 @@ struct ActivitySectionCardScaledV2: View {
 
                         periodPicker
 
-                        // ✅ NEW: Wenn Daily-Builder gesetzt ist → nutze ihn (Movement Split)   // !!! NEW
-                        if let customDailyChartBuilder {                                       // !!! NEW
-                            customDailyChartBuilder(selectedPeriod, filteredLast90DaysData)    // !!! NEW
+                        if let customDailyChartBuilder {
+                            customDailyChartBuilder(selectedPeriod, filteredLast90DaysData)
                         } else {
                             Last90DaysScaledBarChart(
                                 data: filteredLast90DaysData,
@@ -198,7 +209,7 @@ struct ActivitySectionCardScaledV2: View {
                             )
                         }
                     }
-                    .frame(height: 260) // ✅ bleibt einheitlich wie Steps
+                    .frame(height: 260)
                 }
             }
 
@@ -221,7 +232,7 @@ struct ActivitySectionCardScaledV2: View {
                 ChartCard(borderColor: color) {
                     MonthlyScaledBarChart(
                         data: monthlyData,
-                        metricLabel: "\(title) / Month",
+                        metricLabel: resolvedMonthlyChartTitle,
                         barColor: color,
                         yAxisTicks: monthlyScale.yAxisTicks,
                         yMax: monthlyScale.yMax,
@@ -240,137 +251,90 @@ struct ActivitySectionCardScaledV2: View {
 private extension ActivitySectionCardScaledV2 {
 
     var metricChips: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                ForEach(metrics.prefix(3), id: \.self) { metric in
-                    metricChip(metric)
-                }
+        MetricChipGroup(
+            metrics: metrics,
+            selected: title,
+            accent: color,
+            onSelect: { metric in onMetricSelected(metric) },
+            isLocked: { metric in isMetricLocked?(metric) ?? false },
+            onSelectLocked: { metric in (onLockedMetricSelected ?? onMetricSelected)(metric) },
+            showsWarningBadge: { metric in
+                showsWarningBadgeForMetric?(metric) ?? false
             }
-            HStack(spacing: 6) {
-                ForEach(metrics.suffix(from: 3), id: \.self) { metric in
-                    metricChip(metric)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
-    }
-
-    func metricChip(_ metric: String) -> some View {
-        let isActive = (metric == title)
-
-        let strokeColor: Color = isActive
-            ? Color.white.opacity(0.90)
-            : color.opacity(0.90)
-
-        let lineWidth: CGFloat = isActive ? 1.6 : 1.2
-
-        let backgroundFill: some ShapeStyle = isActive
-            ? LinearGradient(
-                colors: [color.opacity(0.95), color.opacity(0.75)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              )
-            : LinearGradient(
-                colors: [Color.clear, Color.clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              )
-
-        let shadowOpacity: Double = isActive ? 0.25 : 0.15
-        let shadowRadius: CGFloat = isActive ? 4 : 2.5
-        let shadowYOffset: CGFloat = isActive ? 2 : 1.5
-
-        return Button {
-            onMetricSelected(metric)
-        } label: {
-            Text(metric)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .layoutPriority(1)
-                .padding(.vertical, 5)
-                .padding(.horizontal, 14)
-                .background(Capsule().fill(backgroundFill))
-                .overlay(Capsule().stroke(strokeColor, lineWidth: lineWidth))
-                .shadow(
-                    color: Color.black.opacity(shadowOpacity),
-                    radius: shadowRadius,
-                    x: 0,
-                    y: shadowYOffset
-                )
-                .foregroundStyle(isActive ? Color.white : Color.Glu.primaryBlue.opacity(0.95))
-                .scaleEffect(isActive ? 1.05 : 1.0)
-                .animation(.easeOut(duration: 0.15), value: isActive)
-        }
-        .buttonStyle(.plain)
+        )
     }
 
     var kpiHeader: some View {
         HStack(alignment: .top, spacing: 10) {
             if hasTarget {
-                KPICard(title: "Target", valueText: kpiTargetText, unit: nil, domain: .activity)
-                KPICard(title: "Current", valueText: kpiCurrentText, unit: nil, domain: .activity)
+                KPICard(title: L10n.Common.target, valueText: kpiTargetText, unit: nil, domain: .activity)
+                KPICard(title: L10n.Common.current, valueText: kpiCurrentText, unit: nil, domain: .activity)
                 KPICard(
-                    title: "Delta",
+                    title: L10n.Common.delta,
                     valueText: kpiDeltaText,
                     unit: nil,
                     valueColor: kpiDeltaColor,
                     domain: .activity
                 )
             } else {
-                KPICard(title: "Current", valueText: kpiCurrentText, unit: nil, domain: .activity)
+                KPICard(title: L10n.Common.current, valueText: kpiCurrentText, unit: nil, domain: .activity)
             }
         }
         .padding(.bottom, 10)
     }
 
     var periodPicker: some View {
-        HStack(spacing: 12) {
-            Spacer()
+        HStack(spacing: 8) {
             ForEach(Last90DaysPeriod.allCases) { period in
                 let active = (period == selectedPeriod)
 
                 Button { selectedPeriod = period } label: {
-                    Text(period.rawValue)
-                        .font(.caption2.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 22)
-                        .background(
-                            Capsule().fill(
-                                active
-                                ? LinearGradient(
-                                    colors: [color.opacity(0.95), color.opacity(0.75)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                  )
-                                : LinearGradient(
-                                    colors: [Color.white.opacity(0.10), color.opacity(0.22)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                  )
-                            )
+                    Text(
+                        period.days == 7 ? L10n.Common.period7d :
+                        period.days == 14 ? L10n.Common.period14d :
+                        period.days == 30 ? L10n.Common.period30d :
+                        period.days == 90 ? L10n.Common.period90d :
+                        period.rawValue
+                    )
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity) // UPDATED
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)   // UPDATED
+                    .background(
+                        Capsule().fill(
+                            active
+                            ? LinearGradient(
+                                colors: [color.opacity(0.95), color.opacity(0.75)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                              )
+                            : LinearGradient(
+                                colors: [Color.white.opacity(0.10), color.opacity(0.22)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                              )
                         )
-                        .overlay(
-                            Capsule().stroke(
-                                active ? Color.white.opacity(0.90) : Color.white.opacity(0.35),
-                                lineWidth: active ? 1.6 : 0.8
-                            )
+                    )
+                    .overlay(
+                        Capsule().stroke(
+                            active ? Color.white.opacity(0.90) : Color.white.opacity(0.35),
+                            lineWidth: active ? 1.6 : 0.8
                         )
-                        .shadow(
-                            color: Color.black.opacity(active ? 0.25 : 0.08),
-                            radius: active ? 4 : 2,
-                            x: 0,
-                            y: active ? 2 : 1
-                        )
-                        .foregroundStyle(active ? Color.white : Color.Glu.primaryBlue.opacity(0.95))
-                        .scaleEffect(active ? 1.05 : 1.0)
-                        .animation(.easeOut(duration: 0.15), value: active)
+                    )
+                    .shadow(
+                        color: Color.black.opacity(active ? 0.25 : 0.08),
+                        radius: active ? 4 : 2,
+                        x: 0,
+                        y: active ? 2 : 1
+                    )
+                    .foregroundStyle(active ? Color.white : Color.Glu.primaryBlue.opacity(0.95))
+                    .scaleEffect(active ? 1.05 : 1.0)
+                    .animation(.easeOut(duration: 0.15), value: active)
                 }
+                .buttonStyle(.plain)
             }
-            Spacer()
         }
         .padding(.horizontal, 4)
     }

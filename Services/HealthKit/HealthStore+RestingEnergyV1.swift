@@ -11,19 +11,18 @@
 
 import Foundation
 import HealthKit
+import OSLog // 🟨 UPDATED
 
 // ============================================================
 // MARK: - Entry Types (V1)
 // ============================================================
 
-// !!! NEW: Minimaler Entry für 90d (analog ActiveEnergy: date + value)
 struct RestingEnergyEntry: Identifiable {
     let id = UUID()
     let date: Date
     let restingEnergyKcal: Int
 }
 
-// !!! NEW: Minimaler Entry für 365d Base-Series (Daily)
 struct DailyRestingEnergyEntry: Identifiable {
     let id = UUID()
     let date: Date
@@ -46,11 +45,17 @@ extension HealthStore {
         if isPreview {
             DispatchQueue.main.async {
                 self.todayRestingEnergyKcal = 0
+                GluLog.restingEnergy.debug("fetchRestingEnergyTodayV1 preview applied | todayRestingEnergy=\(self.todayRestingEnergyKcal, privacy: .public)") // 🟨 UPDATED
             }
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) else { return }
+        GluLog.restingEnergy.notice("fetchRestingEnergyTodayV1 started") // 🟨 UPDATED
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) else {
+            GluLog.restingEnergy.error("fetchRestingEnergyTodayV1 failed | quantityTypeUnavailable=true") // 🟨 UPDATED
+            return
+        }
 
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: Date())
@@ -63,7 +68,9 @@ extension HealthStore {
         ) { [weak self] _, result, _ in
             let value = result?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
             DispatchQueue.main.async {
-                self?.todayRestingEnergyKcal = max(0, Int(value.rounded()))
+                guard let self else { return }
+                self.todayRestingEnergyKcal = max(0, Int(value.rounded()))
+                GluLog.restingEnergy.notice("fetchRestingEnergyTodayV1 finished | todayRestingEnergy=\(self.todayRestingEnergyKcal, privacy: .public)") // 🟨 UPDATED
             }
         }
 
@@ -73,29 +80,47 @@ extension HealthStore {
     /// 90d Serie (für Yesterday/DayBefore Mapping im Overview)
     func fetchLast90DaysRestingEnergyV1() {
         if isPreview {
-            DispatchQueue.main.async { self.last90DaysRestingEnergy = [] }
+            DispatchQueue.main.async {
+                self.last90DaysRestingEnergy = []
+                GluLog.restingEnergy.debug("fetchLast90DaysRestingEnergyV1 preview applied | entries=0") // 🟨 UPDATED
+            }
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) else { return }
+        GluLog.restingEnergy.notice("fetchLast90DaysRestingEnergyV1 started") // 🟨 UPDATED
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) else {
+            GluLog.restingEnergy.error("fetchLast90DaysRestingEnergyV1 failed | quantityTypeUnavailable=true") // 🟨 UPDATED
+            return
+        }
 
         fetchDailySeriesRestingEnergyV1(
             quantityType: type,
             unit: .kilocalorie(),
             days: 90
         ) { [weak self] entries in
-            self?.last90DaysRestingEnergy = entries
+            guard let self else { return }
+            self.last90DaysRestingEnergy = entries
+            GluLog.restingEnergy.notice("fetchLast90DaysRestingEnergyV1 finished | entries=\(entries.count, privacy: .public)") // 🟨 UPDATED
         }
     }
 
     /// Monatswerte (cumulativeSum pro Monat; letzte ~5 Monate)
     func fetchMonthlyRestingEnergyV1() {
         if isPreview {
-            DispatchQueue.main.async { self.monthlyRestingEnergy = [] }
+            DispatchQueue.main.async {
+                self.monthlyRestingEnergy = []
+                GluLog.restingEnergy.debug("fetchMonthlyRestingEnergyV1 preview applied | entries=0") // 🟨 UPDATED
+            }
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) else { return }
+        GluLog.restingEnergy.notice("fetchMonthlyRestingEnergyV1 started") // 🟨 UPDATED
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) else {
+            GluLog.restingEnergy.error("fetchMonthlyRestingEnergyV1 failed | quantityTypeUnavailable=true") // 🟨 UPDATED
+            return
+        }
 
         let calendar = Calendar.current
         let today = Date()
@@ -104,7 +129,10 @@ extension HealthStore {
         guard
             let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today)),
             let startDate = calendar.date(byAdding: .month, value: -4, to: currentMonth)
-        else { return }
+        else {
+            GluLog.restingEnergy.error("fetchMonthlyRestingEnergyV1 failed | startDateUnavailable=true") // 🟨 UPDATED
+            return
+        }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: startOfToday, options: .strictStartDate)
         let interval = DateComponents(month: 1)
@@ -118,7 +146,10 @@ extension HealthStore {
         )
 
         query.initialResultsHandler = { [weak self] _, results, _ in
-            guard let self, let results else { return }
+            guard let self, let results else {
+                GluLog.restingEnergy.notice("fetchMonthlyRestingEnergyV1 finished | resultsEmpty=true") // 🟨 UPDATED
+                return
+            }
 
             var temp: [MonthlyMetricEntry] = []
             temp.reserveCapacity(5)
@@ -131,6 +162,7 @@ extension HealthStore {
 
             DispatchQueue.main.async {
                 self.monthlyRestingEnergy = temp
+                GluLog.restingEnergy.notice("fetchMonthlyRestingEnergyV1 finished | entries=\(temp.count, privacy: .public)") // 🟨 UPDATED
             }
         }
 
@@ -140,18 +172,28 @@ extension HealthStore {
     /// 365d Basereihe (für stabile Averages / spätere Erweiterungen)
     func fetchRestingEnergyDaily365V1() {
         if isPreview {
-            DispatchQueue.main.async { self.restingEnergyDaily365 = [] }
+            DispatchQueue.main.async {
+                self.restingEnergyDaily365 = []
+                GluLog.restingEnergy.debug("fetchRestingEnergyDaily365V1 preview applied | entries=0") // 🟨 UPDATED
+            }
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) else { return }
+        GluLog.restingEnergy.notice("fetchRestingEnergyDaily365V1 started") // 🟨 UPDATED
+
+        guard let type = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) else {
+            GluLog.restingEnergy.error("fetchRestingEnergyDaily365V1 failed | quantityTypeUnavailable=true") // 🟨 UPDATED
+            return
+        }
 
         fetchDailySeriesRestingEnergyDaily365V1(
             quantityType: type,
             unit: .kilocalorie(),
             days: 365
         ) { [weak self] entries in
-            self?.restingEnergyDaily365 = entries
+            guard let self else { return }
+            self.restingEnergyDaily365 = entries
+            GluLog.restingEnergy.notice("fetchRestingEnergyDaily365V1 finished | entries=\(entries.count, privacy: .public)") // 🟨 UPDATED
         }
     }
 }
@@ -172,13 +214,16 @@ private extension HealthStore {
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
 
-        guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else { return }
-
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: [])
-        let interval = DateComponents(day: 1)
+        guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
+            GluLog.restingEnergy.error("fetchDailySeriesRestingEnergyV1 failed | startDateUnavailable=true") // 🟨 UPDATED
+            return
+        }
 
         var daily: [RestingEnergyEntry] = []
         daily.reserveCapacity(days)
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: [])
+        let interval = DateComponents(day: 1)
 
         let query = HKStatisticsCollectionQuery(
             quantityType: quantityType,
@@ -199,8 +244,11 @@ private extension HealthStore {
                 )
             }
 
+            let result = daily.sorted { $0.date < $1.date }
+
             DispatchQueue.main.async {
-                assign(daily.sorted { $0.date < $1.date })
+                assign(result)
+                GluLog.restingEnergy.debug("fetchDailySeriesRestingEnergyV1 finished | entries=\(result.count, privacy: .public)") // 🟨 UPDATED
             }
         }
 
@@ -217,13 +265,16 @@ private extension HealthStore {
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
 
-        guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else { return }
-
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: [])
-        let interval = DateComponents(day: 1)
+        guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
+            GluLog.restingEnergy.error("fetchDailySeriesRestingEnergyDaily365V1 failed | startDateUnavailable=true") // 🟨 UPDATED
+            return
+        }
 
         var daily: [DailyRestingEnergyEntry] = []
         daily.reserveCapacity(days)
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: [])
+        let interval = DateComponents(day: 1)
 
         let query = HKStatisticsCollectionQuery(
             quantityType: quantityType,
@@ -244,8 +295,11 @@ private extension HealthStore {
                 )
             }
 
+            let result = daily.sorted { $0.date < $1.date }
+
             DispatchQueue.main.async {
-                assign(daily.sorted { $0.date < $1.date })
+                assign(result)
+                GluLog.restingEnergy.debug("fetchDailySeriesRestingEnergyDaily365V1 finished | entries=\(result.count, privacy: .public)") // 🟨 UPDATED
             }
         }
 

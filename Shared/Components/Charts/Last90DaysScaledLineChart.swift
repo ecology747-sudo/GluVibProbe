@@ -70,7 +70,7 @@ struct Last90DaysScaledLineChart<DataPoint: Identifiable>: View {
                     y: .value("Goal", goalValue)
                 )
                 .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
-                .foregroundStyle(Color.green)
+                .foregroundStyle(Color.Glu.successGreen)
             }
         }
         // Plot-Hintergrund

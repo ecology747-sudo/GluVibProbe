@@ -20,17 +20,17 @@ final class NutritionEnergyViewModelV1: ObservableObject {
     // MARK: - Published Outputs (View-facing)
     // ============================================================
 
-    // KPIs
     @Published var todayKcal: Int = 0
     @Published var dailyCaloriesGoalInt: Int = 0
 
-    @Published var todayRestingEnergyKcal: Int = 0            // !!! NEW
-    @Published var todayActiveEnergyKcal: Int = 0             // !!! NEW
+    @Published var todayRestingEnergyKcal: Int = 0
+    @Published var todayActiveEnergyKcal: Int = 0
 
-    // Chart Data
     @Published var last90DaysData: [DailyNutritionEnergyEntry] = []
     @Published var monthlyData: [MonthlyMetricEntry] = []
     @Published var daily365: [DailyNutritionEnergyEntry] = []
+
+    @Published var nutritionEnergyReadAuthIssueV1: Bool = false // 🟨 NEW
 
     // ============================================================
     // MARK: - Dependencies
@@ -82,18 +82,19 @@ final class NutritionEnergyViewModelV1: ObservableObject {
             .sink { [weak self] in self?.daily365 = $0 }
             .store(in: &cancellables)
 
-        // --------------------------------------------------------
-        // Resting / Active Energy (Burned) — TODAY
-        // --------------------------------------------------------
-
         healthStore.$todayRestingEnergyKcal
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.todayRestingEnergyKcal = $0 }                   // !!! NEW
+            .sink { [weak self] in self?.todayRestingEnergyKcal = $0 }
             .store(in: &cancellables)
 
         healthStore.$todayActiveEnergy
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.todayActiveEnergyKcal = $0 }                    // !!! NEW
+            .sink { [weak self] in self?.todayActiveEnergyKcal = $0 }
+            .store(in: &cancellables)
+
+        healthStore.$nutritionEnergyReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.nutritionEnergyReadAuthIssueV1 = $0 } // 🟨 NEW
             .store(in: &cancellables)
     }
 
@@ -112,52 +113,104 @@ final class NutritionEnergyViewModelV1: ObservableObject {
         daily365 = healthStore.nutritionEnergyDaily365
         dailyCaloriesGoalInt = settings.dailyCalories
 
-        todayRestingEnergyKcal = healthStore.todayRestingEnergyKcal                       // !!! NEW
-        todayActiveEnergyKcal = healthStore.todayActiveEnergy                             // !!! NEW
+        todayRestingEnergyKcal = healthStore.todayRestingEnergyKcal
+        todayActiveEnergyKcal = healthStore.todayActiveEnergy
+        nutritionEnergyReadAuthIssueV1 = healthStore.nutritionEnergyReadAuthIssueV1 // 🟨 NEW
     }
 
     // ============================================================
-    // MARK: - KPI Formatting
+    // MARK: - Availability (Today)
+    // ============================================================
+
+    private var hasTodayDatapoint: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        let in90 = last90DaysData.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        let in365 = daily365.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        return in90 || in365
+    }
+
+    private var hasTodayPositiveIntake: Bool {
+        todayKcal > 0
+    }
+
+    // ============================================================
+    // MARK: - KPI Formatting (Goldstandard Nutrition)
     // ============================================================
 
     var formattedTodayKcal: String {
-        "\(formattedNumber(todayKcal)) kcal"                 // !!! UPDATED (Einheit im KPI-String)
+        guard hasTodayDatapoint || hasTodayPositiveIntake else { return "–" } // 🟨 UPDATED
+        return "\(formattedNumber(todayKcal)) kcal"
     }
 
     var formattedDailyCaloriesGoal: String {
-        "\(formattedNumber(dailyCaloriesGoalInt)) kcal"      // !!! UPDATED (Einheit im KPI-String)
+        "\(formattedNumber(dailyCaloriesGoalInt)) kcal"
     }
 
     var kpiDeltaText: String {
+        guard hasTodayDatapoint || hasTodayPositiveIntake else { return "–" } // 🟨 UPDATED
         let diff = todayKcal - dailyCaloriesGoalInt
         let sign: String = diff > 0 ? "+" : diff < 0 ? "−" : "±"
-        return "\(sign) \(formattedNumber(abs(diff))) kcal"  // !!! UPDATED (Einheit im KPI-String)
+        return "\(sign) \(formattedNumber(abs(diff))) kcal"
     }
 
     var kpiDeltaColor: Color {
+        guard hasTodayDatapoint || hasTodayPositiveIntake else { return Color.Glu.primaryBlue } // 🟨 UPDATED
         let diff = todayKcal - dailyCaloriesGoalInt
-        if diff > 0 { return .red }          // over target
-        if diff < 0 { return .green }        // under target
+        if diff > 0 { return .red }
+        if diff < 0 { return Color.Glu.successGreen }
         return Color.Glu.primaryBlue
     }
 
+    // ============================================================
+    // MARK: - Info Hint (Today) — Goldstandard Nutrition
+    // ============================================================
+
+    var todayInfoText: String? { // 🟨 UPDATED
+
+        if settings.showPermissionWarnings && nutritionEnergyReadAuthIssueV1 {
+            return L10n.NutritionEnergy.hintNoDataOrPermission
+        }
+
+        if hasTodayDatapoint || hasTodayPositiveIntake {
+            return nil
+        }
+
+        let hasAnyHistoryPositive =
+            last90DaysData.contains { $0.energyKcal > 0 } ||
+            daily365.contains { $0.energyKcal > 0 }
+
+        if !hasAnyHistoryPositive {
+            return L10n.NutritionEnergy.hintNoDataOrPermission
+        }
+
+        return L10n.NutritionEnergy.hintNoToday
+    }
+
     // ------------------------------------------------------------
-    // Burned (Active + Resting) — Anzeige-only
+    // MARK: - Burned (Active + Resting) — Anzeige-only
     // ------------------------------------------------------------
 
-    var totalBurnedTodayKcal: Int {                                                 // !!! NEW
+    var totalBurnedTodayKcal: Int {
         max(0, todayActiveEnergyKcal + todayRestingEnergyKcal)
     }
 
-    var formattedTotalBurnedTodayKcal: String {                                     // !!! NEW
+    var formattedTotalBurnedTodayKcal: String {
         "\(formattedNumber(totalBurnedTodayKcal)) kcal"
     }
 
-    var formattedTodayActiveEnergyKcal: String {                                    // !!! NEW
+    var formattedTodayActiveEnergyKcal: String {
         "\(formattedNumber(todayActiveEnergyKcal)) kcal"
     }
 
-    var formattedTodayRestingEnergyKcal: String {                                   // !!! NEW
+    var formattedTodayRestingEnergyKcal: String {
         "\(formattedNumber(todayRestingEnergyKcal)) kcal"
     }
 
@@ -165,14 +218,14 @@ final class NutritionEnergyViewModelV1: ObservableObject {
     // MARK: - Period Averages
     // ============================================================
 
-    var periodAverages: [PeriodAverageEntry] {
+    var periodAverages: [PeriodAverageEntry] { // 🟨 UPDATED
         [
-            .init(label: "7T",   days: 7,   value: averageKcal(last: 7)),
-            .init(label: "14T",  days: 14,  value: averageKcal(last: 14)),
-            .init(label: "30T",  days: 30,  value: averageKcal(last: 30)),
-            .init(label: "90T",  days: 90,  value: averageKcal(last: 90)),
-            .init(label: "180T", days: 180, value: averageKcal(last: 180)),
-            .init(label: "365T", days: 365, value: averageKcal(last: 365))
+            .init(label: L10n.Common.period7d, days: 7, value: averageKcal(last: 7)),
+            .init(label: L10n.Common.period14d, days: 14, value: averageKcal(last: 14)),
+            .init(label: L10n.Common.period30d, days: 30, value: averageKcal(last: 30)),
+            .init(label: L10n.Common.period90d, days: 90, value: averageKcal(last: 90)),
+            .init(label: L10n.Common.period180d, days: 180, value: averageKcal(last: 180)),
+            .init(label: L10n.Common.period365d, days: 365, value: averageKcal(last: 365))
         ]
     }
 
@@ -210,14 +263,14 @@ final class NutritionEnergyViewModelV1: ObservableObject {
     }
 
     var monthlyScale: MetricScaleResult {
-        MetricScaleHelper.scale(monthlyData.map { Double($0.value) }, for: .energyMonthly) // !!! UPDATED (Monthly != Daily)
+        MetricScaleHelper.scale(monthlyData.map { Double($0.value) }, for: .energyMonthly)
     }
 
     // ============================================================
     // MARK: - Formatter
     // ============================================================
 
-    private func formattedNumber(_ value: Int) -> String {            // !!! NEW
+    private func formattedNumber(_ value: Int) -> String {
         numberFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 

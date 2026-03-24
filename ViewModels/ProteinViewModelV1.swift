@@ -2,12 +2,6 @@
 //  ProteinViewModelV1.swift
 //  GluVibProbe
 //
-//  V1: Protein ViewModel
-//  - KEIN Fetch im ViewModel
-//  - Single Source of Truth: HealthStore
-//  - Targets aus SettingsModel (dailyProtein)
-//  - V1 kompatibel
-//
 
 import Foundation
 import Combine
@@ -20,14 +14,14 @@ final class ProteinViewModelV1: ObservableObject {
     // MARK: - Published Outputs (View-facing)
     // ============================================================
 
-    // KPIs
     @Published var todayProteinGrams: Int = 0
     @Published var dailyProteinGoalInt: Int = 0
 
-    // Chart Data
     @Published var last90DaysData: [DailyProteinEntry] = []
     @Published var monthlyProteinData: [MonthlyMetricEntry] = []
-    @Published var proteinDaily365: [DailyProteinEntry] = []          // !!! NEW
+    @Published var proteinDaily365: [DailyProteinEntry] = []
+
+    @Published var proteinReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies
@@ -74,15 +68,19 @@ final class ProteinViewModelV1: ObservableObject {
             .sink { [weak self] in self?.monthlyProteinData = $0 }
             .store(in: &cancellables)
 
-        healthStore.$proteinDaily365                                       // !!! NEW
+        healthStore.$proteinDaily365
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.proteinDaily365 = $0 }
+            .store(in: &cancellables)
+
+        healthStore.$proteinReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.proteinReadAuthIssueV1 = $0 }
             .store(in: &cancellables)
     }
 
     private func bindSettings() {
-
-        settings.$dailyProtein                                             // !!! UPDATED
+        settings.$dailyProtein
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.dailyProteinGoalInt = $0 }
             .store(in: &cancellables)
@@ -92,43 +90,95 @@ final class ProteinViewModelV1: ObservableObject {
         todayProteinGrams = healthStore.todayProteinGrams
         last90DaysData = healthStore.last90DaysProtein
         monthlyProteinData = healthStore.monthlyProtein
-        proteinDaily365 = healthStore.proteinDaily365                      // !!! NEW
-        dailyProteinGoalInt = settings.dailyProtein                         // !!! UPDATED
+        proteinDaily365 = healthStore.proteinDaily365
+        dailyProteinGoalInt = settings.dailyProtein
+        proteinReadAuthIssueV1 = healthStore.proteinReadAuthIssueV1
     }
 
     // ============================================================
-    // MARK: - KPI Formatting (WITH unit)
+    // MARK: - Availability (Today)
     // ============================================================
 
-    private let numberFormatter: NumberFormatter = {                        // !!! NEW
+    private var hasTodayDatapoint: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        let in90 = last90DaysData.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        let in365 = proteinDaily365.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        return in90 || in365
+    }
+
+    private var hasTodayPositiveProtein: Bool {
+        todayProteinGrams > 0
+    }
+
+    // ============================================================
+    // MARK: - KPI Formatting
+    // ============================================================
+
+    private let numberFormatter: NumberFormatter = {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         return f
-    }()                                                                     // !!! NEW
+    }()
 
     var formattedTodayProtein: String {
-        let formatted = numberFormatter.string(from: NSNumber(value: todayProteinGrams)) ?? "\(todayProteinGrams)" // !!! UPDATED
-        return "\(formatted) g"                                             // !!! UPDATED
+        guard hasTodayDatapoint || hasTodayPositiveProtein else { return "–" }
+        let formatted = numberFormatter.string(from: NSNumber(value: todayProteinGrams)) ?? "\(todayProteinGrams)"
+        return "\(formatted) g"
     }
 
     var formattedDailyProteinGoal: String {
-        let formatted = numberFormatter.string(from: NSNumber(value: dailyProteinGoalInt)) ?? "\(dailyProteinGoalInt)" // !!! UPDATED
-        return "\(formatted) g"                                             // !!! UPDATED
+        let formatted = numberFormatter.string(from: NSNumber(value: dailyProteinGoalInt)) ?? "\(dailyProteinGoalInt)"
+        return "\(formatted) g"
     }
 
     var kpiDeltaText: String {
+        guard hasTodayDatapoint || hasTodayPositiveProtein else { return "–" }
         let diff = todayProteinGrams - dailyProteinGoalInt
         let sign: String = diff > 0 ? "+" : diff < 0 ? "−" : "±"
         let absValue = abs(diff)
-        let formatted = numberFormatter.string(from: NSNumber(value: absValue)) ?? "\(absValue)" // !!! UPDATED
-        return "\(sign) \(formatted) g"                                     // !!! UPDATED
+        let formatted = numberFormatter.string(from: NSNumber(value: absValue)) ?? "\(absValue)"
+        return "\(sign) \(formatted) g"
     }
 
     var kpiDeltaColor: Color {
+        guard hasTodayDatapoint || hasTodayPositiveProtein else { return Color.Glu.primaryBlue }
         let diff = todayProteinGrams - dailyProteinGoalInt
-        if diff > 0 { return .green }
+        if diff > 0 { return Color.Glu.successGreen }
         if diff < 0 { return .red }
         return Color.Glu.primaryBlue
+    }
+
+    // ============================================================
+    // MARK: - Info Hint (Today) — Goldstandard Nutrition
+    // ============================================================
+
+    var todayInfoText: String? {
+
+        if settings.showPermissionWarnings && proteinReadAuthIssueV1 {
+            return L10n.Protein.hintNoDataOrPermission
+        }
+
+        if hasTodayDatapoint || hasTodayPositiveProtein {
+            return nil
+        }
+
+        let hasAnyHistoryPositive =
+            last90DaysData.contains { $0.grams > 0 } ||
+            proteinDaily365.contains { $0.grams > 0 }
+
+        if !hasAnyHistoryPositive {
+            return L10n.Protein.hintNoDataOrPermission
+        }
+
+        return L10n.Protein.hintNoToday
     }
 
     // ============================================================
@@ -137,20 +187,17 @@ final class ProteinViewModelV1: ObservableObject {
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",   days: 7,   value: averageProtein(last: 7)),
-            .init(label: "14T",  days: 14,  value: averageProtein(last: 14)),
-            .init(label: "30T",  days: 30,  value: averageProtein(last: 30)),
-            .init(label: "90T",  days: 90,  value: averageProtein(last: 90)),
-            .init(label: "180T", days: 180, value: averageProtein(last: 180)),
-            .init(label: "365T", days: 365, value: averageProtein(last: 365))
+            .init(label: L10n.Common.period7d, days: 7, value: averageProtein(last: 7)),
+            .init(label: L10n.Common.period14d, days: 14, value: averageProtein(last: 14)),
+            .init(label: L10n.Common.period30d, days: 30, value: averageProtein(last: 30)),
+            .init(label: L10n.Common.period90d, days: 90, value: averageProtein(last: 90)),
+            .init(label: L10n.Common.period180d, days: 180, value: averageProtein(last: 180)),
+            .init(label: L10n.Common.period365d, days: 365, value: averageProtein(last: 365))
         ]
     }
 
     private func averageProtein(last days: Int) -> Int {
-        let source: [DailyProteinEntry] = {                                 // !!! UPDATED
-            if days > 90, !proteinDaily365.isEmpty { return proteinDaily365 } // !!! UPDATED
-            return last90DaysData                                            // !!! UPDATED
-        }()                                                                  // !!! UPDATED
+        let source = proteinDaily365.isEmpty ? last90DaysData : proteinDaily365
 
         guard !source.isEmpty else { return 0 }
 
@@ -169,47 +216,45 @@ final class ProteinViewModelV1: ObservableObject {
 
         guard !filtered.isEmpty else { return 0 }
 
-        let sum = filtered.reduce(0) { $0 + $1.grams }
-        let avg = Double(sum) / Double(filtered.count)
-        return Int(avg.rounded())
+        return filtered.reduce(0) { $0 + $1.grams } / filtered.count
     }
 
     // ============================================================
     // MARK: - Chart Label Helper (NO unit)
     // ============================================================
 
-    private func numberOnlyLabel(_ value: Double) -> String {               // !!! NEW
-        "\(Int(value.rounded()))"                                           // !!! NEW
-    }                                                                       // !!! NEW
+    private func numberOnlyLabel(_ value: Double) -> String {
+        "\(Int(value.rounded()))"
+    }
 
     // ============================================================
     // MARK: - Chart Scales (NO unit in charts)
     // ============================================================
 
     var dailyScale: MetricScaleResult {
-        let base = MetricScaleHelper.scale(last90DaysData.map { Double($0.grams) }, for: .grams) // !!! UPDATED
-        return MetricScaleResult(                                            // !!! UPDATED
-            yAxisTicks: base.yAxisTicks,                                      // !!! UPDATED
-            yMax: base.yMax,                                                  // !!! UPDATED
-            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }         // !!! UPDATED (no "g")
-        )                                                                      // !!! UPDATED
+        let base = MetricScaleHelper.scale(last90DaysData.map { Double($0.grams) }, for: .grams)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
     }
 
     var periodScale: MetricScaleResult {
-        let base = MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .grams) // !!! UPDATED
-        return MetricScaleResult(                                            // !!! UPDATED
-            yAxisTicks: base.yAxisTicks,                                      // !!! UPDATED
-            yMax: base.yMax,                                                  // !!! UPDATED
-            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }         // !!! UPDATED (no "g")
-        )                                                                      // !!! UPDATED
+        let base = MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .grams)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
     }
 
     var monthlyScale: MetricScaleResult {
-        let base = MetricScaleHelper.scale(monthlyProteinData.map { Double($0.value) }, for: .grams) // !!! UPDATED
-        return MetricScaleResult(                                            // !!! UPDATED
-            yAxisTicks: base.yAxisTicks,                                      // !!! UPDATED
-            yMax: base.yMax,                                                  // !!! UPDATED
-            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }         // !!! UPDATED (no "g")
-        )                                                                      // !!! UPDATED
+        let base = MetricScaleHelper.scale(monthlyProteinData.map { Double($0.value) }, for: .grams)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
     }
 }

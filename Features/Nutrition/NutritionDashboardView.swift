@@ -2,6 +2,11 @@
 //  NutritionDashboardView.swift
 //  GluVibProbe
 //
+//  Nutrition Dashboard Router (V1)
+//  - Central switch for Nutrition detail screens.
+//  - Chip navigation maps metric strings to AppState.StatsScreen.
+//  - Fallback stays on NutritionOverviewViewV1 (no cross-domain routing here).
+//
 
 import SwiftUI
 
@@ -27,6 +32,12 @@ struct NutritionDashboardView: View {
         case .carbs:
             CarbsViewV1(onMetricSelected: handleMetricSelection)
 
+        case .carbsDayparts: // 🟨 NEW
+            CarbsDaypartsViewV1(onMetricSelected: handleMetricSelection)
+
+        case .sugar: // 🟨 NEW
+            SugarViewV1(onMetricSelected: handleMetricSelection)
+
         case .protein:
             ProteinViewV1(onMetricSelected: handleMetricSelection)
 
@@ -50,6 +61,10 @@ struct NutritionDashboardView: View {
         switch metric {
         case "Carbs":
             appState.currentStatsScreen = .carbs
+        case "Carbs Split": // 🟨 NEW
+            appState.currentStatsScreen = .carbsDayparts
+        case "Sugar": // 🟨 NEW
+            appState.currentStatsScreen = .sugar
         case "Protein":
             appState.currentStatsScreen = .protein
         case "Fat":

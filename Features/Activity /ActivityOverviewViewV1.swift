@@ -35,9 +35,7 @@ struct ActivityOverviewViewV1: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
-
-    // MARK: - Settings (Units)                                         // !!! NEW
-    @ObservedObject private var settings = SettingsModel.shared         // !!! NEW
+    @EnvironmentObject var settings: SettingsModel // UPDATED: central gating + units via env
 
     // MARK: - ViewModel
 
@@ -77,7 +75,7 @@ struct ActivityOverviewViewV1: View {
             LinearGradient(
                 colors: [
                     .white,
-                    Color.Glu.activityDomain.opacity(0.55)
+                    Color.Glu.activityDomain.opacity(0.75)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -98,6 +96,8 @@ struct ActivityOverviewViewV1: View {
                         .tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .background(Color.clear)                 // 🟨 UPDATED: kill UIKit page background layer
+                .ignoresSafeArea(edges: .bottom)         // 🟨 UPDATED: prevent bottom background behind safeAreaInset tabbar
                 .onPreferenceChange(ActivityScrollOffsetKey.self) { offset in
                     withAnimation(.easeInOut(duration: 0.22)) {
                         hasScrolled = offset < 0
@@ -122,10 +122,11 @@ struct ActivityOverviewViewV1: View {
                 }
 
                 OverviewHeader(
-                    title: "Activity Overview",
+                    title: L10n.ActivityOverview.title, // UPDATED
                     subtitle: headerSubtitle,
                     tintColor: Color.Glu.activityDomain,
-                    hasScrolled: hasScrolled
+                    hasScrolled: hasScrolled,
+                    permissionBadgeScope: .activity // UPDATED
                 )
 
                 VStack {
@@ -150,8 +151,8 @@ struct ActivityOverviewViewV1: View {
 
     private var headerSubtitle: String {
         switch viewModel.selectedDayOffset {
-        case 0: return "TODAY"
-        case -1: return "YESTERDAY"
+        case 0: return L10n.ActivityOverview.today // UPDATED
+        case -1: return L10n.ActivityOverview.yesterday
         default: return dateString(for: viewModel.selectedDate)
         }
     }
@@ -214,7 +215,7 @@ private extension ActivityOverviewViewV1 {
                     last7DaysSteps: viewModel.lastSevenDaysSteps,
                     distanceUnit: settings.distanceUnit,
                     onTap: {
-                        appState.currentStatsScreen = .steps
+                        appState.handleMetricTap(metricName: "Steps", settings: settings)
                     }
                 )
                 .padding(.horizontal, 16)
@@ -224,22 +225,23 @@ private extension ActivityOverviewViewV1 {
                     todayWorkoutMinutes: viewModel.todayWorkoutMinutes,
                     avgWorkoutMinutes7d: viewModel.sevenDayAverageWorkoutMinutes,
                     onTapWorkout: {
-                        appState.currentStatsScreen = .workoutMinutes
+                        appState.handleMetricTap(metricName: "Workout Minutes", settings: settings) // UPDATED
                     },
 
                     todayKcal: viewModel.todayActiveEnergyKcal,
                     avgKcal7d: viewModel.sevenDayAverageActiveEnergyKcal,
                     onTapActiveEnergy: {
-                        appState.currentStatsScreen = .activityEnergy
+                        appState.handleMetricTap(metricName: "Activity Energy", settings: settings) // UPDATED
                     }
                 )
                 .padding(.horizontal, 16)
+
                 // MOVEMENT SPLIT
                 movementSplitCard
                     .padding(.horizontal, 16)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        appState.currentStatsScreen = .movementSplit
+                        appState.handleMetricTap(metricName: "Movement Split", settings: settings) // UPDATED
                     }
 
                 // LAST EXERCISE
@@ -259,6 +261,15 @@ private extension ActivityOverviewViewV1 {
             .padding(.top, 30)
             .padding(.bottom, 24)
         }
+        .scrollContentBackground(.hidden) // 🟨 UPDATED: remove default ScrollView background layer
+        .background(Color.clear)          // 🟨 UPDATED: keep underlying gradient visible
+
+        // 🟨 UPDATED: Reserve bottom space so last card is fully readable above TabBar.
+        // Reason: TabView uses .ignoresSafeArea(.bottom) which removes the automatic bottom inset.
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 90) // tune if needed (80–110)
+        }
+
         .refreshable {
             await viewModel.refresh()
         }
@@ -273,7 +284,7 @@ private extension ActivityOverviewViewV1 {
         VStack(alignment: .leading, spacing: 10) {
 
             HStack {
-                Text("Movement split")
+                Text(L10n.ActivityOverview.movementSplitTitle) // UPDATED
                     .font(.headline)
                     .foregroundColor(Color.Glu.primaryBlue)
                 Spacer()
@@ -334,17 +345,17 @@ private extension ActivityOverviewViewV1 {
                 HStack(alignment: .top, spacing: 5) {
                     movementLegendItem(
                         color: Color.Glu.bodyDomain,
-                        title: "Sleep",
+                        title: L10n.ActivityOverview.movementLegendSleep,
                         minutes: viewModel.movementSleepMinutesToday
                     )
                     movementLegendItem(
                         color: Color.Glu.activityDomain,
-                        title: "Active",
+                        title: L10n.ActivityOverview.movementLegendActive,
                         minutes: viewModel.movementActiveMinutesToday
                     )
                     movementLegendItem(
                         color: Color.gray.opacity(0.65),
-                        title: "Not Active",
+                        title: L10n.ActivityOverview.movementLegendNotActive,
                         minutes: viewModel.movementSedentaryMinutesToday
                     )
                 }
@@ -365,9 +376,9 @@ private extension ActivityOverviewViewV1 {
         // ✅ Quelle ist die echte Active-Source aus HealthStore (wie MovementSplitViewModelV1)
         switch healthStore.movementSplitActiveSourceTodayV1 {
         case .exerciseMinutes:
-            return "Active time based on Exercise Minutes"
+            return L10n.ActivityOverview.movementHintExerciseMinutes // UPDATED
         case .workoutMinutes:
-            return "Active time estimated from Workout Minutes"
+            return L10n.ActivityOverview.movementHintWorkoutMinutes
         case .standTime, .none:
             return nil
         }
@@ -384,7 +395,7 @@ private extension ActivityOverviewViewV1 {
         let timeText: String
         if hours > 0 && mins > 0 { timeText = "\(hours) h \(mins) min" }
         else if hours > 0 { timeText = "\(hours) h" }
-        else { timeText = "\(mins) min" }
+       else { timeText = "\(mins) min" }
 
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
@@ -413,7 +424,7 @@ private struct ActivityOverviewScoreBadge: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text("Activity score")
+            Text(L10n.ActivityOverview.scoreLabel) // UPDATED
                 .font(.caption2.weight(.semibold))
                 .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
 
@@ -439,37 +450,34 @@ private struct ActivityOverviewScoreBadge: View {
     }
 }
 
+// MARK: - Formatting
 
-    // MARK: - Formatting
-
-    private func formattedStepsShort(_ steps: Int) -> String {
-        let value = Double(steps) / 1_000
-        let rounded = (value * 10).rounded() / 10
-        return String(format: "%.1f", rounded)
-    }
-
+private func formattedStepsShort(_ steps: Int) -> String {
+    let value = Double(steps) / 1_000
+    let rounded = (value * 10).rounded() / 10
+    return String(format: "%.1f", rounded)
+}
 
 // MARK: - Formatting
 
-    private func formattedSteps(_ value: Int) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        return f.string(from: NSNumber(value: value)) ?? "\(value)"
-    }
-
+private func formattedSteps(_ value: Int) -> String {
+    let f = NumberFormatter()
+    f.numberStyle = .decimal
+    return f.string(from: NSNumber(value: value)) ?? "\(value)"
+}
 
 // MARK: - Last Exercise (Overview)
 
 private struct ActivityOverviewLastExerciseCard: View {
 
-    let workouts: [(name: String, detail: String, date: String, time: String)]
+    let workouts: [(name: String, badgeName: String, detail: String, date: String, time: String)] // UPDATED
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
 
             HStack {
                 Label {
-                    Text("Last exercise")
+                    Text(L10n.ActivityOverview.lastExerciseTitle) // UPDATED
                         .font(.headline)
                         .foregroundColor(Color.Glu.primaryBlue)
                 } icon: {
@@ -482,7 +490,7 @@ private struct ActivityOverviewLastExerciseCard: View {
 
             if workouts.isEmpty {
                 HStack(spacing: 8) {
-                    Text("No workout tracked yet")
+                    Text(L10n.ActivityOverview.noWorkoutYet) // UPDATED
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(Color.Glu.primaryBlue.opacity(0.85))
                     Spacer()
@@ -492,7 +500,7 @@ private struct ActivityOverviewLastExerciseCard: View {
                     ForEach(Array(workouts.prefix(3).enumerated()), id: \.offset) { _, workout in
                         HStack(alignment: .top, spacing: 10) {
 
-                            workoutBadge(for: workout.name)
+                            workoutBadge(for: workout.badgeName) // UPDATED
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(workout.name)
@@ -502,6 +510,9 @@ private struct ActivityOverviewLastExerciseCard: View {
                                 Text(workout.detail)
                                     .font(.caption)
                                     .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                                    .lineLimit(1)                 // 🟨 UPDATED: never wrap
+                                    .minimumScaleFactor(0.85)     // 🟨 UPDATED: shrink slightly if needed
+                                    .allowsTightening(true)       // 🟨 UPDATED: tighter spacing before truncation
                             }
 
                             Spacer()
@@ -560,7 +571,7 @@ private struct ActivityOverviewInsightCard: View {
         return AnyView(
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Activity insight")
+                    Text(L10n.ActivityOverview.insightTitle) // UPDATED
                         .font(.headline)
                         .foregroundColor(Color.Glu.primaryBlue)
                     Spacer()
@@ -568,7 +579,7 @@ private struct ActivityOverviewInsightCard: View {
 
                 Text(
                     insightText.isEmpty
-                    ? "Not enough activity data is available yet. This insight will automatically adapt to your movement pattern as the day progresses."
+                    ? L10n.ActivityOverview.insightFallback // UPDATED
                     : insightText
                 )
                 .font(.subheadline)

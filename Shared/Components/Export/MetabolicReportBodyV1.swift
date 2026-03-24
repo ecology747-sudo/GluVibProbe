@@ -2,21 +2,10 @@
 //  MetabolicReportBodyV1.swift
 //  GluVibProbe
 //
-//  Metabolic Report (V1) — PDF/Print Master Body
-//
-//  UPDATED:
-//  - Adds compact spacing profile for manual PDF pages (.page1/.page2) to prevent unwanted extra pages
-//  - Rule remains: Insulin therapy section (incl. its heading inside the section) is ALWAYS on page 2
-//  - Screen preview (.all) keeps current layout unchanged
-//
 
 import SwiftUI
 
 struct MetabolicReportBodyV1: View {
-
-    // ============================================================
-    // MARK: - Paging Mode
-    // ============================================================
 
     enum RenderMode {
         case all
@@ -26,37 +15,22 @@ struct MetabolicReportBodyV1: View {
 
     private let renderMode: RenderMode
 
-    // ============================================================
-    // MARK: - Inputs (provided by Preview/Export wrapper)
-    // ============================================================
-
     let windowDays: Int
     let isLoading: Bool
 
-    // “Computed” texts (already produced in your Preview flow)
     let rangeSummary: RangePeriodSummaryEntry?
     let meanText: String
     let gmiText: String
     let cvText: String
     let sdText: String
 
-    // Percentile profile from Coordinator
     let glucoseProfile: ReportGlucoseProfileV1?
 
-    // Layout tuning
     let sectionBlockSpacing: CGFloat
     let sectionTitleToContentSpacing: CGFloat
 
-    // ============================================================
-    // MARK: - Dependencies (SSoT)
-    // ============================================================
-
     @EnvironmentObject private var healthStore: HealthStore
     @EnvironmentObject private var settings: SettingsModel
-
-    // ============================================================
-    // MARK: - Init (keeps old call sites working)
-    // ============================================================
 
     init(
         windowDays: Int,
@@ -84,32 +58,43 @@ struct MetabolicReportBodyV1: View {
         self.renderMode = renderMode
     }
 
-    // ============================================================
-    // MARK: - Compact PDF Spacing (ONLY for manual pages)
-    // ============================================================
+    private var isManualPDFPage: Bool { renderMode == .page1 || renderMode == .page2 }
 
-    // UPDATED: Manual PDF pages must be more compact because footer grows with disclaimer length.
-    private var isManualPDFPage: Bool {
-        renderMode == .page1 || renderMode == .page2
-    }
-
-    // UPDATED: Separator paddings become smaller in PDF manual pages.
     private var sepPadS: CGFloat { isManualPDFPage ? 3 : 6 }
     private var sepPadM: CGFloat { isManualPDFPage ? 4 : 6 }
     private var sepPadL: CGFloat { isManualPDFPage ? 6 : 8 }
 
-    // UPDATED: Reduce top padding for first charts/sections in PDF manual pages.
     private var chartTopPad: CGFloat { isManualPDFPage ? 4 : 8 }
-
-    // UPDATED: Median profile chart height slightly reduced ONLY in PDF manual pages.
     private var medianChartHeight: CGFloat { isManualPDFPage ? 238 : 260 }
-
-    // UPDATED: Reduce extra top padding above median section in PDF manual pages.
     private var medianSectionTopPad: CGFloat { isManualPDFPage ? 2 : 6 }
 
-    // ============================================================
-    // MARK: - Body
-    // ============================================================
+    // UPDATED: Provide windowed TIR daily series (full days only, ends yesterday) for ReportRangeSectionView
+    private var reportDailyTIRSeries: [DailyTIREntry] {
+        windowFullDays(healthStore.dailyTIR90, windowDays: windowDays) { $0.date }
+    }
+
+    private func windowFullDays<T>(
+        _ entries: [T],
+        windowDays: Int,
+        date: (T) -> Date
+    ) -> [T] {
+
+        guard !entries.isEmpty else { return [] }
+
+        let cal = Calendar.current
+        let todayStart = cal.startOfDay(for: Date())
+        guard let end = cal.date(byAdding: .day, value: -1, to: todayStart) else { return [] }
+
+        let n = max(1, windowDays)
+        guard let start = cal.date(byAdding: .day, value: -(n - 1), to: end) else { return [] }
+
+        return entries
+            .filter {
+                let d = cal.startOfDay(for: date($0))
+                return d >= start && d <= end
+            }
+            .sorted { date($0) < date($1) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: sectionBlockSpacing) {
@@ -128,21 +113,14 @@ struct MetabolicReportBodyV1: View {
         .background(Color.white)
     }
 
-    // ============================================================
-    // MARK: - Page Variants
-    // ============================================================
-
     private var bodyAll: some View {
         Group {
-            // Thresholds
             ReportThresholdsSectionView(onOpenMetabolicSettings: nil)
             reportSeparator(verticalPadding: 6)
 
-            // Daily Mean chart
             reportDailyMeanGlucoseLineChartSection
             reportSeparator(verticalPadding: 6)
 
-            // Main Body
             if isLoading {
                 loadingSection
             } else {
@@ -152,7 +130,6 @@ struct MetabolicReportBodyV1: View {
                 medianDailyProfileSection
                     .padding(.top, 6)
 
-                // Insulin must exist here for on-screen layout
                 insulinBlock
 
                 reportSeparator(verticalPadding: 8)
@@ -161,39 +138,31 @@ struct MetabolicReportBodyV1: View {
         }
     }
 
-    // PAGE 1: everything up to (and including) Median Daily Profile
-    //         (Insulin therapy is NOT rendered here)
     private var bodyPage1: some View {
         Group {
-            // Thresholds
             ReportThresholdsSectionView(onOpenMetabolicSettings: nil)
-            reportSeparator(verticalPadding: sepPadM) // UPDATED
+            reportSeparator(verticalPadding: sepPadM)
 
-            // Daily Mean chart
             reportDailyMeanGlucoseLineChartSection
-            reportSeparator(verticalPadding: sepPadM) // UPDATED
+            reportSeparator(verticalPadding: sepPadM)
 
             if isLoading {
                 loadingSection
             } else {
                 glucoseRangeAndVariabilitySection
-                reportSeparator(verticalPadding: sepPadM) // UPDATED
+                reportSeparator(verticalPadding: sepPadM)
 
                 medianDailyProfileSection
-                    .padding(.top, medianSectionTopPad) // UPDATED
+                    .padding(.top, medianSectionTopPad)
             }
         }
     }
 
-    // PAGE 2: insulin therapy section (if enabled) + lifestyle impact
-    //         (Rule: insulin therapy incl its heading is ALWAYS on page 2)
     private var bodyPage2: some View {
         Group {
             if isLoading {
                 loadingSection
             } else {
-
-                // UPDATED: Start directly under page header -> no extra top padding here.
                 if settings.isInsulinTreated {
                     ReportInsulinTherapyOverviewSectionV1(
                         windowDays: windowDays,
@@ -202,19 +171,15 @@ struct MetabolicReportBodyV1: View {
                         dailyCarbBolusRatio90: healthStore.dailyCarbBolusRatio90,
                         dailyBolusBasalRatio90: healthStore.dailyBolusBasalRatio90
                     )
-                    .padding(.top, 0) // UPDATED
+                    .padding(.top, 0)
 
-                    reportSeparator(verticalPadding: sepPadL) // UPDATED
+                    reportSeparator(verticalPadding: sepPadL)
                 }
 
                 lifestyleImpactSection
             }
         }
     }
-
-    // ============================================================
-    // MARK: - Sections
-    // ============================================================
 
     private var reportDailyMeanGlucoseLineChartSection: some View {
         Group {
@@ -240,7 +205,7 @@ struct MetabolicReportBodyV1: View {
                 )
             }
         }
-        .padding(.top, chartTopPad) // UPDATED
+        .padding(.top, chartTopPad)
     }
 
     private var loadingSection: some View {
@@ -260,7 +225,7 @@ struct MetabolicReportBodyV1: View {
     private var glucoseRangeAndVariabilitySection: some View {
         VStack(alignment: .leading, spacing: sectionTitleToContentSpacing) {
 
-            Text("Glucose Range & Variability (\(windowDays) Days)")
+            Text("Time in Range (\(windowDays) Days)")
                 .font(ReportStyle.FontToken.value)
                 .foregroundStyle(ReportStyle.textColor)
 
@@ -271,6 +236,10 @@ struct MetabolicReportBodyV1: View {
                 gmiText: gmiText,
                 cvText: cvText,
                 sdText: sdText,
+
+                tirDailySeries: reportDailyTIRSeries,
+                tirTargetPercent: settings.tirTargetPercent, // UPDATED
+
                 onTap: nil
             )
         }
@@ -289,7 +258,7 @@ struct MetabolicReportBodyV1: View {
                         profile: profile,
                         glucoseUnit: settings.glucoseUnit
                     )
-                    .frame(height: medianChartHeight) // UPDATED
+                    .frame(height: medianChartHeight)
                 }
             } else {
                 RoundedRectangle(cornerRadius: 6)
@@ -328,53 +297,5 @@ struct MetabolicReportBodyV1: View {
             .fill(ReportStyle.dividerColor.opacity(0.9))
             .frame(height: ReportStyle.Size.dividerHeight)
             .padding(.vertical, verticalPadding)
-    }
-}
-
-// MARK: - Preview
-#Preview {
-    let store = HealthStore.preview()
-    let settings = SettingsModel.shared
-    settings.hasCGM = true
-    settings.isInsulinTreated = true
-
-    return ScrollView {
-        VStack(spacing: 24) {
-
-            Text("PAGE 1")
-            MetabolicReportBodyV1(
-                windowDays: 30,
-                isLoading: false,
-                rangeSummary: nil,
-                meanText: "124 mg/dL",
-                gmiText: "6.4",
-                cvText: "28%",
-                sdText: "35 mg/dL",
-                glucoseProfile: nil,
-                sectionBlockSpacing: 0,
-                sectionTitleToContentSpacing: 8,
-                renderMode: .page1
-            )
-            .environmentObject(store)
-            .environmentObject(settings)
-
-            Text("PAGE 2")
-            MetabolicReportBodyV1(
-                windowDays: 30,
-                isLoading: false,
-                rangeSummary: nil,
-                meanText: "124 mg/dL",
-                gmiText: "6.4",
-                cvText: "28%",
-                sdText: "35 mg/dL",
-                glucoseProfile: nil,
-                sectionBlockSpacing: 0,
-                sectionTitleToContentSpacing: 8,
-                renderMode: .page2
-            )
-            .environmentObject(store)
-            .environmentObject(settings)
-        }
-        .background(Color.white)
     }
 }

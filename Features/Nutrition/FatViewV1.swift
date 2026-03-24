@@ -2,19 +2,51 @@
 //  FatViewV1.swift
 //  GluVibProbe
 //
-//  V1 kompatibel (wie Carbs/Protein)
+//  Nutrition V1 — Fat Detail Screen
+//
+//  Purpose
+//  - Renders the fat metric detail screen for the Nutrition domain.
+//  - Shows the current fat hint state, KPI block, daily / period / monthly charts,
+//    and the shared nutrition metric chip navigation.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → FatViewModelV1 (mapping / formatting) → FatViewV1 (render only)
+//
+//  Key Connections
+//  - FatViewModelV1: provides formatted KPI values, chart data and today hint text.
+//  - HealthStore: provides central badge / attention sources for nutrition warning logic.
+//  - AppState: handles metric routing and back navigation.
+//  - NutritionSectionCardScaledV2: shared nutrition card shell for chips, KPIs and charts.
+//  - L10n: localized titles and labels for the nutrition / fat metric.
 //
 
 import SwiftUI
 
 struct FatViewV1: View {
 
+    // ============================================================
+    // MARK: - Dependencies (Environment)
+    // ============================================================
+
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
+    @EnvironmentObject private var settings: SettingsModel
+
+    // ============================================================
+    // MARK: - ViewModel
+    // ============================================================
 
     @StateObject private var viewModel: FatViewModelV1
 
+    // ============================================================
+    // MARK: - Inputs
+    // ============================================================
+
     let onMetricSelected: (String) -> Void
+
+    // ============================================================
+    // MARK: - Init
+    // ============================================================
 
     init(
         viewModel: FatViewModelV1? = nil,
@@ -29,32 +61,39 @@ struct FatViewV1: View {
         }
     }
 
+    // ============================================================
+    // MARK: - Header Badge Gate (Nutrition / Fat)
+    // ============================================================
+
+    private var fatAttentionBadgeV1: Bool { // 🟨 UPDATED
+        settings.showPermissionWarnings && healthStore.fatAnyAttentionForBadgesV1
+    }
+
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
+
     var body: some View {
 
         // ============================================================
-        // MARK: - Local Type Bridge (DailyFatEntry -> DailyStepsEntry)  // !!! NEW
+        // MARK: - Local Type Bridge
+        // NutritionSectionCardScaledV2 expects [DailyStepsEntry]
         // ============================================================
 
-        let last90StepsLike: [DailyStepsEntry] = viewModel.last90DaysData.map {      // !!! NEW
-            DailyStepsEntry(date: $0.date, steps: $0.grams)                          // !!! NEW
-        }                                                                            // !!! NEW
-
-        let daily365StepsLike: [DailyStepsEntry] = viewModel.fatDaily365.map {       // !!! NEW
-            DailyStepsEntry(date: $0.date, steps: $0.grams)                          // !!! NEW
-        }                                                                            // !!! NEW
+        let last90StepsLike: [DailyStepsEntry] = viewModel.last90DaysData.map {
+            DailyStepsEntry(date: $0.date, steps: $0.grams)
+        }
 
         MetricDetailScaffold(
-            headerTitle: "Nutrition",
+            headerTitle: L10n.Common.tabNutrition,
             headerTint: Color.Glu.nutritionDomain,
-
             onBack: {
                 appState.currentStatsScreen = .nutritionOverview
             },
-
             onRefresh: {
-                await healthStore.refreshNutrition(.pullToRefresh)                   // !!! UPDATED
+                await healthStore.refreshNutrition(.pullToRefresh)
             },
-
+            showsPermissionBadge: fatAttentionBadgeV1,
             background: {
                 LinearGradient(
                     colors: [
@@ -68,13 +107,22 @@ struct FatViewV1: View {
         ) {
             VStack(alignment: .leading, spacing: 16) {
 
+                // Today info / hint text from ViewModel
+                if let hint = viewModel.todayInfoText {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(Color.Glu.primaryBlue)
+                        .padding(.horizontal, 2)
+                }
+
+                // Shared Nutrition metric card shell
                 NutritionSectionCardScaledV2(
                     sectionTitle: "",
-                    title: "Fat",
+                    title: L10n.Fat.title,
 
-                    kpiTitle: "Fat Today",
-                    kpiTargetText: viewModel.formattedDailyFatGoal,                  // !!! UPDATED (VM already adds "g")
-                    kpiCurrentText: viewModel.formattedTodayFat,                     // !!! UPDATED (VM already adds "g")
+                    kpiTitle: L10n.Fat.todayKPI,
+                    kpiTargetText: viewModel.formattedDailyFatGoal,
+                    kpiCurrentText: viewModel.formattedTodayFat,
                     kpiDeltaText: viewModel.kpiDeltaText,
                     kpiDeltaColor: viewModel.kpiDeltaColor,
                     hasTarget: true,
@@ -89,24 +137,61 @@ struct FatViewV1: View {
 
                     goalValue: viewModel.dailyFatGoalInt,
 
-                    onMetricSelected: onMetricSelected,
-                    metrics: AppState.nutritionVisibleMetrics,                        // !!! UPDATED
+                    onMetricSelected: { metric in
+                        appState.handleMetricTap(metricName: metric, settings: settings)
+                    },
+                    metrics: AppState.nutritionVisibleMetrics,
+
                     showsDailyChart: true,
                     showsPeriodChart: true,
                     showsMonthlyChart: true,
 
-                    customKpiContent: nil,                                           // !!! UPDATED
-                    customChartContent: nil,                                         // !!! UPDATED
+                    customKpiContent: nil,
+                    customChartContent: nil,
 
-                    dailyScaleType: .gramsDaily
+                    dailyScaleType: .gramsDaily,
+
+                    isMetricLocked: { metric in
+                        !AppState.isUnlocked(metricName: metric, settings: settings)
+                    },
+                    onLockedMetricSelected: { _ in
+                        appState.openAccountRoute(.manage)
+                    },
+
+                    // Nutrition goldstandard:
+                    // each chip resolves its own attention source centrally from HealthStore
+                    showsWarningBadgeForMetric: { metric in // 🟨 UPDATED
+                        guard settings.showPermissionWarnings else { return false }
+
+                        switch metric {
+                        case L10n.Carbs.title:
+                            return healthStore.carbsAnyAttentionForBadgesV1
+                        case L10n.CarbsDayparts.title:
+                            return healthStore.carbsAnyAttentionForBadgesV1
+                        case L10n.Sugar.title:
+                            return healthStore.sugarAnyAttentionForBadgesV1
+                        case L10n.Protein.title:
+                            return healthStore.proteinAnyAttentionForBadgesV1
+                        case L10n.Fat.title:
+                            return healthStore.fatAnyAttentionForBadgesV1
+                        case L10n.NutritionEnergy.title:
+                            return healthStore.nutritionEnergyAnyAttentionForBadgesV1
+                        default:
+                            return false
+                        }
+                    }
                 )
             }
         }
         .task {
-            await healthStore.refreshNutrition(.navigation)                           // !!! UPDATED
+            await healthStore.refreshNutrition(.navigation)
         }
     }
 }
+
+// ============================================================
+// MARK: - Preview
+// ============================================================
 
 #Preview("FatViewV1 – Nutrition") {
     let previewStore = HealthStore.preview()
@@ -116,4 +201,5 @@ struct FatViewV1: View {
     return FatViewV1(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

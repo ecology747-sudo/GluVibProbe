@@ -2,30 +2,51 @@
 //  ActivityEnergyViewV1.swift
 //  GluVibProbe
 //
-//  V1 Adapter View:
-//  - UI läuft über MetricDetailScaffold
-//  - Datenfluss läuft über ActivityEnergyViewModelV1 (kein Fetch im VM)
-//  - Refresh läuft über HealthStore.refreshActivity(...)
-//  - kJ / EnergyUnit vollständig entfernt
+//  Activity V1 — Activity Energy Detail Screen
+//
+//  Purpose
+//  - Renders the activity energy metric detail screen for the Activity domain.
+//  - Shows the current activity energy hint state, KPI block, daily / period / monthly charts,
+//    and the shared activity metric chip navigation.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → ActivityEnergyViewModelV1 (mapping / formatting) → ActivityEnergyViewV1 (render only)
+//
+//  Key Connections
+//  - ActivityEnergyViewModelV1: provides formatted values, chart data and today hint state.
+//  - HealthStore: provides the central activity badge / attention sources.
+//  - AppState: handles navigation and metric routing.
+//  - ActivitySectionCardScaledV2: shared activity card shell for chips, KPIs and charts.
+//  - L10n: localized titles and labels for the activity energy metric.
 //
 
 import SwiftUI
 
 struct ActivityEnergyViewV1: View {
 
-    // MARK: - Environment
+    // ============================================================
+    // MARK: - Dependencies (Environment)
+    // ============================================================
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
+    @EnvironmentObject var settings: SettingsModel
 
+    // ============================================================
     // MARK: - ViewModel
+    // ============================================================
 
     @StateObject private var viewModel: ActivityEnergyViewModelV1
 
-    // Callback aus dem Dashboard (für Metric-Chips)
+    // ============================================================
+    // MARK: - Inputs
+    // ============================================================
+
     let onMetricSelected: (String) -> Void
 
+    // ============================================================
     // MARK: - Init
+    // ============================================================
 
     init(
         viewModel: ActivityEnergyViewModelV1? = nil,
@@ -36,23 +57,42 @@ struct ActivityEnergyViewV1: View {
         if let viewModel {
             _viewModel = StateObject(wrappedValue: viewModel)
         } else {
-            _viewModel = StateObject(wrappedValue: ActivityEnergyViewModelV1(healthStore: HealthStore.shared)) // !!! UPDATED
+            _viewModel = StateObject(wrappedValue: ActivityEnergyViewModelV1(healthStore: HealthStore.shared))
         }
     }
 
+    // ============================================================
+    // MARK: - Today Hint
+    // ============================================================
+
+    private var localizedTodayHint: String? {
+        guard settings.showPermissionWarnings else { return nil }
+        guard let state = viewModel.todayInfoState else { return nil }
+
+        switch state {
+        case .noHistory:
+            return L10n.ActivityEnergy.hintNoDataOrPermission
+        case .noTodayData:
+            return L10n.ActivityEnergy.hintNoToday
+        }
+    }
+
+    // ============================================================
     // MARK: - Body
+    // ============================================================
 
     var body: some View {
         MetricDetailScaffold(
-            headerTitle: "Activity",
+            headerTitle: L10n.Common.activity,
             headerTint: Color.Glu.activityDomain,
-            onBack: {                                        // CHANGED: zentral über Scaffold
+            onBack: {
                 appState.currentStatsScreen = .none
             },
-            onRefresh: {                                     // CHANGED: refreshable läuft über Bootstrap
+            onRefresh: {
                 await healthStore.refreshActivity(.pullToRefresh)
             },
-            background: {                                    // CHANGED: Background als View-Closure
+            showsPermissionBadge: settings.showPermissionWarnings && healthStore.activeEnergyAnyAttentionForBadgesV1,
+            background: {
                 LinearGradient(
                     colors: [
                         .white,
@@ -65,31 +105,62 @@ struct ActivityEnergyViewV1: View {
         ) {
             VStack(alignment: .leading, spacing: 16) {
 
+                if let hint = localizedTodayHint {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(Color.Glu.primaryBlue)
+                        .padding(.horizontal, 2)
+                }
+
                 ActivitySectionCardScaledV2(
                     sectionTitle: "",
-                    title: "Activity Energy",
-                    kpiTitle: "Active Energy Today",
+                    title: L10n.ActivityEnergy.title, // 🟨 UPDATED
+                    kpiTitle: L10n.ActivityEnergy.todayKPI,
                     kpiTargetText: "–",
-                    kpiCurrentText: viewModel.formattedTodayActiveEnergy,      // !!! UPDATED
+                    kpiCurrentText: viewModel.formattedTodayActiveEnergy,
                     kpiDeltaText: "–",
                     kpiDeltaColor: nil,
                     hasTarget: false,
-                    last90DaysData: viewModel.last90DaysChartData,             // !!! UPDATED
-                    periodAverages: viewModel.periodAverages,                  // !!! UPDATED
-                    monthlyData: viewModel.monthlyData,                        // !!! UPDATED
-                    dailyScale: viewModel.dailyScale,                          // !!! UPDATED
-                    periodScale: viewModel.periodScale,                        // !!! UPDATED
-                    monthlyScale: viewModel.monthlyScale,                      // !!! UPDATED
+                    last90DaysData: viewModel.last90DaysChartData,
+                    periodAverages: viewModel.periodAverages,
+                    monthlyData: viewModel.monthlyData,
+                    dailyScale: viewModel.dailyScale,
+                    periodScale: viewModel.periodScale,
+                    monthlyScale: viewModel.monthlyScale,
                     goalValue: nil,
-                    onMetricSelected: onMetricSelected,
+                    onMetricSelected: { metric in
+                        appState.handleMetricTap(metricName: metric, settings: settings)
+                    },
                     metrics: AppState.activityVisibleMetrics,
                     showsDailyChart: true,
                     showsPeriodChart: true,
                     showsMonthlyChart: true,
                     customKpiContent: nil,
                     customChartContent: nil,
-                    customDailyChartBuilder: nil,                              // !!! UPDATED
-                    dailyScaleType: .energyDaily
+                    customDailyChartBuilder: nil,
+                    dailyScaleType: .energyDaily,
+                    isMetricLocked: { metric in
+                        !AppState.isUnlocked(metricName: metric, settings: settings)
+                    },
+                    onLockedMetricSelected: { metric in
+                        appState.handleMetricTap(metricName: metric, settings: settings)
+                    },
+                    showsWarningBadgeForMetric: { metric in // 🟨 UPDATED
+                        guard settings.showPermissionWarnings else { return false }
+
+                        switch metric {
+                        case L10n.Steps.title:
+                            return healthStore.stepsAnyAttentionForBadgesV1
+                        case L10n.WorkoutMinutes.title:
+                            return healthStore.workoutMinutesAnyAttentionForBadgesV1
+                        case L10n.ActivityEnergy.title:
+                            return healthStore.activeEnergyAnyAttentionForBadgesV1
+                        case L10n.MovementSplit.title:
+                            return healthStore.movementSplitAnyAttentionForBadgesV1
+                        default:
+                            return false
+                        }
+                    }
                 )
             }
         }
@@ -99,7 +170,9 @@ struct ActivityEnergyViewV1: View {
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("ActivityEnergyViewV1 – Activity") {
     let previewStore = HealthStore.preview()
@@ -109,4 +182,5 @@ struct ActivityEnergyViewV1: View {
     return ActivityEnergyViewV1(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

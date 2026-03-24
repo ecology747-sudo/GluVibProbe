@@ -164,7 +164,7 @@ private struct RangeBarTileV1: View {
 
     private var inRangeTextStatusColor: Color {
         let target = Double(settings.tirTargetPercent)
-        if inRangePct >= target { return Color.green }
+        if inRangePct >= target { return Color.Glu.successGreen }
         if inRangePct >= max(0, target - tirWarnBufferPct) { return Color.yellow.opacity(0.85) }
         return Color.Glu.acidCGMRed
     }
@@ -376,7 +376,7 @@ private struct RangeBarTileV1: View {
         }()
 
         return HStack {
-            Text("Coverage")
+            Text(L10n.Range.coverageLabel)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.75))
 
@@ -452,7 +452,7 @@ private struct RangeBarTileV1: View {
     }
 
     private func statusColorHigherIsWorse(value: Double, target: Double, warnBuffer: Double) -> Color {
-        if value <= target { return Color.green }
+        if value <= target { return Color.Glu.successGreen }
         if value <= (target + warnBuffer) { return Color.yellow.opacity(0.85) }
         return Color.Glu.acidCGMRed
     }

@@ -3,27 +3,45 @@
 //  GluVibProbe
 //
 //  Metabolic V1 — Overview Card (TIR)
-//  - Top: TIR (24h) bar (IDENTICAL UI)
-//  - Bottom: 7-day mini trend chart (Steps mini-chart style)
-//  - Tappable: navigates to Time in Range
-//  - SSoT: HealthStore + SettingsModel
 //
-
+//  Purpose
+//  - Renders the Time in Range overview card for the Metabolic overview.
+//  - Top area shows the current 24h TIR bar.
+//  - Bottom area shows the last 7 full days mini trend.
+//  - Tapping the card routes to the Time in Range detail screen.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) + SettingsModel → GlucoseOverviewTIRCardV1
+//
+//  Notes
+//  - This card is render-only.
+//  - Info bubble presentation is delegated centrally via PremiumOverviewViewV1.
+//
 import SwiftUI
 import Charts
 
 struct GlucoseOverviewTIRCardV1: View {
 
+    // ============================================================
+    // MARK: - Dependencies (Environment)
+    // ============================================================
+
     @EnvironmentObject private var healthStore: HealthStore
     @EnvironmentObject private var settings: SettingsModel
     @EnvironmentObject private var appState: AppState
-
-    // UPDATED: central bubble presenter from PremiumOverviewViewV1
     @Environment(\.presentInfoBubble) private var presentInfoBubble
 
+    // ============================================================
+    // MARK: - Layout Constants
+    // ============================================================
+
     private let cardPadding: CGFloat = 16
-    private let gapTirValueToBar: CGFloat = 3
+    private let gapTirValueToBar: CGFloat = 10
     private let gapToMiniChart: CGFloat = 12
+
+    // ============================================================
+    // MARK: - Derived Values
+    // ============================================================
 
     private var tirThreshold: Double {
         Double(settings.tirTargetPercent) / 100.0
@@ -32,6 +50,7 @@ struct GlucoseOverviewTIRCardV1: View {
     private var avgTirPercentInt: Int {
         let coverage = max(0, healthStore.last24hTIRCoverageMinutes)
         guard coverage > 0 else { return 0 }
+
         let inRange = max(0, healthStore.last24hTIRInRangeMinutes)
         let ratio = Double(inRange) / Double(coverage)
         return Int((ratio * 100.0).rounded())
@@ -41,12 +60,15 @@ struct GlucoseOverviewTIRCardV1: View {
         buildLast7DaysTirEntries()
     }
 
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
+
     var body: some View {
         Button {
             appState.currentStatsScreen = .timeInRange
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-
                 header
                 Gap(gapTirValueToBar)
 
@@ -68,37 +90,35 @@ struct GlucoseOverviewTIRCardV1: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open Time in Range")
+        .accessibilityLabel(L10n.MetabolicOverviewTIR.openAccessibility) // 🟨 UPDATED
     }
 }
 
+// ============================================================
 // MARK: - Header
+// ============================================================
 
 private extension GlucoseOverviewTIRCardV1 {
 
     var header: some View {
         HStack(alignment: .lastTextBaseline, spacing: 4) {
 
-            Text("TIR")
+            Text(L10n.MetabolicOverviewTIR.cardTitle) // 🟨 UPDATED
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(Color.Glu.primaryBlue)
 
-            Text("(24h)")
+            Text(L10n.MetabolicOverviewTIR.period24h) // 🟨 UPDATED
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Color.Glu.primaryBlue.opacity(0.70))
 
-            // UPDATED: TipInlineButton no longer uses TipKit; central bubble is still used
             TipInlineButton(
                 onTap: {
                     presentInfoBubble(
                         PremiumOverviewViewV1.InfoBubble(
-                            title: "Time in Range (24h)",
-                            message:
-                                "This metric uses the most recent CGM readings available in Apple Health. "
-                                + "Due to system synchronization, newer readings may appear with a short delay. "
-                                + "Details are available in the FAQs.",
-                            primaryTitle: "OK",
-                            secondaryTitle: "Open FAQs",
+                            title: L10n.MetabolicOverviewTIR.infoTitle, // 🟨 UPDATED
+                            message: L10n.MetabolicOverviewTIR.infoMessage, // 🟨 UPDATED
+                            primaryTitle: L10n.MetabolicOverview.infoPrimaryOK, // 🟨 UPDATED
+                            secondaryTitle: L10n.MetabolicOverview.infoSecondaryOpenFAQs, // 🟨 UPDATED
                             secondaryAction: .openFAQ
                         )
                     )
@@ -110,7 +130,9 @@ private extension GlucoseOverviewTIRCardV1 {
     }
 }
 
-// MARK: - 7-day builder (yesterday + 6 before)
+// ============================================================
+// MARK: - 7-Day Builder (Yesterday + 6 Days Before)
+// ============================================================
 
 private extension GlucoseOverviewTIRCardV1 {
 
@@ -124,44 +146,46 @@ private extension GlucoseOverviewTIRCardV1 {
             let startDate = cal.date(byAdding: .day, value: -6, to: endDate)
         else { return [] }
 
-        // Use Overview-lightweight 7-day series (fallback to dailyTIR90 only if empty)
         let source = healthStore.overviewTIRDaily7FullDays.isEmpty
             ? healthStore.dailyTIR90
             : healthStore.overviewTIRDaily7FullDays
 
         let stats = source
-            .map { e in
+            .map { entry in
                 DailyTIREntry(
-                    id: e.id,
-                    date: cal.startOfDay(for: e.date),
-                    veryLowMinutes: e.veryLowMinutes,
-                    lowMinutes: e.lowMinutes,
-                    inRangeMinutes: e.inRangeMinutes,
-                    highMinutes: e.highMinutes,
-                    veryHighMinutes: e.veryHighMinutes,
-                    coverageMinutes: e.coverageMinutes,
-                    expectedMinutes: e.expectedMinutes,
-                    coverageRatio: e.coverageRatio,
-                    isPartial: e.isPartial
+                    id: entry.id,
+                    date: cal.startOfDay(for: entry.date),
+                    veryLowMinutes: entry.veryLowMinutes,
+                    lowMinutes: entry.lowMinutes,
+                    inRangeMinutes: entry.inRangeMinutes,
+                    highMinutes: entry.highMinutes,
+                    veryHighMinutes: entry.veryHighMinutes,
+                    coverageMinutes: entry.coverageMinutes,
+                    expectedMinutes: entry.expectedMinutes,
+                    coverageRatio: entry.coverageRatio,
+                    isPartial: entry.isPartial
                 )
             }
             .filter { $0.date >= startDate && $0.date <= endDate }
             .sorted { $0.date < $1.date }
 
         var map: [Date: Double] = [:]
-        for e in stats {
-            let day = cal.startOfDay(for: e.date)
-            guard e.coverageMinutes > 0 else {
+
+        for entry in stats {
+            let day = cal.startOfDay(for: entry.date)
+
+            guard entry.coverageMinutes > 0 else {
                 map[day] = 0
                 continue
             }
-            let fraction = Double(e.inRangeMinutes) / Double(e.coverageMinutes)
+
+            let fraction = Double(entry.inRangeMinutes) / Double(entry.coverageMinutes)
             map[day] = max(0, min(fraction, 1))
         }
 
-        return (0..<7).compactMap { i in
-            guard let d = cal.date(byAdding: .day, value: i, to: startDate) else { return nil }
-            let day = cal.startOfDay(for: d)
+        return (0..<7).compactMap { index in
+            guard let date = cal.date(byAdding: .day, value: index, to: startDate) else { return nil }
+            let day = cal.startOfDay(for: date)
 
             return TIRMiniTrendEntry(
                 date: day,
@@ -171,15 +195,19 @@ private extension GlucoseOverviewTIRCardV1 {
     }
 }
 
+// ============================================================
 // MARK: - Mini Trend Types
+// ============================================================
 
 private struct TIRMiniTrendEntry: Identifiable {
     let id = UUID()
     let date: Date
-    let fraction: Double   // 0...1
+    let fraction: Double
 }
 
-// MARK: - Mini Trend Chart (Steps style)
+// ============================================================
+// MARK: - Mini Trend Chart
+// ============================================================
 
 private struct TIRMiniTrendChart: View {
 
@@ -187,14 +215,13 @@ private struct TIRMiniTrendChart: View {
     let domainColor: Color
 
     var body: some View {
-
         Chart(data) { entry in
 
             let percentInt = Int((entry.fraction * 100.0).rounded())
 
             BarMark(
-                x: .value("Day", entry.date, unit: .day),
-                y: .value("TIR", percentInt)
+                x: .value(L10n.MetabolicOverviewTIR.chartDay, entry.date, unit: .day), // 🟨 UPDATED
+                y: .value(L10n.MetabolicOverviewTIR.chartValue, percentInt) // 🟨 UPDATED
             )
             .cornerRadius(4)
             .foregroundStyle(
@@ -216,24 +243,53 @@ private struct TIRMiniTrendChart: View {
                 }
             }
         }
-        .chartXAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day)) { value in
+                AxisGridLine().foregroundStyle(Color.clear)
+                AxisTick().foregroundStyle(Color.clear)
+                AxisValueLabel(centered: true) {
+                    if let date = value.as(Date.self) {
+                        Text(weekday2(date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                    }
+                }
+            }
+        }
         .chartYAxis(.hidden)
         .chartXScale(range: .plotDimension(padding: 0))
         .chartPlotStyle { plotArea in
             plotArea.background(Color.clear)
         }
     }
+
+    private func weekday2(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "EE"
+        return formatter.string(from: date).replacingOccurrences(of: ".", with: "")
+    }
 }
 
+// ============================================================
 // MARK: - Adjustable Gap Helper
+// ============================================================
 
 private struct Gap: View {
     let height: CGFloat
-    init(_ height: CGFloat) { self.height = height }
-    var body: some View { Color.clear.frame(height: height) }
+
+    init(_ height: CGFloat) {
+        self.height = height
+    }
+
+    var body: some View {
+        Color.clear.frame(height: height)
+    }
 }
 
-// MARK: - TIR Bar (IDENTICAL to current design)
+// ============================================================
+// MARK: - TIR Bar
+// ============================================================
 
 private struct TIRBar: View {
 
@@ -303,7 +359,7 @@ private struct TIRBar: View {
             }()
 
             let percentInt = Int((p * 100.0).rounded())
-            let targetInt  = Int((t * 100.0).rounded())
+            let targetInt = Int((t * 100.0).rounded())
 
             let badgeXRaw = currentX - (badgeApproxW / 2)
             let badgeX = clamp(badgeXRaw, min: clampInset, max: width - clampInset - badgeApproxW)
@@ -369,8 +425,10 @@ private struct TIRBar: View {
                     Rectangle()
                         .fill(markerLineColor)
                         .frame(width: markerLineWidth, height: barH + markerOverhang)
-                        .offset(x: targetX - (markerLineWidth / 2),
-                                y: -(markerOverhang / 2))
+                        .offset(
+                            x: targetX - (markerLineWidth / 2),
+                            y: -(markerOverhang / 2)
+                        )
                         .zIndex(999)
                 }
                 .frame(height: barH)
@@ -378,7 +436,7 @@ private struct TIRBar: View {
                 ZStack(alignment: .topLeading) {
                     Text("\(targetInt)")
                         .font(.caption2.weight(.semibold))
-                        .foregroundColor(Color.green)
+                        .foregroundColor(Color.Glu.successGreen)
                         .position(x: targetX, y: labelsH / 2)
                 }
                 .frame(height: labelsH)
@@ -395,16 +453,18 @@ private struct TIRBar: View {
 
 private struct TriangleMarker: Shape {
     func path(in rect: CGRect) -> Path {
-        var p = Path()
-        p.move(to: CGPoint(x: rect.midX, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        p.closeSubpath()
-        return p
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("GlucoseOverviewTIRCardV1") {
     let store = HealthStore.preview()

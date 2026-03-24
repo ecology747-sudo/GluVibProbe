@@ -7,7 +7,7 @@
 //  - Single Source of Truth: HealthStore (dailyBasal90)
 //  - Period-Averages im ViewModel (UI-nah)
 //  - Maximal 90 Tage (kein 180/365)
-//  - KPI-Strings inkl. Einheit ("IE")
+//  - KPI-Strings inkl. Einheit
 //  - Daily/Period Scale: MetricScaleType.insulinUnitsDaily
 //
 
@@ -19,14 +19,21 @@ import SwiftUI
 final class BasalViewModelV1: ObservableObject {
 
     // ============================================================
+    // MARK: - Info State
+    // ============================================================
+
+    enum BasalInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
     // MARK: - Published Outputs (View-facing)
     // ============================================================
 
-    // KPI
     @Published var todayBasalUnits: Double = 0
-
-    // Chart Data (SSoT: dailyBasal90)
     @Published var last90DaysData: [DailyBasalEntry] = []
+    @Published var basalReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies
@@ -50,6 +57,7 @@ final class BasalViewModelV1: ObservableObject {
     // ============================================================
 
     private func bindHealthStore() {
+
         healthStore.$dailyBasal90
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
@@ -57,11 +65,19 @@ final class BasalViewModelV1: ObservableObject {
                 self?.todayBasalUnits = Self.extractTodayValue(from: $0)
             }
             .store(in: &cancellables)
+
+        healthStore.$basalReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.basalReadAuthIssueV1 = $0
+            }
+            .store(in: &cancellables)
     }
 
     private func syncFromStores() {
         last90DaysData = healthStore.dailyBasal90
         todayBasalUnits = Self.extractTodayValue(from: healthStore.dailyBasal90)
+        basalReadAuthIssueV1 = healthStore.basalReadAuthIssueV1
     }
 
     // ============================================================
@@ -69,7 +85,28 @@ final class BasalViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodayBasal: String {
-        "\(format1(todayBasalUnits)) U"
+        "\(format1(todayBasalUnits)) \(localizedInsulinUnit(for: todayBasalUnits))"
+    }
+
+    // ============================================================
+    // MARK: - Goldstandard Hint State
+    // ============================================================
+
+    var todayInfoState: BasalInfoState? { // 🟨 NEW
+
+        if basalReadAuthIssueV1 {
+            return .noHistory
+        }
+
+        if todayBasalUnits > 0 { return nil }
+
+        let hasAnyHistory = last90DaysData.contains { $0.basalUnits > 0 }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
     }
 
     // ============================================================
@@ -91,7 +128,6 @@ final class BasalViewModelV1: ObservableObject {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        // Durchschnitt über „letzte volle Tage“ (endet gestern) wie im Steps/Bolus-Flow
         guard
             let endDate = calendar.date(byAdding: .day, value: -1, to: today),
             let startDate = calendar.date(byAdding: .day, value: -days, to: today)
@@ -134,6 +170,12 @@ final class BasalViewModelV1: ObservableObject {
 
     private func format1(_ value: Double) -> String {
         numberFormatter1.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    private func localizedInsulinUnit(for value: Double) -> String {
+        abs(value - 1.0) < 0.0001
+            ? L10n.Common.insulinUnitSingular
+            : L10n.Common.insulinUnitPlural
     }
 
     private let numberFormatter1: NumberFormatter = {

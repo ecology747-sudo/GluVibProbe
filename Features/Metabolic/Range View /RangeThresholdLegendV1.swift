@@ -25,54 +25,57 @@ struct RangeThresholdLegendV1: View {
             onOpenSettings()
         } label: {
 
-            // !!! UPDATED: Replace ChartCard with central GluVib card frame modifier
             VStack(alignment: .leading, spacing: 10) {
 
                 VStack(alignment: .leading, spacing: 8) {
 
                     legendRow(
                         color: colorVeryLow,
-                        title: "Very Low",
+                        title: L10n.Range.thresholdVeryLow,
                         valueText: "< \(format(settings.veryLowLimit))"
                     )
 
                     legendRow(
                         color: colorLow,
-                        title: "Low",
+                        title: L10n.Range.thresholdLow,
                         valueText: "\(format(settings.veryLowLimit)) – \(format(settings.glucoseMin))"
                     )
 
                     legendRow(
                         color: colorInRange,
-                        title: "In Range",
+                        title: L10n.Range.thresholdInRange,
                         valueText: "\(format(settings.glucoseMin)) – \(format(settings.glucoseMax))"
                     )
 
                     legendRow(
                         color: colorHigh,
-                        title: "High",
+                        title: L10n.Range.thresholdHigh,
                         valueText: "\(format(settings.glucoseMax)) – \(format(settings.veryHighLimit))"
                     )
 
                     legendRow(
                         color: colorVeryHigh,
-                        title: "Very High",
+                        title: L10n.Range.thresholdVeryHigh,
                         valueText: "> \(format(settings.veryHighLimit))"
                     )
                 }
+                .frame(maxWidth: .infinity, alignment: .leading) // UPDATED
 
-                Text("Thresholds can be adjusted in Metabolic Settings.")
+                Text(L10n.Range.thresholdsHint)
                     .font(.caption2)
                     .foregroundStyle(Color.Glu.primaryBlue.opacity(0.65))
+                    .multilineTextAlignment(.center) // UPDATED
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 4)
             }
+            .frame(maxWidth: .infinity, alignment: .leading) // UPDATED
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
             .gluVibCardFrame(domainColor: accent)
         }
+        .frame(maxWidth: .infinity) // UPDATED
         .buttonStyle(.plain)
-        .accessibilityLabel("Open Metabolic Settings")
+        .accessibilityLabel(L10n.Range.openSettingsAccessibility)
     }
 
     // ------------------------------------------------------------
@@ -101,6 +104,7 @@ struct RangeThresholdLegendV1: View {
                 .font(.caption2)
                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.85))
         }
+        .frame(maxWidth: .infinity, alignment: .leading) // UPDATED
     }
 
     // ------------------------------------------------------------

@@ -17,6 +17,8 @@ struct MetricDetailScaffold<Background: View, Content: View>: View {
     let onBack: (() -> Void)?
     let onRefresh: (() async -> Void)?
 
+    let showsPermissionBadge: Bool
+
     @ViewBuilder let background: () -> Background
     @ViewBuilder let content: () -> Content
 
@@ -29,6 +31,7 @@ struct MetricDetailScaffold<Background: View, Content: View>: View {
         headerTint: Color,
         onBack: (() -> Void)? = nil,
         onRefresh: (() async -> Void)? = nil,
+        showsPermissionBadge: Bool = false,
         @ViewBuilder background: @escaping () -> Background,
         @ViewBuilder content: @escaping () -> Content
     ) {
@@ -36,18 +39,21 @@ struct MetricDetailScaffold<Background: View, Content: View>: View {
         self.headerTint = headerTint
         self.onBack = onBack
         self.onRefresh = onRefresh
+        self.showsPermissionBadge = showsPermissionBadge
         self.background = background
         self.content = content
     }
 
     var body: some View {
-        ZStack {
+
+        let showsPermissionBadgeEffective = settings.showPermissionWarnings && showsPermissionBadge
+
+        return ZStack {
             background()
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
 
-                // UPDATED: Only one avatar trigger (global) — no local sheet here.
                 SectionHeader(
                     title: headerTitle,
                     subtitle: nil,
@@ -55,15 +61,19 @@ struct MetricDetailScaffold<Background: View, Content: View>: View {
                     onBack: onBack,
                     showsAvatar: true,
                     onAvatarTapped: {
-                        appState.presentAccountSheet() // UPDATED
-                    }
+                        appState.presentAccountSheet()
+                    },
+                    showsPermissionBadge: showsPermissionBadgeEffective
                 )
 
                 ScrollView {
-                    content()
-                        .padding(.top, topInset)
-                        .padding(.horizontal, horizontalInset)
-                        .padding(.bottom, bottomInset)
+                    VStack(alignment: .leading, spacing: 0) {
+                        content()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading) // 🟨 UPDATED
+                    .padding(.top, topInset)
+                    .padding(.horizontal, horizontalInset)
+                    .padding(.bottom, bottomInset)
                 }
                 .modifier(RefreshableIfAvailable(onRefresh: onRefresh))
             }

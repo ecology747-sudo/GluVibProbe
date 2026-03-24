@@ -9,6 +9,8 @@
 //  - Pull-to-Refresh nur für TODAY
 //  - ✅ WICHTIG: KEINE Insight-Berechnung für Yesterday/DayBefore (wie Activity)
 //  - ✅ ABER: Percent/Shares/Energy-UI MUSS für alle Tage berechnet werden (sonst 0%/leere Ringe)
+//  - 🟨 UPDATED: Sugar integriert (Targets + Day Values + Goal Percent) — ohne Pie-Share (Sugar ist Teil von Carbs)
+//  - 🟨 UPDATED: Energy Balance 7D window output (oldest → newest), built in VM (Steps/Weight pattern)
 //
 
 import Foundation
@@ -62,18 +64,21 @@ final class NutritionOverviewViewModelV1: ObservableObject {
 
     // --- Macro Targets + Today/Past-Day Values
     @Published var todayCarbsGrams: Int = 0
+    @Published var todaySugarGrams: Int = 0
     @Published var todayProteinGrams: Int = 0
     @Published var todayFatGrams: Int = 0
 
     @Published var targetCarbsGrams: Int = 0
+    @Published var targetSugarGrams: Int = 0
     @Published var targetProteinGrams: Int = 0
     @Published var targetFatGrams: Int = 0
 
     @Published var carbsGoalPercent: Int = 0
+    @Published var sugarGoalPercent: Int = 0
     @Published var proteinGoalPercent: Int = 0
     @Published var fatGoalPercent: Int = 0
 
-    // --- Macro shares (Pie)
+    // --- Macro shares (Pie)  (NOTE: Sugar bewusst NICHT im Pie)
     @Published var carbsShare: Double = 0
     @Published var proteinShare: Double = 0
     @Published var fatShare: Double = 0
@@ -96,6 +101,9 @@ final class NutritionOverviewViewModelV1: ObservableObject {
     // --- Insight (TODAY only)
     @Published var insightText: String = ""
 
+    // 🟨 UPDATED: Energy Balance 7D (SSoT window; oldest → newest; ends at selected day)
+    @Published var last7DaysEnergyBalance: [EnergyBalanceTrendPointV1] = [] // 🟨 UPDATED
+
     // ============================================================
     // MARK: - Init
     // ============================================================
@@ -117,7 +125,7 @@ final class NutritionOverviewViewModelV1: ObservableObject {
 
     private func bindStores() {
 
-        // --- Macros live + history
+        // --- Carbs live + history
 
         healthStore.$todayCarbsGrams
             .receive(on: DispatchQueue.main)
@@ -133,6 +141,24 @@ final class NutritionOverviewViewModelV1: ObservableObject {
             .sink { [weak self] _ in self?.scheduleRemap() }
             .store(in: &cancellables)
 
+        // --- Sugar live + history
+
+        healthStore.$todaySugarGrams
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                guard self.selectedDayOffset == 0 else { return }
+                self.scheduleRemap()
+            }
+            .store(in: &cancellables)
+
+        healthStore.$sugarDaily365
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.scheduleRemap() }
+            .store(in: &cancellables)
+
+        // --- Protein live + history
+
         healthStore.$todayProteinGrams
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -146,6 +172,8 @@ final class NutritionOverviewViewModelV1: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleRemap() }
             .store(in: &cancellables)
+
+        // --- Fat live + history
 
         healthStore.$todayFatGrams
             .receive(on: DispatchQueue.main)
@@ -193,7 +221,8 @@ final class NutritionOverviewViewModelV1: ObservableObject {
             .sink { [weak self] _ in self?.scheduleRemap() }
             .store(in: &cancellables)
 
-        // --- Resting Energy (Burned) - TODAY live (trigger-only)
+        // --- Resting Energy (Burned)
+
         healthStore.$todayRestingEnergyKcal
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -203,17 +232,21 @@ final class NutritionOverviewViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // !!! NEW: Resting Energy History trigger-only (needed for Yesterday/DayBefore)
-        healthStore.$last90DaysRestingEnergy                                               // !!! NEW
-            .receive(on: DispatchQueue.main)                                                // !!! NEW
-            .sink { [weak self] _ in self?.scheduleRemap() }                                // !!! NEW
-            .store(in: &cancellables)                                                       // !!! NEW
+        healthStore.$last90DaysRestingEnergy
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.scheduleRemap() }
+            .store(in: &cancellables)
 
         // -------------------------
         // Targets (SettingsModel)
         // -------------------------
 
         settings.$dailyCarbs
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] (_: Int) in self?.scheduleRemap() }
+            .store(in: &cancellables)
+
+        settings.$dailySugar
             .receive(on: DispatchQueue.main)
             .sink { [weak self] (_: Int) in self?.scheduleRemap() }
             .store(in: &cancellables)
@@ -273,9 +306,7 @@ final class NutritionOverviewViewModelV1: ObservableObject {
     // ============================================================
 
     func refresh() async {
-        // !!! UPDATED: Pull-to-Refresh darf auch Past Days aktualisieren,
-        // damit nachträgliche Einträge (heute erfasst, für gestern datiert) sichtbar werden.
-        await healthStore.refreshNutrition(.pullToRefresh)     // !!! UPDATED
+        await healthStore.refreshNutrition(.pullToRefresh)
         refreshForSelectedDay()
     }
 
@@ -301,6 +332,7 @@ final class NutritionOverviewViewModelV1: ObservableObject {
         // 1) Targets
         // ---------------------------------------------------------
         targetCarbsGrams = max(0, settings.dailyCarbs)
+        targetSugarGrams = max(0, settings.dailySugar)
         targetProteinGrams = max(0, settings.dailyProtein)
         targetFatGrams = max(0, settings.dailyFat)
 
@@ -310,18 +342,27 @@ final class NutritionOverviewViewModelV1: ObservableObject {
         if selectedDayOffset == 0 {
 
             todayCarbsGrams = max(0, healthStore.todayCarbsGrams)
+            todaySugarGrams = max(0, healthStore.todaySugarGrams)
             todayProteinGrams = max(0, healthStore.todayProteinGrams)
             todayFatGrams = max(0, healthStore.todayFatGrams)
 
             todayNutritionEnergyKcal = max(0, healthStore.todayNutritionEnergyKcal)
             todayActiveEnergyKcal = max(0, healthStore.todayActiveEnergy)
 
-            restingEnergyKcal = max(0, healthStore.todayRestingEnergyKcal)               // !!! UPDATED
+            restingEnergyKcal = max(0, healthStore.todayRestingEnergyKcal)
 
         } else {
 
             todayCarbsGrams = max(0, valueForDay(
                 from: healthStore.carbsDaily365,
+                date: date,
+                dateKey: \.date,
+                value: { $0.grams },
+                calendar: calendar
+            ))
+
+            todaySugarGrams = max(0, valueForDay(
+                from: healthStore.sugarDaily365,
                 date: date,
                 dateKey: \.date,
                 value: { $0.grams },
@@ -360,15 +401,19 @@ final class NutritionOverviewViewModelV1: ObservableObject {
                 calendar: calendar
             ))
 
-            // !!! UPDATED: Past-Day RestingEnergy aus History (nicht 0)
-            restingEnergyKcal = max(0, valueForDay(                                     // !!! UPDATED
-                from: healthStore.last90DaysRestingEnergy,                               // !!! UPDATED
-                date: date,                                                              // !!! UPDATED
-                dateKey: \.date,                                                         // !!! UPDATED
-                value: { $0.restingEnergyKcal },                                         // !!! UPDATED
-                calendar: calendar                                                       // !!! UPDATED
-            ))                                                                            // !!! UPDATED
+            restingEnergyKcal = max(0, valueForDay(
+                from: healthStore.last90DaysRestingEnergy,
+                date: date,
+                dateKey: \.date,
+                value: { $0.restingEnergyKcal },
+                calendar: calendar
+            ))
         }
+
+        // ---------------------------------------------------------
+        // 🟨 UPDATED: 2b) Energy Balance 7D window (ends at selected day)
+        // ---------------------------------------------------------
+        last7DaysEnergyBalance = buildLast7DaysEnergyBalance(endingAt: date) // 🟨 UPDATED
 
         // ---------------------------------------------------------
         // 3) UI-Derivations (✅ für ALLE Tage)
@@ -412,6 +457,9 @@ final class NutritionOverviewViewModelV1: ObservableObject {
             formattedEnergyBalanceValue = out.formattedEnergyBalanceValue
             energyBalanceLabelText = out.energyBalanceLabelText
 
+            // 🟨 UPDATED: Sugar percent deterministic (engine doesn't know Sugar)
+            sugarGoalPercent = percent(value: todaySugarGrams, target: targetSugarGrams)
+
         } else {
             insightText = ""
             nutritionScore = 0
@@ -433,9 +481,11 @@ final class NutritionOverviewViewModelV1: ObservableObject {
     private func applyDerivedUIValues() {
 
         carbsGoalPercent = percent(value: todayCarbsGrams, target: targetCarbsGrams)
+        sugarGoalPercent = percent(value: todaySugarGrams, target: targetSugarGrams)
         proteinGoalPercent = percent(value: todayProteinGrams, target: targetProteinGrams)
         fatGoalPercent = percent(value: todayFatGrams, target: targetFatGrams)
 
+        // Pie uses only macros (Sugar excluded by design)
         let total = max(0, todayCarbsGrams) + max(0, todayProteinGrams) + max(0, todayFatGrams)
         if total > 0 {
             carbsShare = Double(todayCarbsGrams) / Double(total)
@@ -481,5 +531,67 @@ final class NutritionOverviewViewModelV1: ObservableObject {
     ) -> Int {
         values.first(where: { calendar.isDate($0[keyPath: dateKey], inSameDayAs: date) })
             .map(value) ?? 0
+    }
+
+    // 🟨 UPDATED: 7D window builder (oldest → newest), ends at selected day
+    private func buildLast7DaysEnergyBalance(endingAt endDate: Date) -> [EnergyBalanceTrendPointV1] { // 🟨 UPDATED
+
+        let cal = Calendar.current
+        let endDay = cal.startOfDay(for: endDate)
+
+        // 7 calendar days: endDay-6 ... endDay
+        let days: [Date] = (0..<7).compactMap { i in
+            cal.date(byAdding: .day, value: -(6 - i), to: endDay)
+        }
+
+        return days.map { day in
+
+            let intake: Int
+            let active: Int
+            let resting: Int
+
+            if cal.isDate(day, inSameDayAs: cal.startOfDay(for: Date())) {
+                // Today: use live KPIs (0 is valid)
+                intake = max(0, healthStore.todayNutritionEnergyKcal)
+                active = max(0, healthStore.todayActiveEnergy)
+                resting = max(0, healthStore.todayRestingEnergyKcal)
+            } else {
+                // Past days: use SSoT series (no guessing, no fetching)
+                intake = max(0, valueForDay(
+                    from: healthStore.nutritionEnergyDaily365,
+                    date: day,
+                    dateKey: \.date,
+                    value: { $0.energyKcal },
+                    calendar: cal
+                ))
+
+                active = max(0, valueForDay(
+                    from: healthStore.last90DaysActiveEnergy,
+                    date: day,
+                    dateKey: \.date,
+                    value: { $0.activeEnergy },
+                    calendar: cal
+                ))
+
+                resting = max(0, valueForDay(
+                    from: healthStore.last90DaysRestingEnergy,
+                    date: day,
+                    dateKey: \.date,
+                    value: { $0.restingEnergyKcal },
+                    calendar: cal
+                ))
+            }
+
+            // balance semantics for diverging chart:
+            // positive = surplus (intake - burned), negative = deficit
+            let burned = active + resting
+            let balance = intake - burned
+
+            return EnergyBalanceTrendPointV1(
+                date: day,
+                balanceKcal: balance,
+                hasData: true
+            )
+        }
     }
 }

@@ -29,31 +29,43 @@ extension HealthStore {
     func refreshMetabolicTodayRaw3DaysV1(refreshSource: String) async {
         if isPreview { return }
 
-        // --------------------------------------------------------
+        // Default “full raw” for non-overview contexts
+        await refreshMetabolicRaw3DaysMainChartFastV1(refreshSource: refreshSource)
+
+        if SettingsModel.shared.isInsulinTreated {
+            await refreshMetabolicRaw3DaysTherapyOnlyV1(refreshSource: refreshSource)
+        }
+    }
+
+    // 🟨 UPDATED: fast path for Premium Overview Stage A (no therapy raw fetch)
+    @MainActor
+    func refreshMetabolicRaw3DaysMainChartFastV1(refreshSource: String) async {
+        if isPreview { return }
+
         // Nutrition Raw Overlay (3 Tage)
-        // --------------------------------------------------------
-        fetchCarbEvents3DaysV1()            // Carbs = Pflicht
-        fetchProteinEvents3DaysV1()         // Protein = optional (Raw-only)
+        fetchCarbEvents3DaysV1()
+        fetchProteinEvents3DaysV1()
 
-        // --------------------------------------------------------
-        // Insulin Raw Overlay (3 Tage)
-        // --------------------------------------------------------
-        fetchBolusEvents3DaysV1()
-        fetchBasalEvents3DaysV1()           // CHANGE: Basal ist Event (wie Bolus), kein Segment
-
-        // --------------------------------------------------------
         // CGM Raw Overlay (3 Tage)
-        // --------------------------------------------------------
         fetchCGMSamples3DaysV1()
 
-        // --------------------------------------------------------
         // Activity Raw Overlay (3 Tage)
-        // --------------------------------------------------------
         fetchActivityEvents3DaysV1()
 
-        // --------------------------------------------------------
         // Cache Rebuild after RAW fetch calls
-        // --------------------------------------------------------
+        scheduleMainChartCacheRebuildAfterRawFetchesV1()
+    }
+
+    // 🟨 UPDATED: therapy-only raw fetch (deferred stage)
+    @MainActor
+    func refreshMetabolicRaw3DaysTherapyOnlyV1(refreshSource: String) async {
+        if isPreview { return }
+
+        // Insulin Raw Overlay (3 Tage)
+        fetchBolusEvents3DaysV1()
+        fetchBasalEvents3DaysV1()
+
+        // Cache rebuild so overlays show up on MainChart
         scheduleMainChartCacheRebuildAfterRawFetchesV1()
     }
 
@@ -65,7 +77,7 @@ extension HealthStore {
     func clearMetabolicRaw3DaysCacheV1() {
         cgmSamples3Days = []
         bolusEvents3Days = []
-        basalEvents3Days = []              // CHANGE: Segments -> Events
+        basalEvents3Days = []
         carbEvents3Days = []
         proteinEvents3Days = []
         activityEvents3Days = []

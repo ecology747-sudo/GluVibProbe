@@ -2,53 +2,58 @@
 //  HealthStore+MoveTimeV1.swift
 //  GluVibProbe
 //
-//  Move Time V1
-//  ------------------------------------------------------------
-//  - Fetch-only
-//  - Liest appleMoveTime aus HealthKit
-//  - Schreibt rohe Tages-Zeitreihen in HealthStore Published Properties
+//  Domain: Activity / Move Time
+//  Screen Type: HealthStore Metric Extension V1
 //
-//  ✅ Diese Datei liefert:
-//  - Move Time (Minuten) = Alltagsbewegung / "Move Time"
+//  Purpose
+//  - Owns the read-only Apple Health move-time fetch pipeline for Move Time V1.
+//  - Publishes today, last-90-days, monthly and 365-day move-time data into HealthStore.
 //
-//  ❌ Kein Bezug zu:
-//  - Workouts (TrainingMinutes)
-//  - Stand Time
-//  - Exercise Time (appleExerciseTime)
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT Published Move Time Values) → ViewModels → Views
+//
+//  Key Connections
+//  - MoveTimeViewModelV1
+//  - ActivityOverviewViewModelV1
+//
+//  Important
+//  - This file is fetch-only.
+//  - No read-probe lives in this file yet.
+//  - Therefore there is no 7-day probe/auth-heuristic bug here.
+//  - Move Time is strictly based on appleMoveTime and has no relation to
+//    workout minutes, stand time or exercise time.
 //
 
 import Foundation
 import HealthKit
+import OSLog
 
 // ============================================================
-// MARK: - Model (V1)
+// MARK: - Model
 // ============================================================
 
-struct DailyMoveTimeEntry: Identifiable {                                  // !!! NEW
-    let id = UUID()                                                        // !!! NEW
-    let date: Date                                                         // !!! NEW
-    let minutes: Int                                                       // !!! NEW
+struct DailyMoveTimeEntry: Identifiable {
+    let id = UUID()
+    let date: Date
+    let minutes: Int
 }
 
 // ============================================================
-// MARK: - HealthStore + Move Time (V1)
+// MARK: - HealthStore + Move Time
 // ============================================================
 
 extension HealthStore {
 
     // ============================================================
-    // MARK: - Public API (Entry Points)
+    // MARK: - Public API (Today / 90d / Monthly / 365)
     // ============================================================
 
-    /// Today (since midnight) → writes into `todayMoveTimeMinutes`
-    func fetchMoveTimeTodayV1() {                                          // !!! NEW
+    func fetchMoveTimeTodayV1() {
         if isPreview {
             let calendar = Calendar.current
             let today = calendar.startOfDay(for: Date())
 
-            // ✅ FIX #2: Preview nutzt NICHT mehr previewDailyMovementSplit,
-            // sondern die eigene Preview-Serie previewDailyMoveTime.
-            let value = previewDailyMoveTime                               // !!! FIX
+            let value = previewDailyMoveTime // 🟨 UPDATED
                 .first(where: { calendar.isDate($0.date, inSameDayAs: today) })?
                 .minutes ?? 0
 
@@ -58,7 +63,12 @@ extension HealthStore {
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .appleMoveTime) else { return }
+        guard let type = HKQuantityType.quantityType(forIdentifier: .appleMoveTime) else {
+            DispatchQueue.main.async {
+                self.todayMoveTimeMinutes = 0
+            }
+            return
+        }
 
         let calendar = Calendar.current
         let now = Date()
@@ -85,37 +95,32 @@ extension HealthStore {
         healthStore.execute(query)
     }
 
-    /// Last 90d → writes into `last90DaysMoveTime`
-    func fetchLast90DaysMoveTimeV1() {                                     // !!! NEW
-        fetchMoveTimeDailySeriesV1(last: 90) { [weak self] entries in       // !!! UPDATED (struktur)
+    func fetchLast90DaysMoveTimeV1() {
+        fetchMoveTimeDailySeriesV1(last: 90) { [weak self] entries in
             self?.last90DaysMoveTime = entries
         }
     }
 
-    /// Monthly (last 5 months) → writes into `monthlyMoveTime`
-    func fetchMonthlyMoveTimeV1() {                                        // !!! NEW
-        fetchMonthlyMoveTimeSeriesV1 { [weak self] monthly in               // !!! UPDATED (struktur)
+    func fetchMonthlyMoveTimeV1() {
+        fetchMonthlyMoveTimeSeriesV1 { [weak self] monthly in
             self?.monthlyMoveTime = monthly
         }
     }
 
-    /// Daily 365 → writes into `moveTimeDaily365`
-    func fetchMoveTimeDaily365V1() {                                       // !!! NEW
-        fetchMoveTimeDailySeriesV1(last: 365) { [weak self] entries in      // !!! UPDATED (struktur)
+    func fetchMoveTimeDaily365V1() {
+        fetchMoveTimeDailySeriesV1(last: 365) { [weak self] entries in
             self?.moveTimeDaily365 = entries
         }
     }
 
     // ============================================================
-    // MARK: - Private Helpers (Series Fetch)
+    // MARK: - Private Helpers (Daily Series / Monthly)
     // ============================================================
 
-    /// Tägliche Move-Time Serie für die letzten `days` Tage (0–24 Uhr)
-    private func fetchMoveTimeDailySeriesV1(                               // !!! NEW (struktur)
+    private func fetchMoveTimeDailySeriesV1(
         last days: Int,
         assign: @escaping ([DailyMoveTimeEntry]) -> Void
     ) {
-
         let calendar = Calendar.current
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
@@ -125,9 +130,8 @@ extension HealthStore {
             return
         }
 
-        // Preview
         if isPreview {
-            let entries: [DailyMoveTimeEntry] = makePreviewDailyMoveTime(   // !!! NEW (struktur)
+            let entries = makePreviewDailyMoveTime(
                 startDate: startDate,
                 days: days
             )
@@ -173,11 +177,9 @@ extension HealthStore {
         healthStore.execute(query)
     }
 
-    /// Monthly aggregation (last 5 months)
-    private func fetchMonthlyMoveTimeSeriesV1(                             // !!! NEW (struktur)
+    private func fetchMonthlyMoveTimeSeriesV1(
         assign: @escaping ([MonthlyMetricEntry]) -> Void
     ) {
-
         let calendar = Calendar.current
         let today = Date()
         let startOfToday = calendar.startOfDay(for: today)
@@ -192,7 +194,6 @@ extension HealthStore {
             return
         }
 
-        // Preview
         if isPreview {
             let months = ["Jul", "Aug", "Sep", "Okt", "Nov"]
             let values = months.map { _ in Int.random(in: 300...2_000) }
@@ -256,20 +257,17 @@ extension HealthStore {
     // MARK: - Preview Helpers
     // ============================================================
 
-    private func makePreviewDailyMoveTime(                                // !!! NEW (struktur)
+    private func makePreviewDailyMoveTime(
         startDate: Date,
         days: Int
     ) -> [DailyMoveTimeEntry] {
-
         let calendar = Calendar.current
 
-        // ✅ Wenn echte Preview-Daten existieren, nutze sie (stabil)
-        if !previewDailyMoveTime.isEmpty {                                 // !!! FIX
+        if !previewDailyMoveTime.isEmpty { // 🟨 UPDATED
             return Array(previewDailyMoveTime.suffix(days))
                 .sorted { $0.date < $1.date }
         }
 
-        // Fallback: generiere Dummy-Daten
         let entries: [DailyMoveTimeEntry] = (0..<days).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: startDate) else { return nil }
             let value = Int.random(in: 0...120)

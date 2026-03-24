@@ -2,11 +2,6 @@
 //  StepsViewModelV1.swift
 //  GluVibProbe
 //
-//  V1: Steps ViewModel
-//  - KEIN Fetch im ViewModel
-//  - Single Source of Truth: HealthStore
-//  - Targets aus SettingsModel
-//
 
 import Foundation
 import Combine
@@ -16,14 +11,21 @@ import SwiftUI
 final class StepsViewModelV1: ObservableObject {
 
     // ============================================================
-    // MARK: - Published Outputs (View-facing)
+    // MARK: - Info State
     // ============================================================
 
-    // KPIs
+    enum StepsInfoState { // 🟨 UPDATED
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
+    // MARK: - Published State
+    // ============================================================
+
     @Published var todaySteps: Int = 0
     @Published var dailyStepsGoalInt: Int = 0
 
-    // Chart Data
     @Published var last90DaysData: [DailyStepsEntry] = []
     @Published var monthlyStepsData: [MonthlyMetricEntry] = []
     @Published var dailySteps365: [DailyStepsEntry] = []
@@ -53,11 +55,10 @@ final class StepsViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Bindings (SSoT → ViewModel)
+    // MARK: - Bindings
     // ============================================================
 
     private func bindHealthStore() {
-
         healthStore.$todaySteps
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.todaySteps = $0 }
@@ -80,19 +81,23 @@ final class StepsViewModelV1: ObservableObject {
     }
 
     private func bindSettings() {
-
         settings.$dailyStepGoal
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.dailyStepsGoalInt = $0 }
             .store(in: &cancellables)
     }
 
+    // ============================================================
+    // MARK: - Initial Sync
+    // ============================================================
+
     private func syncFromStores() {
         todaySteps = healthStore.todaySteps
+        dailyStepsGoalInt = settings.dailyStepGoal
+
         last90DaysData = healthStore.last90Days
         monthlyStepsData = healthStore.monthlySteps
         dailySteps365 = healthStore.stepsDaily365
-        dailyStepsGoalInt = settings.dailyStepGoal
     }
 
     // ============================================================
@@ -100,7 +105,8 @@ final class StepsViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodaySteps: String {
-        numberFormatter.string(from: NSNumber(value: todaySteps)) ?? "\(todaySteps)"
+        if todaySteps <= 0 { return "–" }
+        return numberFormatter.string(from: NSNumber(value: todaySteps)) ?? "\(todaySteps)"
     }
 
     var formattedDailyStepGoal: String {
@@ -108,6 +114,8 @@ final class StepsViewModelV1: ObservableObject {
     }
 
     var kpiDeltaText: String {
+        guard todaySteps > 0 else { return "–" }
+
         let diff = todaySteps - dailyStepsGoalInt
         let sign: String = diff > 0 ? "+" : diff < 0 ? "−" : "±"
         let absValue = abs(diff)
@@ -116,10 +124,33 @@ final class StepsViewModelV1: ObservableObject {
     }
 
     var kpiDeltaColor: Color {
+        guard todaySteps > 0 else { return Color.Glu.primaryBlue }
+
         let diff = todaySteps - dailyStepsGoalInt
-        if diff > 0 { return .green }
+        if diff > 0 { return Color.Glu.successGreen }
         if diff < 0 { return .red }
         return Color.Glu.primaryBlue
+    }
+
+    // ============================================================
+    // MARK: - Info Hint State
+    // ============================================================
+
+    private var hasAnyHistory: Bool {
+        last90DaysData.contains { $0.steps > 0 } ||
+        dailySteps365.contains { $0.steps > 0 }
+    }
+
+    var todayInfoState: StepsInfoState? { // 🟨 UPDATED
+        if todaySteps > 0 {
+            return nil
+        }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
     }
 
     // ============================================================
@@ -128,12 +159,12 @@ final class StepsViewModelV1: ObservableObject {
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",   days: 7,   value: averageSteps(last: 7)),
-            .init(label: "14T",  days: 14,  value: averageSteps(last: 14)),
-            .init(label: "30T",  days: 30,  value: averageSteps(last: 30)),
-            .init(label: "90T",  days: 90,  value: averageSteps(last: 90)),
-            .init(label: "180T", days: 180, value: averageSteps(last: 180)),
-            .init(label: "365T", days: 365, value: averageSteps(last: 365))
+            .init(label: L10n.Common.period7d, days: 7, value: averageSteps(last: 7)),
+            .init(label: L10n.Common.period14d, days: 14, value: averageSteps(last: 14)),
+            .init(label: L10n.Common.period30d, days: 30, value: averageSteps(last: 30)),
+            .init(label: L10n.Common.period90d, days: 90, value: averageSteps(last: 90)),
+            .init(label: L10n.Common.period180d, days: 180, value: averageSteps(last: 180)),
+            .init(label: L10n.Common.period365d, days: 365, value: averageSteps(last: 365))
         ]
     }
 
@@ -147,7 +178,9 @@ final class StepsViewModelV1: ObservableObject {
         guard
             let endDate = calendar.date(byAdding: .day, value: -1, to: today),
             let startDate = calendar.date(byAdding: .day, value: -days, to: today)
-        else { return 0 }
+        else {
+            return 0
+        }
 
         let filtered = source.filter {
             let d = calendar.startOfDay(for: $0.date)

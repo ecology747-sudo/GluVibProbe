@@ -41,6 +41,17 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
         }
     }
 
+    // MARK: Stable Semantic Kind
+
+    enum SemanticKind: Hashable { // 🟨 NEW
+        case activityWorkout(symbol: String)
+        case carbs
+        case bolus
+        case basal
+        case weight
+        case none
+    }
+
     // MARK: Metabolic Metric Style (MainChart-aligned)
 
     enum MetabolicMetricStyle: Hashable {
@@ -64,11 +75,11 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
             }
         }
 
-        fileprivate static func infer(from titleText: String) -> MetabolicMetricStyle {
-            switch titleText {
-            case "Bolus": return .bolus
-            case "Basal": return .basal
-            default:      return .none
+        fileprivate static func infer(from semanticKind: SemanticKind) -> MetabolicMetricStyle { // 🟨 UPDATED
+            switch semanticKind {
+            case .bolus: return .bolus
+            case .basal: return .basal
+            default:     return .none
             }
         }
     }
@@ -113,9 +124,8 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
     let timeText: String
     let glucoseMarkers: [GlucoseMarker]
     let contextHint: String?
-
-    // ✅ NEW: optional dynamic label for glucose row ("Glucose (mg/dL)" / "Glucose (mmol/L)")
-    let glucoseRowTitleText: String?          // !!! NEW
+    let glucoseRowTitleText: String?
+    let semanticKind: SemanticKind // 🟨 NEW
 
     // MARK: Derived Styling (ONE place)
 
@@ -140,20 +150,18 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
     }
 
     fileprivate var leadingIcon: LeadingIconKind {
-        switch domain {
-        case .activity:
-            return .workout(symbol: WorkoutBadgeHelper.symbolName(for: titleText))
-        case .nutrition:
-            if titleText == "Carbs" { return .carbs }
-            return .none
-        case .metabolic:
-            switch metabolicStyle {
-            case .bolus: return .bolus
-            case .basal: return .basal
-            case .none:  return .none
-            }
-        case .body:
-            if titleText == "Weight" { return .weight }
+        switch semanticKind { // 🟨 UPDATED
+        case .activityWorkout(let symbol):
+            return .workout(symbol: symbol)
+        case .carbs:
+            return .carbs
+        case .bolus:
+            return .bolus
+        case .basal:
+            return .basal
+        case .weight:
+            return .weight
+        case .none:
             return .none
         }
     }
@@ -169,7 +177,7 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
         }
     }
 
-    // MARK: Init (keeps old call-sites stable)
+    // MARK: Init
 
     init(
         domain: Domain,
@@ -178,7 +186,8 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
         timeText: String,
         glucoseMarkers: [GlucoseMarker],
         contextHint: String?,
-        glucoseRowTitleText: String? = nil      // !!! NEW (default keeps old call-sites stable)
+        glucoseRowTitleText: String? = nil,
+        semanticKind: SemanticKind = .none // 🟨 NEW
     ) {
         self.domain = domain
         self.titleText = titleText
@@ -186,10 +195,11 @@ struct HistoryEventRowCardModel: Identifiable, Hashable {
         self.timeText = timeText
         self.glucoseMarkers = glucoseMarkers
         self.contextHint = contextHint
-        self.glucoseRowTitleText = glucoseRowTitleText    // !!! NEW
+        self.glucoseRowTitleText = glucoseRowTitleText
+        self.semanticKind = semanticKind
 
         if domain == .metabolic {
-            self.metabolicStyle = .infer(from: titleText)
+            self.metabolicStyle = .infer(from: semanticKind) // 🟨 UPDATED
         } else {
             self.metabolicStyle = .none
         }
@@ -244,7 +254,8 @@ struct HistoryEventRowCard: View {
 
                 if !model.glucoseMarkers.isEmpty {
                     HistoryEventGlucoseRow(
-                        title: model.glucoseRowTitleText ?? "Glucose",   // !!! UPDATED
+                        title: glucoseRowBaseTitle, // 🟨 UPDATED
+                        unitText: glucoseRowUnitText, // 🟨 NEW
                         markers: model.glucoseMarkers,
                         accent: model.outlineColor
                     )
@@ -258,6 +269,32 @@ struct HistoryEventRowCard: View {
         }
         .buttonStyle(.plain)
         .gluVibCardFrame(domainColor: model.outlineColor)
+    }
+
+    private var glucoseRowBaseTitle: String { // 🟨 NEW
+        splitGlucoseRowTitle(from: model.glucoseRowTitleText ?? String(localized: "Glucose")).title
+    }
+
+    private var glucoseRowUnitText: String? { // 🟨 NEW
+        splitGlucoseRowTitle(from: model.glucoseRowTitleText ?? String(localized: "Glucose")).unit
+    }
+
+    private func splitGlucoseRowTitle(from text: String) -> (title: String, unit: String?) { // 🟨 NEW
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard
+            let open = trimmed.firstIndex(of: "("),
+            let close = trimmed.lastIndex(of: ")"),
+            open < close
+        else {
+            return (trimmed, nil)
+        }
+
+        let base = String(trimmed[..<open]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let unit = String(trimmed[trimmed.index(after: open)..<close]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !base.isEmpty else { return (trimmed, nil) }
+        return (base, unit.isEmpty ? nil : unit)
     }
 }
 
@@ -334,18 +371,28 @@ private struct LeadingIcon: View {
 private struct HistoryEventGlucoseRow: View {
 
     let title: String
+    let unitText: String? // 🟨 NEW
     let markers: [HistoryEventRowCardModel.GlucoseMarker]
     let accent: Color
 
     private var primaryBlueSecondary: Color { Color.Glu.primaryBlue.opacity(0.70) }
     private var primaryBlue: Color { Color.Glu.primaryBlue }
+    private var primaryBlueTertiary: Color { Color.Glu.primaryBlue.opacity(0.55) } // 🟨 NEW
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .top, spacing: 10) { // 🟨 UPDATED
 
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(primaryBlueSecondary)
+            VStack(alignment: .leading, spacing: 0) { // 🟨 NEW
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(primaryBlueSecondary)
+
+                if let unitText, !unitText.isEmpty {
+                    Text(unitText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(primaryBlueTertiary)
+                }
+            }
 
             HStack(spacing: 6) {
                 ForEach(markers.prefix(3)) { m in
@@ -356,9 +403,9 @@ private struct HistoryEventGlucoseRow: View {
     }
 
     private func glucoseChip(label: String, valueText: String, accent: Color) -> some View {
-        HStack(spacing: label.isEmpty ? 0 : 6) {                    // ✅ UPDATED
+        HStack(spacing: label.isEmpty ? 0 : 6) {
 
-            if !label.isEmpty {                                     // ✅ UPDATED
+            if !label.isEmpty {
                 Text(label)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(primaryBlueSecondary)
@@ -400,12 +447,12 @@ private struct HistoryEventGlucoseRow: View {
                     .init(kind: .plus60AfterEnd, valueText: "104")
                 ],
                 contextHint: nil,
-                glucoseRowTitleText: "Glucose (mg/dL)"
+                glucoseRowTitleText: "Glucose (mg/dL)",
+                semanticKind: .activityWorkout(symbol: "figure.walk")
             ),
             onTapTile: {}
         )
 
-        // ✅ NEW: No-data marker preview
         HistoryEventRowCard(
             model: .init(
                 domain: .metabolic,
@@ -416,7 +463,8 @@ private struct HistoryEventGlucoseRow: View {
                     .init(kind: .noData, valueText: "No CGM data")
                 ],
                 contextHint: nil,
-                glucoseRowTitleText: "Glucose (mg/dL)"
+                glucoseRowTitleText: "Glucose (mg/dL)",
+                semanticKind: .bolus
             ),
             onTapTile: {}
         )

@@ -3,6 +3,8 @@
 //  GluVibProbe
 //
 //  HISTORY — ViewModel V1 (SSoT → UI Events)
+//  - 10-day window (today + 9 back)
+//  - History Events are independent from MainChartCache (Carbs/Bolus/Basal/Weight/Workouts)
 //
 
 import Foundation
@@ -45,6 +47,10 @@ final class HistoryViewModelV1: ObservableObject {
         rebuild()
     }
 
+    // ============================================================
+    // MARK: - Bind (SSoT publishers → rebuild)
+    // ============================================================
+
     private func bind() {
         cancellables.removeAll()
         guard let healthStore else { return }
@@ -52,22 +58,17 @@ final class HistoryViewModelV1: ObservableObject {
         let settings = SettingsModel.shared
 
         Publishers.MergeMany(
-            // HealthStore publishes
-            healthStore.$carbEvents3Days.map { _ in () }.eraseToAnyPublisher(),
-            healthStore.$bolusEvents3Days.map { _ in () }.eraseToAnyPublisher(),
-            healthStore.$basalEvents3Days.map { _ in () }.eraseToAnyPublisher(),
-            healthStore.$cgmSamples3Days.map { _ in () }.eraseToAnyPublisher(),
-
-            healthStore.$mainChartCacheV1.map { _ in () }.eraseToAnyPublisher(),
+            healthStore.$carbEventsHistoryWindowV1.map { _ in () }.eraseToAnyPublisher(),
+            healthStore.$bolusEventsHistoryWindowV1.map { _ in () }.eraseToAnyPublisher(),
+            healthStore.$basalEventsHistoryWindowV1.map { _ in () }.eraseToAnyPublisher(),
+            healthStore.$cgmSamplesHistoryWindowV1.map { _ in () }.eraseToAnyPublisher(),
             healthStore.$recentWorkouts.map { _ in () }.eraseToAnyPublisher(),
             healthStore.$recentWeightSamplesForHistoryV1.map { _ in () }.eraseToAnyPublisher(),
-
-            // Settings changes should instantly rebuild History UI strings + filtering
             settings.$glucoseUnit.map { _ in () }.eraseToAnyPublisher(),
             settings.$distanceUnit.map { _ in () }.eraseToAnyPublisher(),
             settings.$weightUnit.map { _ in () }.eraseToAnyPublisher(),
-            settings.$hasCGM.map { _ in () }.eraseToAnyPublisher(),                 // ✅ NEW
-            settings.$isInsulinTreated.map { _ in () }.eraseToAnyPublisher()        // ✅ NEW
+            settings.$hasCGM.map { _ in () }.eraseToAnyPublisher(),
+            settings.$isInsulinTreated.map { _ in () }.eraseToAnyPublisher()
         )
         .debounce(for: .milliseconds(60), scheduler: DispatchQueue.main)
         .sink { [weak self] in
@@ -75,6 +76,10 @@ final class HistoryViewModelV1: ObservableObject {
         }
         .store(in: &cancellables)
     }
+
+    // ============================================================
+    // MARK: - Rebuild (10-day loop)
+    // ============================================================
 
     private func rebuild() {
         guard let healthStore else {
@@ -88,12 +93,12 @@ final class HistoryViewModelV1: ObservableObject {
         let showCGM = settings.hasCGM
         let showInsulin = settings.isInsulinTreated
 
+        let cgmIndex = CGMIndex(samples: healthStore.cgmSamplesHistoryWindowV1, maxDeltaMinutes: 20)
+
         for dayOffset in stride(from: 0, through: -9, by: -1) {
 
-            let profile = resolveMainChartProfile(healthStore: healthStore, dayOffset: dayOffset)
-
             // ------------------------------------------------------------
-            // Body: Weight (Quelle: HealthStore.recentWeightSamplesForHistoryV1)
+            // Body: Weight
             // ------------------------------------------------------------
 
             let weights = weightsForDayOffset(healthStore: healthStore, dayOffset)
@@ -102,19 +107,17 @@ final class HistoryViewModelV1: ObservableObject {
                 let ts = w.timestamp
                 let detail = settings.weightUnit.formatted(fromKg: w.kg, fractionDigits: 1)
 
-                // Weight never shows glucose
-                let markers: [HistoryEventRowCardModel.GlucoseMarker] = []
-
                 out.append(
                     HistoryListEvent(
                         timestamp: ts,
                         cardModel: .init(
                             domain: .body,
-                            titleText: "Weight",
+                            titleText: L10n.History.Event.weight,
                             detailText: detail,
                             timeText: formatTime(ts),
-                            glucoseMarkers: markers,
-                            contextHint: nil
+                            glucoseMarkers: [],
+                            contextHint: nil,
+                            semanticKind: .weight
                         ),
                         metricRoute: .weight,
                         overviewRoute: .bodyOverview
@@ -123,7 +126,7 @@ final class HistoryViewModelV1: ObservableObject {
             }
 
             // ------------------------------------------------------------
-            // Workouts (Quelle: healthStore.recentWorkouts)
+            // Workouts
             // ------------------------------------------------------------
 
             let workouts = workoutsForDayOffset(healthStore: healthStore, dayOffset)
@@ -146,14 +149,15 @@ final class HistoryViewModelV1: ObservableObject {
                 }
 
                 let detail = parts.joined(separator: " · ")
-                let title = w.workoutActivityType.simpleName
+                let title = w.workoutActivityType.localizedHistoryName
+                let workoutSymbol = WorkoutBadgeHelper.symbolName(for: title)
 
                 let markers: [HistoryEventRowCardModel.GlucoseMarker]
-                if showCGM, let profile {
-                    let computed = glucoseMarkersForActivity(samples: profile.cgm, start: start, end: end)
-                    markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: start) : computed   // UPDATED
+                if showCGM {
+                    let computed = glucoseMarkersForActivity(index: cgmIndex, start: start, end: end)
+                    markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: start) : computed
                 } else {
-                    markers = []   // ✅ NO CGM → no glucose row
+                    markers = []
                 }
 
                 out.append(
@@ -165,7 +169,9 @@ final class HistoryViewModelV1: ObservableObject {
                             detailText: detail,
                             timeText: formatTime(start),
                             glucoseMarkers: markers,
-                            contextHint: nil
+                            contextHint: nil,
+                            glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(), // 🟨 UPDATED
+                            semanticKind: .activityWorkout(symbol: workoutSymbol)
                         ),
                         metricRoute: .workoutMinutes,
                         overviewRoute: .activityOverview
@@ -173,22 +179,23 @@ final class HistoryViewModelV1: ObservableObject {
                 )
             }
 
-            guard let profile else { continue }
-
             // ------------------------------------------------------------
-            // Nutrition: Carbs (always allowed; glucose row only if CGM)
+            // Nutrition: Carbs
             // ------------------------------------------------------------
 
-            for e in profile.carbs {
+            let carbEvents = carbEventsForDayOffset(healthStore: healthStore, dayOffset)
+            let clusteredCarbEvents = clusterNutritionEventsV1(carbEvents, windowMinutes: 10)
+
+            for e in clusteredCarbEvents {
                 let gramsInt = Int(max(0, e.grams).rounded())
                 let detail = "\(gramsInt) g"
 
                 let markers: [HistoryEventRowCardModel.GlucoseMarker]
                 if showCGM {
-                    let computed = glucoseMarkersForPointEvent(samples: profile.cgm, timestamp: e.timestamp)
-                    markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: e.timestamp) : computed   // UPDATED
+                    let computed = glucoseMarkersForPointEvent(index: cgmIndex, timestamp: e.timestamp)
+                    markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: e.timestamp) : computed
                 } else {
-                    markers = []   // ✅ NO CGM → no glucose row
+                    markers = []
                 }
 
                 out.append(
@@ -196,11 +203,13 @@ final class HistoryViewModelV1: ObservableObject {
                         timestamp: e.timestamp,
                         cardModel: .init(
                             domain: .nutrition,
-                            titleText: "Carbs",
+                            titleText: L10n.History.Event.carbs,
                             detailText: detail,
                             timeText: formatTime(e.timestamp),
                             glucoseMarkers: markers,
-                            contextHint: nil
+                            contextHint: nil,
+                            glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(), // 🟨 UPDATED
+                            semanticKind: .carbs
                         ),
                         metricRoute: .carbs,
                         overviewRoute: .nutritionOverview
@@ -209,22 +218,22 @@ final class HistoryViewModelV1: ObservableObject {
             }
 
             // ------------------------------------------------------------
-            // Metabolic: Bolus/Basal (only if insulin-treated)
+            // Metabolic: Bolus/Basal
             // ------------------------------------------------------------
 
             if showInsulin {
 
-                // Bolus
-                for b in profile.bolus {
+                let bolus = bolusEventsForDayOffset(healthStore: healthStore, dayOffset)
+                for b in bolus {
                     let units = max(0, b.units)
-                    let detail = String(format: "%.1f U", units)
+                    let detail = L10n.History.Format.insulinValue(units) // 🟨 UPDATED
 
                     let markers: [HistoryEventRowCardModel.GlucoseMarker]
                     if showCGM {
-                        let computed = glucoseMarkersForPointEvent(samples: profile.cgm, timestamp: b.timestamp)
-                        markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: b.timestamp) : computed   // UPDATED
+                        let computed = glucoseMarkersForPointEvent(index: cgmIndex, timestamp: b.timestamp)
+                        markers = computed.isEmpty ? placeholderCGMMarker(forEventTimestamp: b.timestamp) : computed
                     } else {
-                        markers = []   // ✅ NO CGM → no glucose row
+                        markers = []
                     }
 
                     out.append(
@@ -232,11 +241,13 @@ final class HistoryViewModelV1: ObservableObject {
                             timestamp: b.timestamp,
                             cardModel: .init(
                                 domain: .metabolic,
-                                titleText: "Bolus",
+                                titleText: L10n.History.Event.bolus,
                                 detailText: detail,
                                 timeText: formatTime(b.timestamp),
                                 glucoseMarkers: markers,
-                                contextHint: nil
+                                contextHint: nil,
+                                glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(), // 🟨 UPDATED
+                                semanticKind: .bolus
                             ),
                             metricRoute: .bolus,
                             overviewRoute: .metabolicPremiumOverview
@@ -244,21 +255,22 @@ final class HistoryViewModelV1: ObservableObject {
                     )
                 }
 
-                // Basal (never shows glucose row)
-                for b in profile.basal {
+                let basal = basalEventsForDayOffset(healthStore: healthStore, dayOffset)
+                for b in basal {
                     let units = max(0, b.units)
-                    let detail = String(format: "%.1f U", units)
+                    let detail = L10n.History.Format.insulinValue(units) // 🟨 UPDATED
 
                     out.append(
                         HistoryListEvent(
                             timestamp: b.timestamp,
                             cardModel: .init(
                                 domain: .metabolic,
-                                titleText: "Basal",
+                                titleText: L10n.History.Event.basal,
                                 detailText: detail,
                                 timeText: formatTime(b.timestamp),
                                 glucoseMarkers: [],
-                                contextHint: nil
+                                contextHint: nil,
+                                semanticKind: .basal
                             ),
                             metricRoute: .basal,
                             overviewRoute: .metabolicPremiumOverview
@@ -273,15 +285,100 @@ final class HistoryViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - UPDATED: Placeholder marker (Pending vs No Data)
+    // MARK: - Carbs helpers (History Window, 10 days)
+    // ============================================================
+
+    private func carbEventsForDayOffset(healthStore: HealthStore, _ dayOffset: Int) -> [NutritionEvent] {
+        let (dayStart, dayEnd) = dayBounds(dayOffset: dayOffset)
+        return healthStore.carbEventsHistoryWindowV1
+            .filter { $0.timestamp >= dayStart && $0.timestamp < dayEnd }
+            .sorted { $0.timestamp < $1.timestamp }
+    }
+
+    private func bolusEventsForDayOffset(healthStore: HealthStore, _ dayOffset: Int) -> [InsulinBolusEvent] {
+        let (dayStart, dayEnd) = dayBounds(dayOffset: dayOffset)
+        return healthStore.bolusEventsHistoryWindowV1
+            .filter { $0.timestamp >= dayStart && $0.timestamp < dayEnd }
+            .sorted { $0.timestamp > $1.timestamp }
+    }
+
+    private func basalEventsForDayOffset(healthStore: HealthStore, _ dayOffset: Int) -> [InsulinBasalEvent] {
+        let (dayStart, dayEnd) = dayBounds(dayOffset: dayOffset)
+        return healthStore.basalEventsHistoryWindowV1
+            .filter { $0.timestamp >= dayStart && $0.timestamp < dayEnd }
+            .sorted { $0.timestamp > $1.timestamp }
+    }
+
+    // ============================================================
+    // MARK: - Nutrition Cluster Helper (Meal Window)
+    // ============================================================
+
+    private func clusterNutritionEventsV1(
+        _ events: [NutritionEvent],
+        windowMinutes: Int
+    ) -> [NutritionEvent] {
+        guard !events.isEmpty else { return [] }
+
+        let window: TimeInterval = TimeInterval(max(1, windowMinutes) * 60)
+
+        var result: [NutritionEvent] = []
+        result.reserveCapacity(events.count)
+
+        var currentKind: NutritionEventKind? = nil
+        var currentStart: Date? = nil
+        var lastTime: Date? = nil
+        var sum: Double = 0
+
+        func flushIfNeeded() {
+            guard let kind = currentKind, let start = currentStart else { return }
+            guard sum > 0 else { return }
+
+            result.append(
+                NutritionEvent(
+                    id: UUID(),
+                    timestamp: start,
+                    grams: sum,
+                    kind: kind
+                )
+            )
+        }
+
+        for e in events {
+            if currentKind == nil {
+                currentKind = e.kind
+                currentStart = e.timestamp
+                lastTime = e.timestamp
+                sum = max(0, e.grams)
+                continue
+            }
+
+            let sameKind = (e.kind == currentKind)
+            let closeEnough = (lastTime.map { e.timestamp.timeIntervalSince($0) <= window } ?? false)
+
+            if sameKind && closeEnough {
+                sum += max(0, e.grams)
+                lastTime = e.timestamp
+            } else {
+                flushIfNeeded()
+                currentKind = e.kind
+                currentStart = e.timestamp
+                lastTime = e.timestamp
+                sum = max(0, e.grams)
+            }
+        }
+
+        flushIfNeeded()
+        return result.sorted { $0.timestamp > $1.timestamp }
+    }
+
+    // ============================================================
+    // MARK: - Placeholder marker (Pending vs No Data)
     // ============================================================
 
     private func placeholderCGMMarker(forEventTimestamp ts: Date) -> [HistoryEventRowCardModel.GlucoseMarker] {
-        // "3 hours and 1 minute" window
         let pendingWindow: TimeInterval = (3 * 3600) + 60
         let isPending = Date().timeIntervalSince(ts) <= pendingWindow
-
-        let text = isPending ? "CGM Data Pending" : "No CGM Data"
+        let text = isPending ? L10n.History.Event.cgmPending : L10n.History.Event.noCGMData
 
         return [
             HistoryEventRowCardModel.GlucoseMarker(
@@ -300,35 +397,11 @@ final class HistoryViewModelV1: ObservableObject {
         _ dayOffset: Int
     ) -> [WeightSamplePointV1] {
 
-        let calendar = Calendar.current
-        let todayStart = calendar.startOfDay(for: Date())
-        let dayStart = calendar.date(byAdding: .day, value: dayOffset, to: todayStart) ?? todayStart
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(24 * 3600)
+        let (dayStart, dayEnd) = dayBounds(dayOffset: dayOffset)
 
         return healthStore.recentWeightSamplesForHistoryV1
             .filter { $0.timestamp >= dayStart && $0.timestamp < dayEnd }
             .sorted { $0.timestamp > $1.timestamp }
-    }
-
-    // ============================================================
-    // MARK: - MainChart Cache Resolve (0...-9)
-    // ============================================================
-
-    private func resolveMainChartProfile(
-        healthStore: HealthStore,
-        dayOffset: Int
-    ) -> MainChartDayProfileV1? {
-
-        if let cached = healthStore.cachedMainChartProfileV1(dayOffset: dayOffset) {
-            return cached
-        }
-
-        if [0, -1, -2].contains(dayOffset) {
-            healthStore.rebuildMainChartCacheFromRaw3DaysV1()
-            return healthStore.cachedMainChartProfileV1(dayOffset: dayOffset)
-        }
-
-        return nil
     }
 
     // ============================================================
@@ -340,10 +413,7 @@ final class HistoryViewModelV1: ObservableObject {
         _ dayOffset: Int
     ) -> [HKWorkout] {
 
-        let calendar = Calendar.current
-        let todayStart = calendar.startOfDay(for: Date())
-        let dayStart = calendar.date(byAdding: .day, value: dayOffset, to: todayStart) ?? todayStart
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(24 * 3600)
+        let (dayStart, dayEnd) = dayBounds(dayOffset: dayOffset)
 
         return healthStore.recentWorkouts
             .filter { $0.startDate >= dayStart && $0.startDate < dayEnd }
@@ -351,18 +421,79 @@ final class HistoryViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Glucose Marker Helpers
+    // MARK: - Day Bounds (0...-9)
+    // ============================================================
+
+    private func dayBounds(dayOffset: Int) -> (Date, Date) {
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        let dayStart = calendar.date(byAdding: .day, value: dayOffset, to: todayStart) ?? todayStart
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(24 * 3600)
+        return (dayStart, dayEnd)
+    }
+
+    // ============================================================
+    // MARK: - CGM Index (fast nearest lookup)
+    // ============================================================
+
+    private struct CGMIndex {
+        let times: [TimeInterval]
+        let values: [Double]
+        let maxDelta: TimeInterval
+
+        init(samples: [CGMSamplePoint], maxDeltaMinutes: Double = 10) {
+            self.maxDelta = max(1, maxDeltaMinutes) * 60.0
+            let sorted = samples.sorted { $0.timestamp < $1.timestamp }
+            self.times = sorted.map { $0.timestamp.timeIntervalSince1970 }
+            self.values = sorted.map { $0.glucoseMgdl }
+        }
+
+        func nearestValue(at date: Date) -> Int? {
+            guard !times.isEmpty else { return nil }
+
+            let t = date.timeIntervalSince1970
+            let i = lowerBound(times, t)
+
+            var bestDelta = TimeInterval.greatestFiniteMagnitude
+            var bestValue: Double? = nil
+
+            if i < times.count {
+                let d = abs(times[i] - t)
+                if d < bestDelta { bestDelta = d; bestValue = values[i] }
+            }
+            if i > 0 {
+                let d = abs(times[i - 1] - t)
+                if d < bestDelta { bestDelta = d; bestValue = values[i - 1] }
+            }
+
+            guard bestDelta <= maxDelta, let v = bestValue else { return nil }
+            return Int(v.rounded())
+        }
+
+        private func lowerBound(_ a: [TimeInterval], _ x: TimeInterval) -> Int {
+            var l = 0
+            var r = a.count
+            while l < r {
+                let m = (l + r) >> 1
+                if a[m] < x { l = m + 1 } else { r = m }
+            }
+            return l
+        }
+    }
+
+    // ============================================================
+    // MARK: - Glucose Marker Helpers (indexed)
     // ============================================================
 
     private func glucoseMarkersForPointEvent(
-        samples: [CGMSamplePoint],
+        index: CGMIndex,
         timestamp: Date
     ) -> [HistoryEventRowCardModel.GlucoseMarker] {
 
-        guard let s = glucoseValueNear(samples: samples, timestamp) else { return [] }
+        guard let s = index.nearestValue(at: timestamp) else { return [] }
 
-        let p30 = glucoseValueNear(samples: samples, timestamp.addingTimeInterval(30 * 60))
-        let p60 = glucoseValueNear(samples: samples, timestamp.addingTimeInterval(60 * 60))
+        let p30 = index.nearestValue(at: timestamp.addingTimeInterval(30 * 60))
+        let p60 = index.nearestValue(at: timestamp.addingTimeInterval(60 * 60))
 
         var out: [HistoryEventRowCardModel.GlucoseMarker] = []
         out.append(.init(kind: .start, valueText: glucoseDisplayText(mgdlInt: s)))
@@ -374,15 +505,15 @@ final class HistoryViewModelV1: ObservableObject {
     }
 
     private func glucoseMarkersForActivity(
-        samples: [CGMSamplePoint],
+        index: CGMIndex,
         start: Date,
         end: Date
     ) -> [HistoryEventRowCardModel.GlucoseMarker] {
 
-        guard let s = glucoseValueNear(samples: samples, start) else { return [] }
+        guard let s = index.nearestValue(at: start) else { return [] }
 
-        let ePlus30 = glucoseValueNear(samples: samples, end.addingTimeInterval(30 * 60))
-        let ePlus60 = glucoseValueNear(samples: samples, end.addingTimeInterval(60 * 60))
+        let ePlus30 = index.nearestValue(at: end.addingTimeInterval(30 * 60))
+        let ePlus60 = index.nearestValue(at: end.addingTimeInterval(60 * 60))
 
         var out: [HistoryEventRowCardModel.GlucoseMarker] = []
         out.append(.init(kind: .start, valueText: glucoseDisplayText(mgdlInt: s)))
@@ -400,31 +531,6 @@ final class HistoryViewModelV1: ObservableObject {
         return unit.formattedNumber(fromMgdl: Double(mgdlInt), fractionDigits: digits)
     }
 
-    private func glucoseValueNear(
-        samples: [CGMSamplePoint],
-        _ ts: Date
-    ) -> Int? {
-
-        guard !samples.isEmpty else { return nil }
-
-        let maxDelta: TimeInterval = 10 * 60
-        var best: (delta: TimeInterval, value: Double)? = nil
-
-        for s in samples {
-            let d = abs(s.timestamp.timeIntervalSince(ts))
-            guard d <= maxDelta else { continue }
-
-            if let b = best {
-                if d < b.delta { best = (d, s.glucoseMgdl) }
-            } else {
-                best = (d, s.glucoseMgdl)
-            }
-        }
-
-        guard let v = best?.value else { return nil }
-        return Int(v.rounded())
-    }
-
     // ============================================================
     // MARK: - Formatting
     // ============================================================
@@ -433,6 +539,12 @@ final class HistoryViewModelV1: ObservableObject {
         let df = DateFormatter()
         df.dateFormat = "HH:mm"
         return df.string(from: date)
+    }
+
+    private func localizedGlucoseRowTitle() -> String { // 🟨 UPDATED
+        let settings = SettingsModel.shared
+        let unitText = settings.glucoseUnit == .mmolL ? "mmol/L" : "mg/dL"
+        return L10n.History.Glucose.rowTitle(unit: unitText)
     }
 }
 
@@ -465,24 +577,24 @@ enum HistoryOverviewRoute: Hashable {
 }
 
 private extension HKWorkoutActivityType {
-    var simpleName: String {
+    var localizedHistoryName: String {
         switch self {
-        case .walking: return "Walking"
-        case .running: return "Running"
-        case .cycling: return "Cycling"
-        case .highIntensityIntervalTraining: return "HIIT"
-        case .functionalStrengthTraining: return "Functional Training"
-        case .traditionalStrengthTraining: return "Strength Training"
-        case .yoga: return "Yoga"
-        case .pilates: return "Pilates"
-        case .coreTraining: return "Core Training"
-        case .elliptical: return "Elliptical"
-        case .swimming: return "Swimming"
-        case .rowing: return "Rowing"
-        case .hiking: return "Hiking"
-        case .dance: return "Dance"
-        case .martialArts: return "Martial Arts"
-        default: return "Workout"
+        case .walking: return L10n.History.Workout.walking
+        case .running: return L10n.History.Workout.running
+        case .cycling: return L10n.History.Workout.cycling
+        case .highIntensityIntervalTraining: return L10n.History.Workout.hiit
+        case .functionalStrengthTraining: return L10n.History.Workout.functionalTraining
+        case .traditionalStrengthTraining: return L10n.History.Workout.strengthTraining
+        case .yoga: return L10n.History.Workout.yoga
+        case .pilates: return L10n.History.Workout.pilates
+        case .coreTraining: return L10n.History.Workout.coreTraining
+        case .elliptical: return L10n.History.Workout.elliptical
+        case .swimming: return L10n.History.Workout.swimming
+        case .rowing: return L10n.History.Workout.rowing
+        case .hiking: return L10n.History.Workout.hiking
+        case .dance: return L10n.History.Workout.dance
+        case .martialArts: return L10n.History.Workout.martialArts
+        default: return L10n.History.Workout.default
         }
     }
 }

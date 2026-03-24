@@ -2,26 +2,42 @@
 //  NutritionOverviewViewV1.swift
 //  GluVibProbe
 //
-//  V1: Nutrition Overview
-//  - Pager (3 Tage) + Sticky Header + PageDots wie ActivityOverviewViewV1
-//  - Daten kommen aus NutritionOverviewViewModelV1 (SSoT: HealthStore)
-//  - Pull-to-Refresh nur sinnvoll für TODAY (VM gated)
-//  - Navigation: Tap auf Cards -> AppState StatsScreen
+//  Nutrition — Overview (V1)
+//
+//  Purpose
+//  - UI-only overview for the Nutrition domain.
+//  - Renders score, macro targets, macro distribution, energy balance and insight.
+//  - Follows the shared GluVib overview pattern with sticky header, 3-day pager,
+//    page dots and pull-to-refresh.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → NutritionOverviewViewModelV1 → NutritionOverviewViewV1
+//
+//  Architecture Rules
+//  - View is render-only.
+//  - No direct HealthKit access.
+//  - No fetching logic inside the View.
+//  - All state comes from the ViewModel.
 //
 
 import SwiftUI
 import Charts
 
-// MARK: - Scroll Offset Preference (für Sticky-Header)
+// ============================================================
+// MARK: - Scroll Offset Preference
+// ============================================================
 
 private struct NutritionScrollOffsetKeyV1: PreferenceKey {
     static var defaultValue: CGFloat = 0
+
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
     }
 }
 
-// MARK: - PageDots (muss im Scope sein)
+// ============================================================
+// MARK: - Pager Dots
+// ============================================================
 
 private struct NutritionPageDotsV1: View {
     let selected: Int
@@ -40,29 +56,33 @@ private struct NutritionPageDotsV1: View {
     }
 }
 
+// ============================================================
+// MARK: - Nutrition Overview View
+// ============================================================
+
 struct NutritionOverviewViewV1: View {
 
-    // MARK: - Environment
+    // ============================================================
+    // MARK: - Dependencies
+    // ============================================================
 
     @EnvironmentObject var appState: AppState
-    // @EnvironmentObject var healthStore: HealthStore                                // !!! UPDATED (entfernt, View nutzt nur VM)
-
-    // MARK: - ViewModel
+    @EnvironmentObject private var settings: SettingsModel
 
     @StateObject private var viewModel: NutritionOverviewViewModelV1
 
-    // MARK: - Sticky Header
+    // ============================================================
+    // MARK: - UI State
+    // ============================================================
 
     @State private var hasScrolled: Bool = false
-
-    // MARK: - Pager State
-
-    /// 0 = DayBefore (-2), 1 = Yesterday (-1), 2 = Today (0)
     @State private var selectedPage: Int = 2
     @State private var didInitialLoad = false
     @State private var isProgrammaticPageUpdate = false
 
+    // ============================================================
     // MARK: - Init
+    // ============================================================
 
     init(viewModel: NutritionOverviewViewModelV1? = nil) {
         if let vm = viewModel {
@@ -77,29 +97,24 @@ struct NutritionOverviewViewV1: View {
         }
     }
 
+    // ============================================================
     // MARK: - Body
+    // ============================================================
 
     var body: some View {
         ZStack {
-
-            LinearGradient(
-                colors: [
-                    .white,
-                    Color.Glu.nutritionDomain.opacity(0.55)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            backgroundGradient
+                .ignoresSafeArea()
 
             ZStack(alignment: .top) {
-
                 TabView(selection: $selectedPage) {
                     dayScrollView.tag(0)
                     dayScrollView.tag(1)
                     dayScrollView.tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .background(Color.clear)
+                .ignoresSafeArea(edges: .bottom)
                 .onPreferenceChange(NutritionScrollOffsetKeyV1.self) { offset in
                     withAnimation(.easeInOut(duration: 0.22)) {
                         hasScrolled = offset < 0
@@ -113,7 +128,6 @@ struct NutritionOverviewViewV1: View {
                     }
                 }
                 .onAppear {
-                    // ✅ Initiales Setzen der Page darf KEIN onChange-Remap auslösen
                     isProgrammaticPageUpdate = true
                     selectedPage = pageIndex(for: viewModel.selectedDayOffset)
                     DispatchQueue.main.async {
@@ -122,15 +136,16 @@ struct NutritionOverviewViewV1: View {
                 }
 
                 OverviewHeader(
-                    title: "Nutrition Overview",
+                    title: L10n.Common.nutritionOverviewTitle,
                     subtitle: headerSubtitle,
                     tintColor: Color.Glu.nutritionDomain,
-                    hasScrolled: hasScrolled
+                    hasScrolled: hasScrolled,
+                    permissionBadgeScope: .nutrition
                 )
 
                 VStack {
                     Spacer()
-                    NutritionPageDotsV1(                                                  // !!! UPDATED
+                    NutritionPageDotsV1(
                         selected: selectedPage,
                         total: 3,
                         color: Color.Glu.nutritionDomain
@@ -145,7 +160,6 @@ struct NutritionOverviewViewV1: View {
             await viewModel.refreshOnNavigation()
         }
         .onChange(of: appState.currentStatsScreen) { newScreen in
-            // Wenn wir aus Detail-Metriken zurückkommen → Overview neu mappen
             if newScreen == .nutritionOverview || newScreen == .none {
                 Task { @MainActor in
                     await viewModel.refreshOnNavigation()
@@ -153,25 +167,30 @@ struct NutritionOverviewViewV1: View {
             }
         }
     }
+}
 
-    // MARK: - Header Subtitle
+// ============================================================
+// MARK: - Pager / Header Helpers
+// ============================================================
 
-    private var headerSubtitle: String {
+private extension NutritionOverviewViewV1 {
+
+    var headerSubtitle: String {
         switch viewModel.selectedDayOffset {
-        case 0: return "TODAY"
-        case -1: return "YESTERDAY"
+        case 0: return L10n.Common.todayUpper
+        case -1: return L10n.Common.yesterdayUpper
         default: return dateString(for: viewModel.selectedDate)
         }
     }
 
-    private func dateString(for date: Date) -> String {
+    func dateString(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
     }
 
-    private func dayOffset(for pageIndex: Int) -> Int {
+    func dayOffset(for pageIndex: Int) -> Int {
         switch pageIndex {
         case 0: return -2
         case 1: return -1
@@ -179,7 +198,7 @@ struct NutritionOverviewViewV1: View {
         }
     }
 
-    private func pageIndex(for offset: Int) -> Int {
+    func pageIndex(for offset: Int) -> Int {
         switch offset {
         case -2: return 0
         case -1: return 1
@@ -188,9 +207,22 @@ struct NutritionOverviewViewV1: View {
     }
 }
 
-// MARK: - Shared Card Background
+// ============================================================
+// MARK: - Reusable Visual Styling
+// ============================================================
 
 private extension NutritionOverviewViewV1 {
+
+    var backgroundGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                .white,
+                Color.Glu.nutritionDomain.opacity(0.75)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
 
     var cardBackground: some View {
         RoundedRectangle(cornerRadius: 12)
@@ -208,51 +240,56 @@ private extension NutritionOverviewViewV1 {
     }
 }
 
-// MARK: - Day ScrollView
+// ============================================================
+// MARK: - Main Day Scroll Container
+// ============================================================
 
 private extension NutritionOverviewViewV1 {
 
     var dayScrollView: some View {
         ScrollView {
             VStack(spacing: 20) {
+                scrollOffsetProbe
 
-                GeometryReader { geo in
-                    Color.clear
-                        .preference(
-                            key: NutritionScrollOffsetKeyV1.self,
-                            value: geo.frame(in: .global).minY
-                        )
-                }
-                .frame(height: 0)
-
-                // 1) SCORE
                 scoreSection
-
-                // 2) MACRO TARGET BARS
                 macroTargetsSection
-
-                // 3) MACRO DISTRIBUTION PIE
                 macroDistributionSection
-
-                // 4) DAILY ENERGY BALANCE
                 energyRingSection
+                energyBalance7DSection
 
-                // 5) INSIGHT (nur TODAY wie Activity)
-                if viewModel.selectedDayOffset == 0 {                                    // !!! NEW
-                    insightSection                                                       // !!! NEW
-                }                                                                        // !!! NEW
+                if viewModel.selectedDayOffset == 0 {
+                    insightSection
+                }
             }
             .padding(.top, 30)
             .padding(.horizontal, 16)
             .padding(.bottom, 60)
         }
-        .refreshable {
-            await viewModel.refresh()                                                    // ✅ VM gated (TODAY only)
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 90)
         }
+        .refreshable {
+            await viewModel.refresh()
+        }
+    }
+
+    var scrollOffsetProbe: some View {
+        GeometryReader { geo in
+            Color.clear
+                .preference(
+                    key: NutritionScrollOffsetKeyV1.self,
+                    value: geo.frame(in: .global).minY
+                )
+        }
+        .frame(height: 0)
     }
 }
 
+// ============================================================
 // MARK: - Score Section
+// ============================================================
 
 private extension NutritionOverviewViewV1 {
 
@@ -261,7 +298,7 @@ private extension NutritionOverviewViewV1 {
             Spacer()
 
             HStack(spacing: 6) {
-                Text("Nutrition Score")
+                Text(L10n.NutritionOverview.scoreLabel)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color.Glu.primaryBlue.opacity(0.7))
 
@@ -288,42 +325,53 @@ private extension NutritionOverviewViewV1 {
     }
 }
 
-// MARK: - Macro Targets
+// ============================================================
+// MARK: - Macro Target Section
+// ============================================================
 
 private extension NutritionOverviewViewV1 {
 
     var macroTargetsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(spacing: 10) {
-
                 macroTargetRow(
-                    label: "Carbs",
+                    label: L10n.Carbs.title,
                     todayValue: viewModel.todayCarbsGrams,
                     targetValue: viewModel.targetCarbsGrams,
                     percentOfGoal: viewModel.carbsGoalPercent,
                     color: Color.Glu.nutritionDomain
                 ) {
-                    appState.currentStatsScreen = .carbs
+                    appState.handleMetricTap(metricName: L10n.Carbs.title, settings: settings)
+                }
+
+                macroSubTargetRow(
+                    label: L10n.Sugar.title,
+                    todayValue: viewModel.todaySugarGrams,
+                    targetValue: viewModel.targetSugarGrams,
+                    percentOfGoal: viewModel.sugarGoalPercent,
+                    color: Color.Glu.activityDomain.opacity(0.75)
+                ) {
+                    appState.handleMetricTap(metricName: L10n.Sugar.title, settings: settings)
                 }
 
                 macroTargetRow(
-                    label: "Protein",
+                    label: L10n.Protein.title,
                     todayValue: viewModel.todayProteinGrams,
                     targetValue: viewModel.targetProteinGrams,
                     percentOfGoal: viewModel.proteinGoalPercent,
                     color: Color.Glu.metabolicDomain
                 ) {
-                    appState.currentStatsScreen = .protein
+                    appState.handleMetricTap(metricName: L10n.Protein.title, settings: settings)
                 }
 
                 macroTargetRow(
-                    label: "Fat",
+                    label: L10n.Fat.title,
                     todayValue: viewModel.todayFatGrams,
                     targetValue: viewModel.targetFatGrams,
                     percentOfGoal: viewModel.fatGoalPercent,
                     color: Color.Glu.bodyDomain
                 ) {
-                    appState.currentStatsScreen = .fat
+                    appState.handleMetricTap(metricName: L10n.Fat.title, settings: settings)
                 }
             }
         }
@@ -340,7 +388,6 @@ private extension NutritionOverviewViewV1 {
         onTap: @escaping () -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-
             HStack {
                 Text(label)
                     .font(.subheadline.weight(.semibold))
@@ -348,12 +395,28 @@ private extension NutritionOverviewViewV1 {
 
                 Spacer()
 
-                let todayText  = "\(todayValue) g"
-                let targetText = targetValue > 0 ? "\(targetValue) g" : "–"
+                let todayText = String.localizedStringWithFormat(
+                    L10n.NutritionOverviewFormat.gramsValue,
+                    todayValue
+                )
 
-                Text("\(todayText) / \(targetText)  (\(percentOfGoal)%)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
+                let targetText = targetValue > 0
+                    ? String.localizedStringWithFormat(
+                        L10n.NutritionOverviewFormat.gramsValue,
+                        targetValue
+                    )
+                    : "–"
+
+                Text(
+                    String.localizedStringWithFormat(
+                        L10n.NutritionOverviewFormat.macroTargetProgress,
+                        todayText,
+                        targetText,
+                        percentOfGoal
+                    )
+                )
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.8))
             }
 
             ZStack(alignment: .leading) {
@@ -391,36 +454,120 @@ private extension NutritionOverviewViewV1 {
             .onTapGesture { onTap() }
         }
     }
+
+    func macroSubTargetRow(
+        label: String,
+        todayValue: Int,
+        targetValue: Int,
+        percentOfGoal: Int,
+        color: Color,
+        onTap: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.55))
+
+                Text(L10n.NutritionOverview.sugarOfCarbsLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.88))
+
+                Spacer()
+
+                let todayText = String.localizedStringWithFormat(
+                    L10n.NutritionOverviewFormat.gramsValue,
+                    todayValue
+                )
+
+                let targetText = targetValue > 0
+                    ? String.localizedStringWithFormat(
+                        L10n.NutritionOverviewFormat.gramsValue,
+                        targetValue
+                    )
+                    : "–"
+
+                Text(
+                    String.localizedStringWithFormat(
+                        L10n.NutritionOverviewFormat.macroTargetProgress,
+                        todayText,
+                        targetText,
+                        percentOfGoal
+                    )
+                )
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.75))
+            }
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.Glu.primaryBlue.opacity(0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.Glu.primaryBlue.opacity(0.18), lineWidth: 0.55)
+                    )
+
+                GeometryReader { geo in
+                    let width = geo.size.width
+                    let ratio = min(max(CGFloat(percentOfGoal) / 100.0, 0), 1.0)
+
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    color.opacity(0.80),
+                                    color.opacity(0.55)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.Glu.primaryBlue.opacity(0.30), lineWidth: 0.45)
+                        )
+                        .frame(width: width * ratio)
+                }
+            }
+            .frame(height: 10)
+        }
+        .padding(.leading, 10)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
+    }
 }
 
-// MARK: - Macro Distribution Pie
+// ============================================================
+// MARK: - Macro Distribution Section
+// ============================================================
 
 private extension NutritionOverviewViewV1 {
 
     var macroDistributionSection: some View {
         HStack(spacing: 12) {
-
             if #available(iOS 17.0, *) {
                 Chart {
                     if viewModel.todayCarbsGrams > 0 {
                         SectorMark(
-                            angle: .value("Carbs", viewModel.carbsShare),
+                            angle: .value(L10n.NutritionOverview.carbsShort, viewModel.carbsShare),
                             innerRadius: .ratio(0.6),
                             angularInset: 1.5
                         )
                         .foregroundStyle(Color.Glu.nutritionDomain)
                     }
+
                     if viewModel.todayProteinGrams > 0 {
                         SectorMark(
-                            angle: .value("Protein", viewModel.proteinShare),
+                            angle: .value(L10n.Protein.title, viewModel.proteinShare),
                             innerRadius: .ratio(0.6),
                             angularInset: 1.5
                         )
                         .foregroundStyle(Color.Glu.metabolicDomain)
                     }
+
                     if viewModel.todayFatGrams > 0 {
                         SectorMark(
-                            angle: .value("Fat", viewModel.fatShare),
+                            angle: .value(L10n.Fat.title, viewModel.fatShare),
                             innerRadius: .ratio(0.6),
                             angularInset: 1.5
                         )
@@ -431,44 +578,49 @@ private extension NutritionOverviewViewV1 {
                 .frame(width: 110, height: 110)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    appState.currentStatsScreen = .carbs
+                    appState.handleMetricTap(metricName: L10n.Carbs.title, settings: settings)
                 }
             } else {
                 ZStack {
                     Circle().fill(Color.white.opacity(0.06))
-                    Text("iOS 17 Pie only")
+                    Text(L10n.NutritionOverview.pieIOS17Only)
                         .font(.caption2)
                         .foregroundStyle(Color.Glu.primaryBlue.opacity(0.6))
                 }
                 .frame(width: 110, height: 110)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    appState.currentStatsScreen = .carbs
+                    appState.handleMetricTap(metricName: L10n.Carbs.title, settings: settings)
                 }
             }
 
             VStack(alignment: .leading, spacing: 8) {
-
                 macroLegendRow(
-                    label: "Carbs",
+                    label: L10n.NutritionOverview.carbsShort,
                     grams: viewModel.todayCarbsGrams,
                     share: viewModel.carbsShare,
                     color: Color.Glu.nutritionDomain
-                ) { appState.currentStatsScreen = .carbs }
+                ) {
+                    appState.handleMetricTap(metricName: L10n.Carbs.title, settings: settings)
+                }
 
                 macroLegendRow(
-                    label: "Protein",
+                    label: L10n.Protein.title,
                     grams: viewModel.todayProteinGrams,
                     share: viewModel.proteinShare,
                     color: Color.Glu.metabolicDomain
-                ) { appState.currentStatsScreen = .protein }
+                ) {
+                    appState.handleMetricTap(metricName: L10n.Protein.title, settings: settings)
+                }
 
                 macroLegendRow(
-                    label: "Fat",
+                    label: L10n.Fat.title,
                     grams: viewModel.todayFatGrams,
                     share: viewModel.fatShare,
                     color: Color.Glu.bodyDomain
-                ) { appState.currentStatsScreen = .fat }
+                ) {
+                    appState.handleMetricTap(metricName: L10n.Fat.title, settings: settings)
+                }
             }
         }
         .padding(12)
@@ -495,26 +647,32 @@ private extension NutritionOverviewViewV1 {
 
             Spacer()
 
-            Text("\(grams) g (\(percentage)%)")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Color.Glu.primaryBlue.opacity(0.9))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            Text(
+                String.localizedStringWithFormat(
+                    L10n.NutritionOverviewFormat.macroShare,
+                    grams,
+                    percentage
+                )
+            )
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(Color.Glu.primaryBlue.opacity(0.9))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
         }
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
     }
 }
 
-// MARK: - Daily Energy Balance
+// ============================================================
+// MARK: - Energy Ring Section
+// ============================================================
 
 private extension NutritionOverviewViewV1 {
 
     var energyRingSection: some View {
         VStack(spacing: 12) {
-
             HStack(alignment: .center, spacing: 16) {
-
                 ZStack {
                     let ringColor: Color = viewModel.isEnergyRemaining
                         ? Color.Glu.nutritionDomain
@@ -543,19 +701,20 @@ private extension NutritionOverviewViewV1 {
                         .animation(.easeOut(duration: 0.8), value: viewModel.energyProgress)
 
                     VStack(spacing: 2) {
-                        Text("\(viewModel.formattedEnergyBalanceValue) kcal")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundColor(viewModel.isEnergyRemaining ? .green : .red)
+                        Text(
+                            String.localizedStringWithFormat(
+                                L10n.NutritionOverviewFormat.kcalValue,
+                                Int(viewModel.formattedEnergyBalanceValue) ?? 0
+                            )
+                        )
+                        .font(.subheadline.weight(.bold))
+                        .foregroundColor(viewModel.isEnergyRemaining ? Color.Glu.successGreen : .red)
 
-                        let label = viewModel.energyBalanceLabelText
-                            .replacingOccurrences(of: "kcal ", with: "")
-                            .capitalized
-
-                        Text(label)
+                        Text(energyRingStatusLabel) // 🟨 UPDATED
                             .font(.caption2.weight(.semibold))
                             .foregroundColor(
                                 viewModel.isEnergyRemaining
-                                ? .green.opacity(0.9)
+                                ? Color.Glu.successGreen
                                 : .red.opacity(0.9)
                             )
                     }
@@ -563,12 +722,9 @@ private extension NutritionOverviewViewV1 {
                 .frame(width: 110, height: 110)
 
                 VStack(spacing: 10) {
-
-                    // Burned
                     VStack(alignment: .leading, spacing: 8) {
-
                         HStack {
-                            Text("Burned")
+                            Text(L10n.NutritionOverviewEnergy.burned)
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(Color.Glu.primaryBlue)
                                 .padding(.horizontal, 8)
@@ -586,12 +742,17 @@ private extension NutritionOverviewViewV1 {
 
                         let totalBurned = viewModel.todayActiveEnergyKcal + viewModel.restingEnergyKcal
 
-                        Text("\(totalBurned.formatted(.number.grouping(.automatic))) kcal")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(Color.Glu.primaryBlue)
+                        Text(
+                            String.localizedStringWithFormat(
+                                L10n.NutritionOverviewFormat.kcalValue,
+                                totalBurned
+                            )
+                        )
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Color.Glu.primaryBlue)
 
                         HStack {
-                            Text("Active")
+                            Text(L10n.NutritionOverviewEnergy.active)
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.75))
                             Spacer()
@@ -601,7 +762,7 @@ private extension NutritionOverviewViewV1 {
                         }
 
                         HStack {
-                            Text("Resting")
+                            Text(L10n.NutritionOverviewEnergy.resting)
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.75))
                             Spacer()
@@ -629,18 +790,16 @@ private extension NutritionOverviewViewV1 {
                             )
                     )
 
-                    // Intake
                     VStack(alignment: .leading, spacing: 8) {
-
                         HStack {
-                            Text("Intake")
+                            Text(L10n.NutritionOverviewEnergy.intake)
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(Color.Glu.primaryBlue)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                                 .background(
                                     Capsule()
-                                        .fill(Color(.systemGray6))
+                                        .fill(Color.white.opacity(0.98))
                                         .overlay(
                                             Capsule()
                                                 .stroke(Color.Glu.nutritionDomain, lineWidth: 0.6)
@@ -654,7 +813,7 @@ private extension NutritionOverviewViewV1 {
                             .foregroundStyle(Color.Glu.primaryBlue)
 
                         HStack {
-                            Text("Nutrition")
+                            Text(L10n.NutritionOverviewEnergy.nutrition)
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.75))
                             Spacer()
@@ -669,7 +828,7 @@ private extension NutritionOverviewViewV1 {
                             .fill(
                                 LinearGradient(
                                     colors: [
-                                        Color(.systemGray6),
+                                        Color.white.opacity(0.96),
                                         Color.Glu.nutritionDomain.opacity(0.20)
                                     ],
                                     startPoint: .topLeading,
@@ -688,24 +847,139 @@ private extension NutritionOverviewViewV1 {
         .background(cardBackground)
         .contentShape(Rectangle())
         .onTapGesture {
-            appState.currentStatsScreen = .calories
+            appState.handleMetricTap(metricName: L10n.NutritionEnergy.title, settings: settings)
         }
+    }
+
+    var energyRingStatusLabel: String { // 🟨 UPDATED
+        let rawLabel = viewModel.isEnergyRemaining
+            ? L10n.NutritionOverviewEnergy.remaining
+            : L10n.NutritionOverviewEnergy.over
+
+        let kcalPrefix = L10n.Common.kcalUnit + " "
+        return rawLabel
+            .replacingOccurrences(of: kcalPrefix, with: "")
+            .capitalized
     }
 }
 
-// MARK: - Insight (TODAY only)
+// ============================================================
+// MARK: - Energy Balance 7D Section
+// ============================================================
+
+private extension NutritionOverviewViewV1 {
+
+    var energyBalance7DSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(L10n.NutritionOverviewEnergy.sectionTitle)
+                    .font(.headline)
+                    .foregroundStyle(Color.Glu.primaryBlue)
+                Spacer()
+            }
+
+            EnergyBalance7DMiniBarChartV1(data: viewModel.last7DaysEnergyBalance)
+                .frame(height: 90)
+        }
+        .padding(12)
+        .background(cardBackground)
+    }
+}
+
+// ============================================================
+// MARK: - Energy Balance Mini Chart
+// ============================================================
+
+private struct EnergyBalance7DMiniBarChartV1: View {
+
+    let data: [EnergyBalanceTrendPointV1]
+
+    var body: some View {
+        Chart {
+            RuleMark(y: .value("Zero", 0))
+                .lineStyle(StrokeStyle(lineWidth: 0.8))
+                .foregroundStyle(Color.Glu.nutritionDomain.opacity(0.95))
+
+            ForEach(data, id: \.date) { point in
+                BarMark(
+                    x: .value("Day", point.date, unit: .day),
+                    y: .value("Balance", point.balanceKcal)
+                )
+                .cornerRadius(4)
+                .opacity(point.hasData ? 1.0 : 0.0)
+                .foregroundStyle(barGradient(for: point.balanceKcal))
+                .annotation(position: point.balanceKcal >= 0 ? .top : .bottom, alignment: .center) {
+                    if point.hasData {
+                        Text(formatKcal(point.balanceKcal))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(Color.Glu.primaryBlue)
+                            .padding(point.balanceKcal >= 0 ? .bottom : .top, 2)
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day)) { value in
+                AxisGridLine().foregroundStyle(Color.clear)
+                AxisTick().foregroundStyle(Color.clear)
+                AxisValueLabel {
+                    if let date = value.as(Date.self) {
+                        Text(weekday2(date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                    }
+                }
+            }
+        }
+        .chartYAxis(.hidden)
+        .chartPlotStyle { plotArea in
+            plotArea.background(Color.clear)
+        }
+    }
+
+    private func barGradient(for balance: Int) -> LinearGradient {
+        let c: Color = balance > 0 ? .red : Color.Glu.successGreen
+        return LinearGradient(
+            colors: [
+                c.opacity(0.25),
+                c
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private func weekday2(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.dateFormat = "EE"
+        return f.string(from: date).replacingOccurrences(of: ".", with: "")
+    }
+
+    private func formatKcal(_ v: Int) -> String {
+        let absV = abs(v)
+        let nf = NumberFormatter()
+        nf.numberStyle = .decimal
+        let s = nf.string(from: NSNumber(value: absV)) ?? "\(absV)"
+        return v >= 0 ? "+\(s)" : "−\(s)"
+    }
+}
+
+// ============================================================
+// MARK: - Insight Section
+// ============================================================
 
 private extension NutritionOverviewViewV1 {
 
     var insightSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Insight")
+            Text(L10n.NutritionOverviewInsight.title)
                 .font(.headline)
                 .foregroundStyle(Color.Glu.primaryBlue)
 
             Text(
                 viewModel.insightText.isEmpty
-                ? "No nutrition data recorded yet today."
+                ? L10n.NutritionOverviewInsight.emptyToday
                 : viewModel.insightText
             )
             .font(.subheadline)
@@ -718,7 +992,9 @@ private extension NutritionOverviewViewV1 {
     }
 }
 
-// MARK: - Preview (minimal, ohne zusätzliche Layout-Mods)
+// ============================================================
+// MARK: - Preview
+// ============================================================
 
 #Preview("Nutrition Overview V1") {
     let previewStore = HealthStore.preview()

@@ -14,18 +14,25 @@ import Combine
 final class MovementSplitViewModelV1: ObservableObject {
 
     // ============================================================
+    // MARK: - Info State
+    // ============================================================
+
+    enum MovementSplitInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
     // MARK: - Published Outputs (SSoT → View)
     // ============================================================
 
-    @Published var movementSplitDaily365: [DailyMovementSplitEntry] = []   // ✅ SSoT (365)
+    @Published var movementSplitDaily365: [DailyMovementSplitEntry] = []
 
-    // ✅ TODAY KPIs
     @Published var todayMoveMinutes: Int = 0
     @Published var todaySedentaryMinutes: Int = 0
     @Published var todaySleepSplitMinutes: Int = 0
 
-    // ✅ UPDATED: Source kommt 1:1 aus HealthStore (keine doppelte Wahrheit)
-    @Published var todayActiveTimeSource: HealthStore.MovementSplitActiveSourceTodayV1 = .none  // !!! UPDATED
+    @Published var todayActiveTimeSource: HealthStore.MovementSplitActiveSourceTodayV1 = .none
 
     private let healthStore: HealthStore
     private var cancellables = Set<AnyCancellable>()
@@ -37,8 +44,6 @@ final class MovementSplitViewModelV1: ObservableObject {
     }
 
     private func bindHealthStore() {
-
-        // ✅ SSoT bind
         healthStore.$movementSplitDaily365
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.movementSplitDaily365 = $0 }
@@ -59,10 +64,9 @@ final class MovementSplitViewModelV1: ObservableObject {
             .sink { [weak self] in self?.todaySleepSplitMinutes = $0 }
             .store(in: &cancellables)
 
-        // ✅ UPDATED: Source Today direkt binden
         healthStore.$movementSplitActiveSourceTodayV1
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.todayActiveTimeSource = $0 }          // !!! UPDATED
+            .sink { [weak self] in self?.todayActiveTimeSource = $0 }
             .store(in: &cancellables)
     }
 
@@ -71,7 +75,7 @@ final class MovementSplitViewModelV1: ObservableObject {
         todayMoveMinutes = healthStore.todayMoveMinutes
         todaySedentaryMinutes = healthStore.todaySedentaryMinutes
         todaySleepSplitMinutes = healthStore.todaySleepSplitMinutes
-        todayActiveTimeSource = healthStore.movementSplitActiveSourceTodayV1   // !!! UPDATED
+        todayActiveTimeSource = healthStore.movementSplitActiveSourceTodayV1
     }
 
     // ============================================================
@@ -83,10 +87,34 @@ final class MovementSplitViewModelV1: ObservableObject {
     var kpiSedentaryText: String { formatMinutes(todaySedentaryMinutes) }
 
     // ============================================================
+    // MARK: - Goldstandard Hint State
+    // ============================================================
+
+    private var hasAnyHistory: Bool { // 🟨 NEW
+        movementSplitDaily365.contains {
+            ($0.sleepMorningMinutes + $0.sleepEveningMinutes + $0.activeMinutes) > 0
+        }
+    }
+
+    private var hasUsableTodayData: Bool { // 🟨 NEW
+        todaySleepSplitMinutes > 0 || todayMoveMinutes > 0
+    }
+
+    private var hasAuthAttention: Bool { // 🟨 NEW
+        healthStore.movementSplitAnyAttentionForBadgesV1
+    }
+
+    var todayInfoState: MovementSplitInfoState? { // 🟨 UPDATED
+        if hasAuthAttention { return .noHistory }
+        if hasUsableTodayData { return nil }
+        if !hasAnyHistory { return .noHistory }
+        return .noTodayData
+    }
+
+    // ============================================================
     // MARK: - UX Hinweis (Pflicht bei Fallback)
     // ============================================================
 
-    /// Hinweis nur, wenn NICHT StandTime (Primärquelle) verwendet wurde.
     var shouldShowActiveSourceHint: Bool {
         switch todayActiveTimeSource {
         case .exerciseMinutes, .workoutMinutes:
@@ -96,15 +124,14 @@ final class MovementSplitViewModelV1: ObservableObject {
         }
     }
 
-    /// Text (sinngemäß, wie gefordert). Kein neues UI-Pattern – nur Text.
     var activeSourceHintText: String? {
         guard shouldShowActiveSourceHint else { return nil }
 
         switch todayActiveTimeSource {
         case .exerciseMinutes:
-            return "Active time based on Exercise Minutes"
+            return L10n.MovementSplit.hintExerciseMinutes
         case .workoutMinutes:
-            return "Active time estimated from Workout Minutes"
+            return L10n.MovementSplit.hintWorkoutMinutes
         case .standTime, .none:
             return nil
         }

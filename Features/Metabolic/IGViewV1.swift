@@ -74,19 +74,18 @@ struct IGViewV1: View {
     // ============================================================
 
     private var dailyScaleDisplay: MetricScaleResult {
-        let base = viewModel.dailyScale   // ✅ ticks + yMax are mg/dL
+        let base = viewModel.dailyScale
         return MetricScaleResult(
             yAxisTicks: base.yAxisTicks,
             yMax: base.yMax,
             valueLabel: { v in
-                // v is mg/dL (chart-space) → label in current unit
                 settings.glucoseUnit.formattedNumber(fromMgdl: v, fractionDigits: unitDigits)
             }
         )
     }
 
     private var periodScaleDisplay: MetricScaleResult {
-        let base = viewModel.periodScale  // ✅ ticks + yMax are mg/dL
+        let base = viewModel.periodScale
         return MetricScaleResult(
             yAxisTicks: base.yAxisTicks,
             yMax: base.yMax,
@@ -96,14 +95,74 @@ struct IGViewV1: View {
         )
     }
 
+    // ============================================================
+    // MARK: - Header Badge
+    // ============================================================
+
+    private var glucoseAttentionBadgeV1: Bool { // 🟨 NEW
+        settings.hasCGM && settings.showPermissionWarnings && healthStore.glucoseAnyAttentionForBadgesV1
+    }
+
+    // ============================================================
+    // MARK: - Today Hint
+    // ============================================================
+
+    private var localizedTodayHint: String? { // 🟨 NEW
+        guard settings.showPermissionWarnings else { return nil }
+        guard let state = viewModel.todayInfoState else { return nil }
+
+        switch state {
+        case .noHistory:
+            return L10n.IG.hintNoDataOrPermission
+        case .noTodayData:
+            return L10n.IG.hintNoToday
+        }
+    }
+
+    // ============================================================
+    // MARK: - Chip Badge Mapping
+    // ============================================================
+
+    private func showsMetabolicWarningBadge(for metric: String) -> Bool {
+        switch metric {
+
+        case L10n.IG.title,
+             L10n.TimeInRange.title,
+             L10n.GMI.title,
+             L10n.SD.title,
+             L10n.CV.title,
+             L10n.Range.title:
+            return settings.hasCGM && healthStore.glucoseAnyAttentionForBadgesV1 // 🟨 NEW
+
+        case L10n.Bolus.title:
+            return settings.hasCGM && settings.isInsulinTreated && healthStore.bolusAnyAttentionForBadgesV1 // 🟨 NEW
+
+        case L10n.Basal.title:
+            return settings.hasCGM && settings.isInsulinTreated && healthStore.basalAnyAttentionForBadgesV1 // 🟨 NEW
+
+        case L10n.BolusBasalRatio.title:
+            return settings.hasCGM
+                && settings.isInsulinTreated
+                && (healthStore.bolusAnyAttentionForBadgesV1 || healthStore.basalAnyAttentionForBadgesV1) // 🟨 NEW
+
+        case L10n.CarbsBolusRatio.title:
+            return settings.hasCGM
+                && settings.isInsulinTreated
+                && (healthStore.carbsReadAuthIssueV1 || healthStore.bolusAnyAttentionForBadgesV1) // 🟨 NEW
+
+        default:
+            return false
+        }
+    }
+
     var body: some View {
+
         MetricDetailScaffold(
-            headerTitle: "Metabolic",
+            headerTitle: L10n.Common.metabolicHeader,
             headerTint: color,
             onBack: { appState.currentStatsScreen = .none },
-            onRefresh: {
-                await healthStore.refreshMetabolic(.pullToRefresh)
-            },
+            onRefresh: { await healthStore.refreshMetabolic(.pullToRefresh) },
+            showsPermissionBadge: glucoseAttentionBadgeV1, // 🟨 NEW
             background: {
                 LinearGradient(
                     colors: [.white, color.opacity(0.55)],
@@ -114,57 +173,56 @@ struct IGViewV1: View {
         ) {
             VStack(alignment: .leading, spacing: 16) {
 
-                MetabolicSectionCardScaledV1(
-                    title: "IG",
+                if let hint = localizedTodayHint { // 🟨 NEW
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(Color.Glu.primaryBlue)
+                        .padding(.horizontal, 2)
+                }
 
-                    // KPI (Default wird durch customKpiContent ersetzt)
-                    kpiTitle: "Mean",
+                MetabolicSectionCardScaledV1(
+                    title: L10n.IG.title,
+
+                    kpiTitle: L10n.IG.meanKPI,
                     kpiCurrentText: formattedTodayIG,
                     kpiSecondaryText: unitLabel,
 
-                    // Charts
                     last90DaysData: viewModel.last90DaysChartData,
                     periodAverages: viewModel.periodAverages,
 
-                    // Scales (✅ axis labels follow unit)
                     dailyScale: dailyScaleDisplay,
                     periodScale: periodScaleDisplay,
 
-                    // Target Marker (kein Goal für IG)
                     goalValue: nil,
 
-                    // Navigation + Chips
                     onMetricSelected: onMetricSelected,
                     metrics: AppState.metabolicVisibleMetrics(settings: settings),
 
-                    // Scale Type
                     dailyScaleType: .glucoseMeanMgdl,
 
-                    // Slots
                     showsDailyChart: true,
                     showsPeriodChart: true,
                     showsMonthlyChart: false,
 
-                    // Custom KPI Content (3 KPIs)
                     customKpiContent: AnyView(
                         HStack(spacing: 12) {
 
                             KPICard(
-                                title: "Last 24h",
+                                title: L10n.IG.last24hKPI,
                                 valueText: formattedLast24hIG,
                                 unit: unitLabel,
                                 domain: .metabolic
                             )
 
                             KPICard(
-                                title: "Today",
+                                title: L10n.IG.todayKPI,
                                 valueText: formattedTodayIG,
                                 unit: unitLabel,
                                 domain: .metabolic
                             )
 
                             KPICard(
-                                title: "Ø 90d",
+                                title: L10n.IG.average90dKPI,
                                 valueText: formattedIG90d,
                                 unit: unitLabel,
                                 domain: .metabolic
@@ -173,9 +231,9 @@ struct IGViewV1: View {
                         .padding(.bottom, 8)
                     ),
 
-                    customChartContent: nil,
-                    customDailyChartBuilder: nil,
-                    customPeriodChartContent: nil
+                    showsWarningBadgeForMetric: { metric in
+                        showsMetabolicWarningBadge(for: metric)
+                    }
                 )
             }
         }

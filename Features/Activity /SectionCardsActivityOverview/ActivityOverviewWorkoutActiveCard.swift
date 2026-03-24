@@ -51,13 +51,13 @@ private struct ActivityOverviewWorkoutTile: View {
 
             HStack {
                 Label {
-                    Text("Workout min")
+                    Text(L10n.ActivityOverview.workoutMinTitle) // UPDATED
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(Color.Glu.primaryBlue)
                 } icon: {
                     Image(systemName: "dumbbell.fill")
                         .font(.system(size: 13))
-                        .foregroundColor(Color.Glu.activityDomain) // ✅ Activity
+                        .foregroundColor(Color.Glu.activityDomain)
                 }
 
                 Spacer()
@@ -94,7 +94,7 @@ private struct ActivityOverviewWorkoutTile: View {
                         Circle()
                             .trim(from: 0, to: ratio)
                             .stroke(
-                                Color.Glu.activityDomain, // ✅ Activity
+                                Color.Glu.activityDomain,
                                 style: StrokeStyle(lineWidth: 7, lineCap: .round)
                             )
                             .rotationEffect(.degrees(-90))
@@ -104,7 +104,7 @@ private struct ActivityOverviewWorkoutTile: View {
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(Color.Glu.primaryBlue)
 
-                            Text("7d")
+                            Text(L10n.ActivityOverview.average7dShort)
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(Color.Glu.primaryBlue)
                         }
@@ -142,13 +142,13 @@ private struct ActivityOverviewActiveEnergyTile: View {
 
             HStack {
                 Label {
-                    Text("Active energy")
+                    Text(L10n.ActivityOverview.activeEnergyTitle) // UPDATED
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(Color.Glu.primaryBlue)
                 } icon: {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 13))
-                        .foregroundColor(Color.Glu.activityDomain) // ✅ Activity
+                        .foregroundColor(Color.Glu.activityDomain)
                 }
 
                 Spacer()
@@ -185,7 +185,7 @@ private struct ActivityOverviewActiveEnergyTile: View {
                         Circle()
                             .trim(from: 0, to: ratio)
                             .stroke(
-                                Color.Glu.activityDomain, // ✅ Activity
+                                Color.Glu.activityDomain,
                                 style: StrokeStyle(lineWidth: 7, lineCap: .round)
                             )
                             .rotationEffect(.degrees(-90))
@@ -195,7 +195,7 @@ private struct ActivityOverviewActiveEnergyTile: View {
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(Color.Glu.primaryBlue)
 
-                            Text("7d")
+                            Text(L10n.ActivityOverview.average7dShort)
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(Color.Glu.primaryBlue)
                         }

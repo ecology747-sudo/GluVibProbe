@@ -10,11 +10,13 @@
 //  - Past days: tagesbasiert aus dailyTIR90 ✅
 //  - Perioden 7/14/30/90: (days-1) Daily + Today RAW ✅
 //
-//  Keine DailyStats-Berechnung in dieser Datei.
-//  Diese Datei aggregiert nur bereits vorhandene Published State.
+//  ✅ UPDATED (Single-writer / Batch gating):
+//  - This file MUST NOT write glucoseReadAuthIssueV1.
+//  - If glucoseReadAuthIssueV1 == true, this file clears TIR summaries (nil) and returns.
 //
 
 import Foundation
+import OSLog // 🟨 UPDATED
 
 extension HealthStore {
 
@@ -23,22 +25,42 @@ extension HealthStore {
     // ------------------------------------------------------------
 
     /// Recompute Period KPIs from existing caches:
-    /// - Today TIR: uses todayTIR* Published Props (computed in HealthStore+CGMV1)
+    /// - Today TIR: uses todayTIR* Published Props (computed in HealthStore+CGMKPIV1)
     /// - Past days: uses dailyTIR90 (tagesbasiert)
     /// - Periods: (days-1) Daily + Today RAW
     @MainActor
     func recomputeCGMPeriodKPIsHybridV1() {
-        if isPreview { return }
+        if isPreview {
+            GluLog.healthStore.debug("recomputeCGMPeriodKPIsHybridV1 skipped | preview=true") // 🟨 UPDATED
+            return
+        }
 
-        // !!! FIX: Today summary must stay "00:00 → now"
+        GluLog.healthStore.notice("recomputeCGMPeriodKPIsHybridV1 started") // 🟨 UPDATED
+
+        // ✅ UPDATED: Batch gate — if permission missing, never compute (avoid stale values)
+        if glucoseReadAuthIssueV1 {
+            tirTodaySummary = nil
+            tir7dSummary = nil
+            tir14dSummary = nil
+            tir30dSummary = nil
+            tir90dSummary = nil
+
+            GluLog.healthStore.notice("recomputeCGMPeriodKPIsHybridV1 aborted | authIssue=true") // 🟨 UPDATED
+            return
+        }
+
+        // Today summary must stay "00:00 → now"
         tirTodaySummary = buildTodayTIRSummaryFromPublished()
 
         // Periods (HYBRID): (days-1) from dailyTIR90 + today from Published
-        tir7dSummary  = buildHybridTIRSummary(days: 7)
+        tir7dSummary = buildHybridTIRSummary(days: 7)
         tir14dSummary = buildHybridTIRSummary(days: 14)
         tir30dSummary = buildHybridTIRSummary(days: 30)
         tir90dSummary = buildHybridTIRSummary(days: 90)
-    }
+
+        GluLog.healthStore.notice(
+            "recomputeCGMPeriodKPIsHybridV1 finished | today=\(self.tirTodaySummary != nil, privacy: .public) d7=\(self.tir7dSummary != nil, privacy: .public) d14=\(self.tir14dSummary != nil, privacy: .public) d30=\(self.tir30dSummary != nil, privacy: .public) d90=\(self.tir90dSummary != nil, privacy: .public)"
+        )    }
 
     // ------------------------------------------------------------
     // MARK: - HYBRID builder (Periods)

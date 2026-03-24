@@ -2,13 +2,6 @@
 //  PremiumOverviewViewV1.swift
 //  GluVibProbe
 //
-//  Premium Home (Overview) — V1
-//
-//  FIX: Unified vertical spacing between ALL overview cards (Single Source of Truth)
-//  - Use ONE spacing token for the main stack
-//  - Conditional blocks must NOT introduce extra/irregular gaps
-//  - Therapy cards are inserted as normal items (no nested VStack)
-//
 
 import SwiftUI
 
@@ -99,11 +92,9 @@ struct PremiumOverviewViewV1: View {
         switch action {
 
         case .openSettings(let domain):
-            // UPDATED: Use your existing safe flow (dismiss Account sheet if needed; then open Settings)
             appState.requestOpenSettings(startDomain: domain)
 
         case .openFAQ:
-            // UPDATED: Open Account sheet + deep-link to FAQ via AppState SSoT
             appState.openAccountRoute(.faq)
         }
     }
@@ -114,7 +105,7 @@ struct PremiumOverviewViewV1: View {
             LinearGradient(
                 colors: [
                     .white,
-                    Color.Glu.metabolicDomain.opacity(0.50)
+                    Color.Glu.metabolicDomain.opacity(0.70)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -189,9 +180,23 @@ struct PremiumOverviewViewV1: View {
 
                     Spacer(minLength: 8)
                 }
-                .padding(.top, 30)
+                .padding(.top, 16) // 🟨 UPDATED: was 30 (header now in safeAreaInset)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
+            }
+            .scrollBounceBehavior(.always) // 🟨 UPDATED: ensures pull gesture exists
+            .simultaneousGesture(                         // ✅ HIER EINFÜGEN
+                DragGesture(minimumDistance: 10),
+                including: .subviews
+            )
+            .safeAreaInset(edge: .top) {   // 🟨 UPDATED: header is part of scroll container; pull-to-refresh becomes reliable
+                OverviewHeader(
+                    title: L10n.Common.metabolicOverviewTitle,
+                    subtitle: premiumHeaderSubtitle,
+                    tintColor: Color.Glu.metabolicDomain,
+                    hasScrolled: hasScrolled,
+                    permissionBadgeScope: .metabolic
+                )
             }
             .onPreferenceChange(PremiumScrollOffsetKey.self) { offset in
                 withAnimation(.easeInOut(duration: 0.22)) {
@@ -206,17 +211,6 @@ struct PremiumOverviewViewV1: View {
                 didInitialLoad = true
                 await healthStore.refreshMetabolicOverview(.navigation)
             }
-
-            OverviewHeader(
-                title: "Premium Overview",
-                subtitle: premiumHeaderSubtitle,
-                tintColor: Color.Glu.metabolicDomain,
-                hasScrolled: hasScrolled
-            )
-
-            // ============================================================
-            // MARK: - Bubble Overlay (ALWAYS top; never behind cards)
-            // ============================================================
 
             if let bubble = activeBubble {
                 GlassyBubbleCard(
@@ -252,7 +246,7 @@ struct PremiumOverviewViewV1: View {
 
     private var premiumHeaderSubtitle: String {
         settings.isInsulinTreated
-            ? "Satus: Insulin metrics On"
+            ? "Status: Insulin metrics On"
             : "Status: Insulin metrics Off"
     }
 }

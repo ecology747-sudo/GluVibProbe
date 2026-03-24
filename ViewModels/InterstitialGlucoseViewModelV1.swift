@@ -19,17 +19,29 @@ import SwiftUI
 final class InterstitialGlucoseViewModelV1: ObservableObject {
 
     // ============================================================
+    // MARK: - Info State
+    // ============================================================
+
+    enum IGInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
     // MARK: - Published Outputs (View-facing)
     // ============================================================
 
     @Published var todayMeanMgdl: Int = 0
     @Published var last90DaysDaily: [DailyGlucoseStatsEntry] = []
 
-    @Published private(set) var ig24hMeanMgdl: Int = 0              // !!! NEW
+    @Published private(set) var ig24hMeanMgdl: Int = 0
     @Published private(set) var ig7dMeanMgdl: Int = 0
     @Published private(set) var ig14dMeanMgdl: Int = 0
     @Published private(set) var ig30dMeanMgdl: Int = 0
     @Published private(set) var ig90dMeanMgdl: Int = 0
+
+    @Published var glucoseReadAuthIssueV1: Bool = false
+    @Published private(set) var todayCoverageMinutes: Int = 0
 
     // ============================================================
     // MARK: - Dependencies
@@ -54,6 +66,7 @@ final class InterstitialGlucoseViewModelV1: ObservableObject {
     // ============================================================
 
     private func bindHealthStore() {
+
         healthStore.$dailyGlucoseStats90
             .receive(on: DispatchQueue.main)
             .sink { [weak self] entries in
@@ -62,11 +75,49 @@ final class InterstitialGlucoseViewModelV1: ObservableObject {
                 self.recomputeFromDaily(entries)
             }
             .store(in: &cancellables)
+
+        healthStore.$glucoseReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.glucoseReadAuthIssueV1 = $0
+            }
+            .store(in: &cancellables)
+
+        healthStore.$todayGlucoseCoverageMinutes
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.todayCoverageMinutes = max(0, $0)
+            }
+            .store(in: &cancellables)
     }
 
     private func syncFromStores() {
         last90DaysDaily = healthStore.dailyGlucoseStats90
         recomputeFromDaily(last90DaysDaily)
+
+        glucoseReadAuthIssueV1 = healthStore.glucoseReadAuthIssueV1
+        todayCoverageMinutes = max(0, healthStore.todayGlucoseCoverageMinutes)
+    }
+
+    // ============================================================
+    // MARK: - Goldstandard Hint State
+    // ============================================================
+
+    var todayInfoState: IGInfoState? { // 🟨 NEW
+
+        if glucoseReadAuthIssueV1 {
+            return .noHistory
+        }
+
+        if todayCoverageMinutes > 0 { return nil }
+
+        let hasAnyHistory = last90DaysDaily.contains { $0.coverageMinutes > 0 }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
     }
 
     // ============================================================
@@ -77,22 +128,21 @@ final class InterstitialGlucoseViewModelV1: ObservableObject {
         todayMeanMgdl > 0 ? "\(todayMeanMgdl)" : "–"
     }
 
-    var formattedIG24h: String { ig24hMeanMgdl > 0 ? "\(ig24hMeanMgdl)" : "–" }   // !!! NEW
-
+    var formattedIG24h: String { ig24hMeanMgdl > 0 ? "\(ig24hMeanMgdl)" : "–" }
     var formattedIG7d: String { ig7dMeanMgdl > 0 ? "\(ig7dMeanMgdl)" : "–" }
     var formattedIG14d: String { ig14dMeanMgdl > 0 ? "\(ig14dMeanMgdl)" : "–" }
     var formattedIG30d: String { ig30dMeanMgdl > 0 ? "\(ig30dMeanMgdl)" : "–" }
     var formattedIG90d: String { ig90dMeanMgdl > 0 ? "\(ig90dMeanMgdl)" : "–" }
 
     // ============================================================
-    // MARK: - Adapter: DailyGlucoseStatsEntry → DailyStepsEntry (Chart expects Int)
+    // MARK: - Adapter: DailyGlucoseStatsEntry → DailyStepsEntry
     // ============================================================
 
     var last90DaysChartData: [DailyStepsEntry] {
-        last90DaysDaily.map { e in
+        last90DaysDaily.map { entry in
             DailyStepsEntry(
-                date: e.date,
-                steps: Int(max(0, e.meanMgdl).rounded())
+                date: entry.date,
+                steps: Int(max(0, entry.meanMgdl).rounded())
             )
         }
     }
@@ -103,10 +153,10 @@ final class InterstitialGlucoseViewModelV1: ObservableObject {
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",  days: 7,  value: ig7dMeanMgdl),
-            .init(label: "14T", days: 14, value: ig14dMeanMgdl),
-            .init(label: "30T", days: 30, value: ig30dMeanMgdl),
-            .init(label: "90T", days: 90, value: ig90dMeanMgdl)
+            .init(label: L10n.Common.period7d,  days: 7,  value: ig7dMeanMgdl),
+            .init(label: L10n.Common.period14d, days: 14, value: ig14dMeanMgdl),
+            .init(label: L10n.Common.period30d, days: 30, value: ig30dMeanMgdl),
+            .init(label: L10n.Common.period90d, days: 90, value: ig90dMeanMgdl)
         ]
     }
 
@@ -121,7 +171,7 @@ final class InterstitialGlucoseViewModelV1: ObservableObject {
 
     var periodScale: MetricScaleResult {
         let vals: [Double] = [
-            Double(ig24hMeanMgdl),                                    // !!! NEW
+            Double(ig24hMeanMgdl),
             Double(ig7dMeanMgdl),
             Double(ig14dMeanMgdl),
             Double(ig30dMeanMgdl),
@@ -138,23 +188,21 @@ final class InterstitialGlucoseViewModelV1: ObservableObject {
         let cal = Calendar.current
         let now = Date()
         let todayStart = cal.startOfDay(for: now)
-        let yesterdayStart = cal.date(byAdding: .day, value: -1, to: todayStart)!   // !!! NEW
+        let yesterdayStart = cal.date(byAdding: .day, value: -1, to: todayStart) ?? todayStart
 
-        // Today KPI: today entry if present + has coverage
-        if let todayEntry = entries.last(where: { cal.isDate($0.date, inSameDayAs: todayStart) || cal.isDate($0.date, inSameDayAs: now) }) {
+        if let todayEntry = entries.last(where: {
+            cal.isDate($0.date, inSameDayAs: todayStart) || cal.isDate($0.date, inSameDayAs: now)
+        }) {
             todayMeanMgdl = todayEntry.coverageMinutes > 0 ? Int(max(0, todayEntry.meanMgdl).rounded()) : 0
         } else {
             todayMeanMgdl = 0
         }
 
-        // Last 24h KPI (Daily-based approximation):
-        // = weighted mean of yesterday (full) + today (partial), using coverageMinutes as weights.   // !!! NEW
         let todayDaily = entries.first(where: { cal.isDate($0.date, inSameDayAs: todayStart) && $0.coverageMinutes > 0 })
         let yesterdayDaily = entries.first(where: { cal.isDate($0.date, inSameDayAs: yesterdayStart) && $0.coverageMinutes > 0 })
 
-        ig24hMeanMgdl = Self.weightedMeanMgdl(today: todayDaily, yesterday: yesterdayDaily)          // !!! NEW
+        ig24hMeanMgdl = Self.weightedMeanMgdl(today: todayDaily, yesterday: yesterdayDaily)
 
-        // Period averages: FULL days only (exclude today), coverage>0
         let fullDays = entries
             .filter { $0.coverageMinutes > 0 }
             .filter { cal.startOfDay(for: $0.date) < todayStart }

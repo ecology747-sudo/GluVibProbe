@@ -2,19 +2,6 @@
 //  WorkoutMinutesViewModelV1.swift
 //  GluVibProbe
 //
-//  V1: Workout Minutes ViewModel (kein Fetch im VM)
-//  - bindet nur HealthStore
-//  - Daten kommen aus:
-//      healthStore.todayWorkoutMinutes
-//      healthStore.last90DaysWorkoutMinutes
-//      healthStore.monthlyWorkoutMinutes
-//      healthStore.workoutMinutesDaily365
-//
-//  ✅ FIX:
-//  - Entfernt doppelte/uneinheitliche Today-Outputs (todayMinutes)
-//  - Einheitliche Naming-Strategie: "Workout Minutes"
-//  - sevenDayAverageWorkoutMinutes wird nun sauber aus daily365 berechnet
-//
 
 import Foundation
 import SwiftUI
@@ -23,15 +10,26 @@ import Combine
 final class WorkoutMinutesViewModelV1: ObservableObject {
 
     // ============================================================
+    // MARK: - Info State
+    // ============================================================
+
+    enum WorkoutMinutesInfoState {
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
     // MARK: - Published Outputs (SSoT → View)
     // ============================================================
 
-    @Published var todayWorkoutMinutes: Int = 0                           // ✅ FIX (einheitlich)
-    @Published var sevenDayAverageWorkoutMinutes: Int = 0                 // ✅ FIX (wird befüllt)
+    @Published var todayWorkoutMinutes: Int = 0
+    @Published var sevenDayAverageWorkoutMinutes: Int = 0
 
-    @Published var last90DaysData: [DailyStepsEntry] = []                 // Chart Adapter (Steps-Pattern)
+    @Published var last90DaysData: [DailyStepsEntry] = []
     @Published var monthlyDataRaw: [MonthlyMetricEntry] = []
     @Published var daily365: [DailyWorkoutMinutesEntry] = []
+
+    @Published var workoutMinutesReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies
@@ -51,20 +49,16 @@ final class WorkoutMinutesViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Bindings (HealthStore → Published)
+    // MARK: - Bindings
     // ============================================================
 
     private func bind() {
 
-        // TODAY
         healthStore.$todayWorkoutMinutes
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.todayWorkoutMinutes = $0
-            }
+            .sink { [weak self] in self?.todayWorkoutMinutes = $0 }
             .store(in: &cancellables)
 
-        // LAST 90 DAYS (Chart)
         healthStore.$last90DaysWorkoutMinutes
             .receive(on: DispatchQueue.main)
             .sink { [weak self] entries in
@@ -74,28 +68,26 @@ final class WorkoutMinutesViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // MONTHLY
         healthStore.$monthlyWorkoutMinutes
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.monthlyDataRaw = $0
-            }
+            .sink { [weak self] in self?.monthlyDataRaw = $0 }
             .store(in: &cancellables)
 
-        // 365 (Base Series + 7d Avg Derivation)
         healthStore.$workoutMinutesDaily365
             .receive(on: DispatchQueue.main)
             .sink { [weak self] series in
                 guard let self else { return }
                 self.daily365 = series
-                self.sevenDayAverageWorkoutMinutes = self.computeSevenDayAverageEndingYesterday(from: series) // ✅ FIX
+                self.sevenDayAverageWorkoutMinutes =
+                    self.computeSevenDayAverageEndingYesterday(from: series)
             }
             .store(in: &cancellables)
-    }
 
-    // ============================================================
-    // MARK: - Initial Sync (Preview / App-Start)
-    // ============================================================
+        healthStore.$workoutMinutesReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.workoutMinutesReadAuthIssueV1 = $0 }
+            .store(in: &cancellables)
+    }
 
     private func sync() {
         todayWorkoutMinutes = healthStore.todayWorkoutMinutes
@@ -105,9 +97,12 @@ final class WorkoutMinutesViewModelV1: ObservableObject {
         }
 
         monthlyDataRaw = healthStore.monthlyWorkoutMinutes
-
         daily365 = healthStore.workoutMinutesDaily365
-        sevenDayAverageWorkoutMinutes = computeSevenDayAverageEndingYesterday(from: daily365)                 // ✅ FIX
+
+        sevenDayAverageWorkoutMinutes =
+            computeSevenDayAverageEndingYesterday(from: daily365)
+
+        workoutMinutesReadAuthIssueV1 = healthStore.workoutMinutesReadAuthIssueV1
     }
 
     // ============================================================
@@ -119,30 +114,41 @@ final class WorkoutMinutesViewModelV1: ObservableObject {
         return "\(todayWorkoutMinutes) min"
     }
 
-    // Workout Minutes hat in V1 kein Target/Goal → Delta bleibt neutral
     var kpiDeltaText: String { "–" }
     var kpiDeltaColor: Color { .secondary }
     var kpiTargetText: String { "" }
 
     // ============================================================
-    // MARK: - Period Averages (Detail Charts)
+    // MARK: - Today Hint State
     // ============================================================
 
-    var avgLast7Days: Int { average(last: 7) }
-    var avgLast14Days: Int { average(last: 14) }
-    var avgLast30Days: Int { average(last: 30) }
-    var avgLast90Days: Int { average(last: 90) }
-    var avgLast180Days: Int { average(last: 180) }
-    var avgLast365Days: Int { average(last: 365) }
+    var todayInfoState: WorkoutMinutesInfoState? {
+
+        if todayWorkoutMinutes > 0 { return nil }
+
+        let hasAnyHistory =
+            daily365.contains { $0.minutes > 0 } ||
+            last90DaysData.contains { $0.steps > 0 }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
+    }
+
+    // ============================================================
+    // MARK: - Period Averages
+    // ============================================================
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",   days: 7,   value: avgLast7Days),
-            .init(label: "14T",  days: 14,  value: avgLast14Days),
-            .init(label: "30T",  days: 30,  value: avgLast30Days),
-            .init(label: "90T",  days: 90,  value: avgLast90Days),
-            .init(label: "180T", days: 180, value: avgLast180Days),
-            .init(label: "365T", days: 365, value: avgLast365Days)
+            .init(label: "7T",   days: 7,   value: average(last: 7)),
+            .init(label: "14T",  days: 14,  value: average(last: 14)),
+            .init(label: "30T",  days: 30,  value: average(last: 30)),
+            .init(label: "90T",  days: 90,  value: average(last: 90)),
+            .init(label: "180T", days: 180, value: average(last: 180)),
+            .init(label: "365T", days: 365, value: average(last: 365))
         ]
     }
 
@@ -152,49 +158,40 @@ final class WorkoutMinutesViewModelV1: ObservableObject {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        guard let endDate = calendar.date(byAdding: .day, value: -1, to: today),
-              let startDate = calendar.date(byAdding: .day, value: -days, to: today) else {
-            return 0
-        }
+        guard let end = calendar.date(byAdding: .day, value: -1, to: today),
+              let start = calendar.date(byAdding: .day, value: -days, to: today)
+        else { return 0 }
 
-        let filtered = daily365.filter { e in
-            let d = calendar.startOfDay(for: e.date)
-            return d >= startDate && d <= endDate && e.minutes > 0
+        let filtered = daily365.filter {
+            let d = calendar.startOfDay(for: $0.date)
+            return d >= start && d <= end && $0.minutes > 0
         }
 
         guard !filtered.isEmpty else { return 0 }
-        let sum = filtered.reduce(0) { $0 + $1.minutes }
-        return sum / filtered.count
+        return filtered.reduce(0) { $0 + $1.minutes } / filtered.count
     }
 
-    // ✅ FIX: 7d Avg für Overview-Card (Ending Yesterday, komplette Tage)
-    private func computeSevenDayAverageEndingYesterday(from series: [DailyWorkoutMinutesEntry]) -> Int {
+    private func computeSevenDayAverageEndingYesterday(
+        from series: [DailyWorkoutMinutesEntry]
+    ) -> Int {
+
         guard !series.isEmpty else { return 0 }
 
         let calendar = Calendar.current
         let todayStart = calendar.startOfDay(for: Date())
 
-        guard let endDate = calendar.date(byAdding: .day, value: -1, to: todayStart),
-              let startDate = calendar.date(byAdding: .day, value: -7, to: todayStart) else {
-            return 0
-        }
+        guard let end = calendar.date(byAdding: .day, value: -1, to: todayStart),
+              let start = calendar.date(byAdding: .day, value: -7, to: todayStart)
+        else { return 0 }
 
-        let filtered = series.filter { e in
-            let d = calendar.startOfDay(for: e.date)
-            return d >= startDate && d <= endDate && e.minutes > 0
+        let filtered = series.filter {
+            let d = calendar.startOfDay(for: $0.date)
+            return d >= start && d <= end && $0.minutes > 0
         }
 
         guard !filtered.isEmpty else { return 0 }
-        let sum = filtered.reduce(0) { $0 + $1.minutes }
-        return sum / filtered.count
+        return filtered.reduce(0) { $0 + $1.minutes } / filtered.count
     }
-
-    // ============================================================
-    // MARK: - Chart Adapters (Steps-Pattern)
-    // ============================================================
-
-    var last90DaysChartData: [DailyStepsEntry] { last90DaysData }
-    var monthlyData: [MonthlyMetricEntry] { monthlyDataRaw }
 
     // ============================================================
     // MARK: - Scales
@@ -202,22 +199,22 @@ final class WorkoutMinutesViewModelV1: ObservableObject {
 
     var dailyScale: MetricScaleResult {
         MetricScaleHelper.scale(
-            last90DaysChartData.map { Double($0.steps) },
-            for: .moveMinutes
+            last90DaysData.map { Double($0.steps) },
+            for: .workoutMinutes // 🟨 UPDATED
         )
     }
 
     var periodScale: MetricScaleResult {
         MetricScaleHelper.scale(
             periodAverages.map { Double($0.value) },
-            for: .moveMinutes
+            for: .workoutMinutes // 🟨 UPDATED
         )
     }
 
     var monthlyScale: MetricScaleResult {
         MetricScaleHelper.scale(
-            monthlyData.map { Double($0.value) },
-            for: .moveMinutes
+            monthlyDataRaw.map { Double($0.value) },
+            for: .workoutMinutes // 🟨 UPDATED
         )
     }
 }

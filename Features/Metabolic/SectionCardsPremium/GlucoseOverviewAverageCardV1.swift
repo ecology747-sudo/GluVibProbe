@@ -44,6 +44,13 @@ struct GlucoseOverviewAverageCardV1: View {
 
     private var avgGlucoseUnitText: String { settings.glucoseUnit.label }
 
+    // UPDATED: manufacturer-independent coverage display based on covered minutes only
+    private var coveragePercentInt: Int {
+        let coverageRaw = healthStore.last24hTIRCoverageMinutes
+        let coverageMinutes = min(1440, max(0, coverageRaw))
+        return Int((Double(coverageMinutes) / 1440.0 * 100.0).rounded())
+    }
+
     // 7-day data (Overview-series; UI-only mapping)
     private var last7DaysMeanEntries: [GlucoseMiniTrendEntry] {
         buildLast7DaysMeanEntries()
@@ -99,7 +106,7 @@ private extension GlucoseOverviewAverageCardV1 {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundColor(Color.Glu.primaryBlue)
 
-            Text("Glucose")
+            Text(L10n.MetabolicOverview.glucoseTitle) // UPDATED
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(Color.Glu.primaryBlue.opacity(0.90))
 
@@ -112,13 +119,10 @@ private extension GlucoseOverviewAverageCardV1 {
                 onTap: {
                     presentInfoBubble(
                         PremiumOverviewViewV1.InfoBubble(
-                            title: "Last 24 Hours (24h)",
-                            message:
-                                "This metric uses the most recent CGM readings available in Apple Health. "
-                                + "Due to system synchronization, newer readings may appear with a short delay. "
-                                + "Details are available in the FAQs.",
-                            primaryTitle: "OK",
-                            secondaryTitle: "Open FAQs",
+                            title: L10n.MetabolicOverview.last24hInfoTitle, // UPDATED
+                            message: L10n.MetabolicOverview.last24hInfoMessage, // UPDATED
+                            primaryTitle: L10n.MetabolicOverview.infoPrimaryOK, // UPDATED
+                            secondaryTitle: L10n.MetabolicOverview.infoSecondaryOpenFAQs, // UPDATED
                             secondaryAction: .openFAQ
                         )
                     )
@@ -127,13 +131,12 @@ private extension GlucoseOverviewAverageCardV1 {
 
             Spacer()
 
-            let coverage = max(0, healthStore.last24hTIRCoverageMinutes)
-            let samples = Int((Double(coverage) / 5.0).rounded())
-            let maxSamples = 288
-
-            Text("CGM \(samples) / \(maxSamples)")
+            Text("\(L10n.MetabolicOverview.coverageLabel) \(coveragePercentInt)%") // UPDATED
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.65))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.85)
         }
     }
 }
@@ -213,12 +216,31 @@ private struct GlucoseMiniTrendChart: View {
                 }
             }
         }
-        .chartXAxis(.hidden)
+        .chartXAxis { // UPDATED
+            AxisMarks(values: .stride(by: .day)) { value in
+                AxisGridLine().foregroundStyle(Color.clear)
+                AxisTick().foregroundStyle(Color.clear)
+                AxisValueLabel(centered: true) {
+                    if let date = value.as(Date.self) {
+                        Text(weekday2(date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                    }
+                }
+            }
+        }
         .chartYAxis(.hidden)
         .chartXScale(range: .plotDimension(padding: 0))
         .chartPlotStyle { plotArea in
             plotArea.background(Color.clear)
         }
+    }
+
+    private func weekday2(_ date: Date) -> String { // UPDATED
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.dateFormat = "EE"
+        return f.string(from: date).replacingOccurrences(of: ".", with: "")
     }
 }
 
@@ -386,11 +408,11 @@ private struct GlucoseFiveZoneBar: View {
                         .frame(height: barH)
 
                     HStack(spacing: 0) {
-                        Rectangle().fill(Color.Glu.acidCGMRed)         .frame(width: wRedL)
-                        Rectangle().fill(Color.yellow.opacity(0.80))   .frame(width: wYelL)
-                        Rectangle().fill(Color.Glu.metabolicDomain)    .frame(width: wGreen)
-                        Rectangle().fill(Color.yellow.opacity(0.80))   .frame(width: wYelR)
-                        Rectangle().fill(Color.Glu.acidCGMRed)         .frame(width: wRedR)
+                        Rectangle().fill(Color.Glu.acidCGMRed).frame(width: wRedL)
+                        Rectangle().fill(Color.yellow.opacity(0.80)).frame(width: wYelL)
+                        Rectangle().fill(Color.Glu.metabolicDomain).frame(width: wGreen)
+                        Rectangle().fill(Color.yellow.opacity(0.80)).frame(width: wYelR)
+                        Rectangle().fill(Color.Glu.acidCGMRed).frame(width: wRedR)
                     }
                     .frame(height: barH)
                     .clipShape(RoundedRectangle(cornerRadius: r))
@@ -410,13 +432,13 @@ private struct GlucoseFiveZoneBar: View {
 
                     Text(labelMin)
                         .font(.caption2.weight(.semibold))
-                        .foregroundColor(Color.green)
+                        .foregroundColor(Color.Glu.successGreen)
                         .frame(width: width, alignment: .leading)
                         .offset(x: clampLabelX(xMin, width: width) + 2, y: 0)
 
                     Text(labelMax)
                         .font(.caption2.weight(.semibold))
-                        .foregroundColor(Color.green)
+                        .foregroundColor(Color.Glu.successGreen)
                         .position(x: clampLabelX(xMax, width: width), y: labelsH / 2)
 
                     Text(labelVH)

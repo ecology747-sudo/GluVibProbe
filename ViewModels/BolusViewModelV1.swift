@@ -5,9 +5,10 @@
 //  V1: Bolus ViewModel (Metabolic)
 //  - KEIN Fetch im ViewModel
 //  - Single Source of Truth: HealthStore (dailyBolus90)
-//  - Rolling / Period-Averages im ViewModel (UI-nah)
+//  - Period-Averages im ViewModel (UI-nah)
 //  - Maximal 90 Tage (kein 180/365)
-//  - KPI-Strings inkl. Einheit ("IE")
+//  - KPI-Strings inkl. Einheit
+//  - Daily/Period Scale: MetricScaleType.insulinUnitsDaily
 //
 
 import Foundation
@@ -18,14 +19,21 @@ import SwiftUI
 final class BolusViewModelV1: ObservableObject {
 
     // ============================================================
+    // MARK: - Info State
+    // ============================================================
+
+    enum BolusInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
+    // ============================================================
     // MARK: - Published Outputs (View-facing)
     // ============================================================
 
-    // KPI
     @Published var todayBolusUnits: Double = 0
-
-    // Chart Data (SSoT: dailyBolus90)
     @Published var last90DaysData: [DailyBolusEntry] = []
+    @Published var bolusReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies
@@ -40,7 +48,6 @@ final class BolusViewModelV1: ObservableObject {
 
     init(healthStore: HealthStore = .shared) {
         self.healthStore = healthStore
-
         bindHealthStore()
         syncFromStores()
     }
@@ -58,11 +65,19 @@ final class BolusViewModelV1: ObservableObject {
                 self?.todayBolusUnits = Self.extractTodayValue(from: $0)
             }
             .store(in: &cancellables)
+
+        healthStore.$bolusReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.bolusReadAuthIssueV1 = $0
+            }
+            .store(in: &cancellables)
     }
 
     private func syncFromStores() {
         last90DaysData = healthStore.dailyBolus90
         todayBolusUnits = Self.extractTodayValue(from: healthStore.dailyBolus90)
+        bolusReadAuthIssueV1 = healthStore.bolusReadAuthIssueV1
     }
 
     // ============================================================
@@ -70,32 +85,24 @@ final class BolusViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodayBolus: String {
-        "\(format1(todayBolusUnits)) U"
+        "\(format1(todayBolusUnits)) \(localizedInsulinUnit(for: todayBolusUnits))"
     }
 
-    var formattedAvg7dBolus: String {                                        // !!! NEW
-        let avg7 = Double(periodAverages.first(where: { $0.days == 7 })?.value ?? 0)
-        return "\(format1(avg7)) U"
-    }                                                                         // !!! NEW
+    // ============================================================
+    // MARK: - Goldstandard Hint State
+    // ============================================================
 
-    var kpiDeltaText: String {                                                // !!! NEW
-        let avg7 = Double(periodAverages.first(where: { $0.days == 7 })?.value ?? 0)
-        let diff = todayBolusUnits - avg7
+    var todayInfoState: BolusInfoState? { // 🟨 NEW
+        if todayBolusUnits > 0 { return nil }
 
-        let sign: String = diff > 0 ? "+" : diff < 0 ? "−" : "±"
-        let absValue = abs(diff)
+        let hasAnyHistory = last90DaysData.contains { $0.bolusUnits > 0 }
 
-        return "\(sign) \(format1(absValue))"
-    }                                                                         // !!! NEW
+        if !hasAnyHistory {
+            return .noHistory
+        }
 
-    var kpiDeltaColor: Color {                                                // !!! NEW
-        let avg7 = Double(periodAverages.first(where: { $0.days == 7 })?.value ?? 0)
-        let diff = todayBolusUnits - avg7
-
-        if diff > 0 { return .orange }
-        if diff < 0 { return .green }
-        return Color.Glu.primaryBlue
-    }                                                                         // !!! NEW
+        return .noTodayData
+    }
 
     // ============================================================
     // MARK: - Period Averages (max 90 Tage)
@@ -116,7 +123,6 @@ final class BolusViewModelV1: ObservableObject {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        // Durchschnitt über „letzte volle Tage“ (endet gestern) wie im Steps-Flow
         guard
             let endDate = calendar.date(byAdding: .day, value: -1, to: today),
             let startDate = calendar.date(byAdding: .day, value: -days, to: today)
@@ -140,17 +146,11 @@ final class BolusViewModelV1: ObservableObject {
     // ============================================================
 
     var dailyScale: MetricScaleResult {
-        MetricScaleHelper.scale(
-            last90DaysData.map { $0.bolusUnits }.filter { $0 > 0 },
-            for: .insulinUnitsDaily
-        )
+        MetricScaleHelper.scale(last90DaysData.map { $0.bolusUnits }, for: .insulinUnitsDaily)
     }
 
     var periodScale: MetricScaleResult {
-        MetricScaleHelper.scale(
-            periodAverages.map { Double($0.value) }.filter { $0 > 0 },
-            for: .insulinUnitsDaily
-        )
+        MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .insulinUnitsDaily)
     }
 
     // ============================================================
@@ -160,12 +160,17 @@ final class BolusViewModelV1: ObservableObject {
     private static func extractTodayValue(from daily: [DailyBolusEntry]) -> Double {
         let calendar = Calendar.current
         let todayStart = calendar.startOfDay(for: Date())
-
         return daily.first(where: { calendar.isDate($0.date, inSameDayAs: todayStart) })?.bolusUnits ?? 0
     }
 
     private func format1(_ value: Double) -> String {
         numberFormatter1.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    private func localizedInsulinUnit(for value: Double) -> String {
+        abs(value - 1.0) < 0.0001
+            ? L10n.Common.insulinUnitSingular
+            : L10n.Common.insulinUnitPlural
     }
 
     private let numberFormatter1: NumberFormatter = {

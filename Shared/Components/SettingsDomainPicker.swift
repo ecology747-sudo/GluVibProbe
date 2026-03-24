@@ -119,7 +119,7 @@ struct SettingsDomainPicker: View {
                     y: shadowYOffset
                 )
                 .foregroundStyle(
-                    isActive ? Color.white : Color.Glu.primaryBlue.opacity(0.95)
+                    isActive ? Color.white : Color.Glu.systemForeground.opacity(0.95) // 🟨 UPDATED
                 )
                 .scaleEffect(isActive ? 1.05 : 1.0)
                 .animation(.easeOut(duration: 0.15), value: isActive)

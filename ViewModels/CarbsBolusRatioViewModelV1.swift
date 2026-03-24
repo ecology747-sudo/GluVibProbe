@@ -2,11 +2,6 @@
 //  CarbsBolusRatioViewModelV1.swift
 //  GluVibProbe
 //
-//  V1: Carbs/Bolus Ratio ViewModel (Metabolic)
-//  - KEIN Fetch im ViewModel
-//  - SSoT: HealthStore.dailyCarbBolusRatio90 (derived in HealthStore)
-//  - UI-nah: Period Averages + Formatting + Chart-Adapter (Int*10 via DailyStepsEntry)
-//
 
 import Foundation
 import Combine
@@ -15,25 +10,19 @@ import SwiftUI
 @MainActor
 final class CarbsBolusRatioViewModelV1: ObservableObject {
 
-    // ============================================================
-    // MARK: - Published Outputs (View-facing)
-    // ============================================================
+    enum CarbsBolusRatioInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
 
     @Published var todayRatio: Double = 0
-
-    /// Chart Adapter: ratio (Double) -> Int*10 im `steps` Feld
     @Published var last90DaysRatioInt10: [DailyStepsEntry] = []
 
-    // ============================================================
-    // MARK: - Dependencies
-    // ============================================================
+    @Published var bolusReadAuthIssueV1: Bool = false
+    @Published var carbsReadAuthIssueV1: Bool = false
 
     private let healthStore: HealthStore
     private var cancellables = Set<AnyCancellable>()
-
-    // ============================================================
-    // MARK: - Init
-    // ============================================================
 
     init(healthStore: HealthStore = .shared) {
         self.healthStore = healthStore
@@ -41,13 +30,8 @@ final class CarbsBolusRatioViewModelV1: ObservableObject {
         syncFromStores()
     }
 
-    // ============================================================
-    // MARK: - Bindings (SSoT → ViewModel)
-    // ============================================================
-
     private func bindHealthStore() {
 
-        // !!! NEW: single SSoT stream (derived in HealthStore)
         healthStore.$dailyCarbBolusRatio90
             .receive(on: DispatchQueue.main)
             .sink { [weak self] daily in
@@ -55,48 +39,67 @@ final class CarbsBolusRatioViewModelV1: ObservableObject {
                 self.recompute(from: daily)
             }
             .store(in: &cancellables)
+
+        healthStore.$bolusReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in
+                self?.bolusReadAuthIssueV1 = value
+            }
+            .store(in: &cancellables)
+
+        healthStore.$carbsReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in
+                self?.carbsReadAuthIssueV1 = value
+            }
+            .store(in: &cancellables)
     }
 
     private func syncFromStores() {
-        recompute(from: healthStore.dailyCarbBolusRatio90) // !!! NEW
+        recompute(from: healthStore.dailyCarbBolusRatio90)
+        bolusReadAuthIssueV1 = healthStore.bolusReadAuthIssueV1
+        carbsReadAuthIssueV1 = healthStore.carbsReadAuthIssueV1
     }
-
-    // ============================================================
-    // MARK: - Recompute (UI-nahe Mapping)
-    // ============================================================
 
     private func recompute(from daily: [DailyCarbBolusRatioEntry]) {
 
         let calendar = Calendar.current
 
-        // Map to chart-friendly series (Int*10)
         let mapped: [DailyStepsEntry] = daily
-            .map { e in
-                let day = calendar.startOfDay(for: e.date)
-                let int10 = Int((max(0, e.gramsPerUnit) * 10.0).rounded())
+            .map { entry in
+                let day = calendar.startOfDay(for: entry.date)
+                let int10 = Int((max(0, entry.gramsPerUnit) * 10.0).rounded())
                 return DailyStepsEntry(date: day, steps: max(0, int10))
             }
             .sorted { $0.date < $1.date }
 
-        self.last90DaysRatioInt10 = mapped
+        last90DaysRatioInt10 = mapped
 
-        // Today KPI (Double)
         let todayStart = calendar.startOfDay(for: Date())
         let todayInt10 = mapped.first(where: { calendar.isDate($0.date, inSameDayAs: todayStart) })?.steps ?? 0
-        self.todayRatio = Double(todayInt10) / 10.0
+        todayRatio = Double(todayInt10) / 10.0
     }
-
-    // ============================================================
-    // MARK: - KPI Formatting
-    // ============================================================
 
     var formattedTodayRatio: String {
-        "\(format1(todayRatio)) g/U"
+        guard todayRatio > 0 else { return "–" }
+        return "\(format1(todayRatio)) \(L10n.CarbsBolusRatio.gramsPerUnit)"
     }
 
-    // ============================================================
-    // MARK: - Period Averages (≤ 90d) — endet gestern
-    // ============================================================
+    var todayInfoState: CarbsBolusRatioInfoState? { // 🟨 NEW
+
+        if bolusReadAuthIssueV1 || carbsReadAuthIssueV1 {
+            return .noHistory
+        }
+
+        if todayRatio > 0 { return nil }
+
+        let hasAnyHistory = last90DaysRatioInt10.contains { $0.steps > 0 }
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
+    }
 
     var periodAverages: [PeriodAverageEntry] {
         [
@@ -119,43 +122,39 @@ final class CarbsBolusRatioViewModelV1: ObservableObject {
         else { return 0 }
 
         let filtered = last90DaysRatioInt10.filter { entry in
-            let d = calendar.startOfDay(for: entry.date)
-            return d >= startDate && d <= endDate && entry.steps > 0
+            let day = calendar.startOfDay(for: entry.date)
+            return day >= startDate && day <= endDate && entry.steps > 0
         }
 
         guard !filtered.isEmpty else { return 0 }
 
         let sum = filtered.reduce(0) { $0 + $1.steps }
-        let avg = Double(sum) / Double(filtered.count)
-
-        return Int(avg.rounded())
+        return Int((Double(sum) / Double(filtered.count)).rounded())
     }
 
-    // ============================================================
-    // MARK: - Scales (Int*10 Domain)
-    // ============================================================
-
     var dailyScale: MetricScaleResult {
-        MetricScaleHelper.scale(last90DaysRatioInt10.map { Double($0.steps) }, for: .ratioInt10)   // !!! NEW
+        MetricScaleHelper.scale(
+            last90DaysRatioInt10.map { Double($0.steps) },
+            for: .ratioInt10
+        )
     }
 
     var periodScale: MetricScaleResult {
-        MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .ratioInt10)         // !!! NEW
+        MetricScaleHelper.scale(
+            periodAverages.map { Double($0.value) },
+            for: .ratioInt10
+        )
     }
-
-    // ============================================================
-    // MARK: - Formatting Helpers
-    // ============================================================
 
     private func format1(_ value: Double) -> String {
         numberFormatter1.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     private let numberFormatter1: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 1
-        f.minimumFractionDigits = 1
-        return f
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 1
+        formatter.minimumFractionDigits = 1
+        return formatter
     }()
 }

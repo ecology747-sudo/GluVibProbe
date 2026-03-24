@@ -9,13 +9,11 @@ struct TimeInRangeViewV1: View {
 
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
-    @EnvironmentObject private var settings: SettingsModel   // ✅ keep (needed for targets + capability metrics)
+    @EnvironmentObject private var settings: SettingsModel
 
     @StateObject private var viewModel: TimeInRangeViewModelV1
 
     let onMetricSelected: (String) -> Void
-
-    private let color = Color.Glu.metabolicDomain
 
     init(
         viewModel: TimeInRangeViewModelV1? = nil,
@@ -38,17 +36,77 @@ struct TimeInRangeViewV1: View {
         MetricScaleHelper.scale([100], for: .percent0to100)
     }
 
+    // ============================================================
+    // MARK: - Header Badge
+    // ============================================================
+
+    private var glucoseAttentionBadgeV1: Bool { // 🟨 NEW
+        settings.hasCGM && settings.showPermissionWarnings && healthStore.glucoseAnyAttentionForBadgesV1
+    }
+
+    // ============================================================
+    // MARK: - Today Hint
+    // ============================================================
+
+    private var localizedTodayHint: String? { // 🟨 NEW
+        guard settings.showPermissionWarnings else { return nil }
+        guard let state = viewModel.todayInfoState else { return nil }
+
+        switch state {
+        case .noHistory:
+            return L10n.TimeInRange.hintNoDataOrPermission
+        case .noTodayData:
+            return L10n.TimeInRange.hintNoToday
+        }
+    }
+
+    // ============================================================
+    // MARK: - Chip Badge Mapping
+    // ============================================================
+
+    private func showsMetabolicWarningBadge(for metric: String) -> Bool {
+        switch metric {
+
+        case L10n.IG.title,
+             L10n.TimeInRange.title,
+             L10n.GMI.title,
+             L10n.SD.title,
+             L10n.CV.title,
+             L10n.Range.title:
+            return settings.hasCGM && healthStore.glucoseAnyAttentionForBadgesV1 // 🟨 NEW
+
+        case L10n.Bolus.title:
+            return settings.hasCGM && settings.isInsulinTreated && healthStore.bolusAnyAttentionForBadgesV1 // 🟨 NEW
+
+        case L10n.Basal.title:
+            return settings.hasCGM && settings.isInsulinTreated && healthStore.basalAnyAttentionForBadgesV1 // 🟨 NEW
+
+        case L10n.BolusBasalRatio.title:
+            return settings.hasCGM
+                && settings.isInsulinTreated
+                && (healthStore.bolusAnyAttentionForBadgesV1 || healthStore.basalAnyAttentionForBadgesV1) // 🟨 NEW
+
+        case L10n.CarbsBolusRatio.title:
+            return settings.hasCGM
+                && settings.isInsulinTreated
+                && (healthStore.carbsReadAuthIssueV1 || healthStore.bolusAnyAttentionForBadgesV1) // 🟨 NEW
+
+        default:
+            return false
+        }
+    }
+
     var body: some View {
+
         MetricDetailScaffold(
-            headerTitle: "Metabolic",
-            headerTint: color,
+            headerTitle: L10n.Common.metabolicHeader,
+            headerTint: Color.Glu.metabolicDomain, // 🟨 UPDATED
             onBack: { appState.currentStatsScreen = .none },
-            onRefresh: {
-                await healthStore.refreshMetabolic(.pullToRefresh)
-            },
+            onRefresh: { await healthStore.refreshMetabolic(.pullToRefresh) },
+            showsPermissionBadge: glucoseAttentionBadgeV1,
             background: {
                 LinearGradient(
-                    colors: [.white, color.opacity(0.55)],
+                    colors: [.white, Color.Glu.metabolicDomain.opacity(0.55)], // 🟨 UPDATED
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -56,56 +114,56 @@ struct TimeInRangeViewV1: View {
         ) {
             VStack(alignment: .leading, spacing: 16) {
 
-                MetabolicSectionCardScaledV1(
-                    title: "TIR",
+                if let hint = localizedTodayHint { // 🟨 NEW
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(Color.Glu.primaryBlue)
+                        .padding(.horizontal, 2)
+                }
 
-                    // KPI (Default wird durch customKpiContent ersetzt)
-                    kpiTitle: "Target",
+                MetabolicSectionCardScaledV1(
+                    title: L10n.TimeInRange.title,
+
+                    kpiTitle: L10n.TimeInRange.targetKPI,
                     kpiCurrentText: viewModel.formattedTodayTIRPercent,
                     kpiSecondaryText: nil,
 
-                    // Charts
                     last90DaysData: viewModel.last90DaysChartData,
                     periodAverages: viewModel.periodAverages,
 
-                    // Scales (fixed 0..100)
                     dailyScale: fixedPercentScale,
                     periodScale: fixedPercentScale,
 
-                    // Target Marker
                     goalValue: Double(settings.tirTargetPercent),
 
-                    // Navigation + Chips
                     onMetricSelected: onMetricSelected,
-                    metrics: AppState.metabolicVisibleMetrics(settings: settings),   // ✅ FIX
+                    metrics: AppState.metabolicVisibleMetrics(settings: settings),
 
-                    // Scale Type
                     dailyScaleType: .percent0to100,
 
-                    // Slots
                     showsDailyChart: true,
                     showsPeriodChart: true,
                     showsMonthlyChart: false,
 
-                    // Custom KPI Content (3 KPIs wie Steps)
                     customKpiContent: AnyView(
                         HStack(spacing: 12) {
+
                             KPICard(
-                                title: "Target",
+                                title: L10n.TimeInRange.targetKPI,
                                 valueText: "\(settings.tirTargetPercent)%",
                                 unit: nil,
                                 domain: .metabolic
                             )
 
                             KPICard(
-                                title: "Today",
+                                title: L10n.TimeInRange.todayKPI,
                                 valueText: viewModel.formattedTodayTIRPercent,
                                 unit: nil,
                                 domain: .metabolic
                             )
 
                             KPICard(
-                                title: "Delta",
+                                title: L10n.TimeInRange.deltaKPI,
                                 valueText: "\(viewModel.kpiDeltaText)%",
                                 unit: nil,
                                 valueColor: viewModel.kpiDeltaColor,
@@ -115,10 +173,9 @@ struct TimeInRangeViewV1: View {
                         .padding(.bottom, 8)
                     ),
 
-                    // No extra chart blocks
-                    customChartContent: nil,
-                    customDailyChartBuilder: nil,
-                    customPeriodChartContent: nil
+                    showsWarningBadgeForMetric: { metric in
+                        showsMetabolicWarningBadge(for: metric)
+                    }
                 )
             }
         }

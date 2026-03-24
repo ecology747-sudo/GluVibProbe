@@ -101,7 +101,7 @@ struct Last90DaysScaledBarChart<DataPoint>: View {
                     y: .value("Goal", goalValue)
                 )
                 .lineStyle(StrokeStyle(lineWidth: 1.8, dash: [6, 6]))
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.Glu.successGreen)
             }
 
             // 🔴 Trendlinie

@@ -16,8 +16,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D0306B582EC9DD49004BE9C2"
-               BuildableName = "GluVibProbe.app"
-               BlueprintName = "GluVibProbe"
+               BuildableName = "GluVib.app"
+               BlueprintName = "GluVib"
                ReferencedContainer = "container:GluVib.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -45,8 +45,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D0306B582EC9DD49004BE9C2"
-            BuildableName = "GluVibProbe.app"
-            BlueprintName = "GluVibProbe"
+            BuildableName = "GluVib.app"
+            BlueprintName = "GluVib"
             ReferencedContainer = "container:GluVib.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -62,8 +62,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D0306B582EC9DD49004BE9C2"
-            BuildableName = "GluVibProbe.app"
-            BlueprintName = "GluVibProbe"
+            BuildableName = "GluVib.app"
+            BlueprintName = "GluVib"
             ReferencedContainer = "container:GluVib.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

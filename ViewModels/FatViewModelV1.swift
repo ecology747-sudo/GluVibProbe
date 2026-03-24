@@ -20,14 +20,14 @@ final class FatViewModelV1: ObservableObject {
     // MARK: - Published Outputs (View-facing)
     // ============================================================
 
-    // KPIs
     @Published var todayFatGrams: Int = 0
     @Published var dailyFatGoalInt: Int = 0
 
-    // Chart Data
     @Published var last90DaysData: [DailyFatEntry] = []
     @Published var monthlyFatData: [MonthlyMetricEntry] = []
-    @Published var fatDaily365: [DailyFatEntry] = []                      // !!! UPDATED (Name wie HealthStore)
+    @Published var fatDaily365: [DailyFatEntry] = []
+
+    @Published var fatReadAuthIssueV1: Bool = false // 🟨 NEW
 
     // ============================================================
     // MARK: - Dependencies
@@ -76,7 +76,12 @@ final class FatViewModelV1: ObservableObject {
 
         healthStore.$fatDaily365
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.fatDaily365 = $0 }               // !!! UPDATED
+            .sink { [weak self] in self?.fatDaily365 = $0 }
+            .store(in: &cancellables)
+
+        healthStore.$fatReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.fatReadAuthIssueV1 = $0 } // 🟨 NEW
             .store(in: &cancellables)
     }
 
@@ -92,8 +97,32 @@ final class FatViewModelV1: ObservableObject {
         todayFatGrams = healthStore.todayFatGrams
         last90DaysData = healthStore.last90DaysFat
         monthlyFatData = healthStore.monthlyFat
-        fatDaily365 = healthStore.fatDaily365                             // !!! UPDATED
+        fatDaily365 = healthStore.fatDaily365
         dailyFatGoalInt = settings.dailyFat
+        fatReadAuthIssueV1 = healthStore.fatReadAuthIssueV1 // 🟨 NEW
+    }
+
+    // ============================================================
+    // MARK: - Availability (Today)
+    // ============================================================
+
+    private var hasTodayDatapoint: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        let in90 = last90DaysData.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        let in365 = fatDaily365.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
+
+        return in90 || in365
+    }
+
+    private var hasTodayPositiveFat: Bool {
+        todayFatGrams > 0
     }
 
     // ============================================================
@@ -101,47 +130,75 @@ final class FatViewModelV1: ObservableObject {
     // ============================================================
 
     var formattedTodayFat: String {
+        guard hasTodayDatapoint || hasTodayPositiveFat else { return "–" } // 🟨 UPDATED
         let formatted = numberFormatter.string(from: NSNumber(value: todayFatGrams)) ?? "\(todayFatGrams)"
-        return "\(formatted) g"                                           // !!! UPDATED
+        return "\(formatted) g"
     }
 
     var formattedDailyFatGoal: String {
         let formatted = numberFormatter.string(from: NSNumber(value: dailyFatGoalInt)) ?? "\(dailyFatGoalInt)"
-        return "\(formatted) g"                                           // !!! UPDATED
+        return "\(formatted) g"
     }
 
     var kpiDeltaText: String {
+        guard hasTodayDatapoint || hasTodayPositiveFat else { return "–" } // 🟨 UPDATED
         let diff = todayFatGrams - dailyFatGoalInt
         let sign: String = diff > 0 ? "+" : diff < 0 ? "−" : "±"
         let absValue = abs(diff)
         let formatted = numberFormatter.string(from: NSNumber(value: absValue)) ?? "\(absValue)"
-        return "\(sign) \(formatted) g"                                   // !!! UPDATED
+        return "\(sign) \(formatted) g"
     }
 
     var kpiDeltaColor: Color {
+        guard hasTodayDatapoint || hasTodayPositiveFat else { return Color.Glu.primaryBlue } // 🟨 UPDATED
         let diff = todayFatGrams - dailyFatGoalInt
-        if diff > 0 { return .green }
+        if diff > 0 { return Color.Glu.successGreen }
         if diff < 0 { return .red }
         return Color.Glu.primaryBlue
+    }
+
+    // ============================================================
+    // MARK: - Info Hint (Today) — Goldstandard Nutrition
+    // ============================================================
+
+    var todayInfoText: String? { // 🟨 UPDATED
+
+        if settings.showPermissionWarnings && fatReadAuthIssueV1 {
+            return L10n.Fat.hintNoDataOrPermission
+        }
+
+        if hasTodayDatapoint || hasTodayPositiveFat {
+            return nil
+        }
+
+        let hasAnyHistoryPositive =
+            last90DaysData.contains { $0.grams > 0 } ||
+            fatDaily365.contains { $0.grams > 0 }
+
+        if !hasAnyHistoryPositive {
+            return L10n.Fat.hintNoDataOrPermission
+        }
+
+        return L10n.Fat.hintNoToday
     }
 
     // ============================================================
     // MARK: - Period Averages
     // ============================================================
 
-    var periodAverages: [PeriodAverageEntry] {
+    var periodAverages: [PeriodAverageEntry] { // 🟨 UPDATED
         [
-            .init(label: "7T",   days: 7,   value: averageFat(last: 7)),
-            .init(label: "14T",  days: 14,  value: averageFat(last: 14)),
-            .init(label: "30T",  days: 30,  value: averageFat(last: 30)),
-            .init(label: "90T",  days: 90,  value: averageFat(last: 90)),
-            .init(label: "180T", days: 180, value: averageFat(last: 180)),
-            .init(label: "365T", days: 365, value: averageFat(last: 365))
+            .init(label: L10n.Common.period7d, days: 7, value: averageFat(last: 7)),
+            .init(label: L10n.Common.period14d, days: 14, value: averageFat(last: 14)),
+            .init(label: L10n.Common.period30d, days: 30, value: averageFat(last: 30)),
+            .init(label: L10n.Common.period90d, days: 90, value: averageFat(last: 90)),
+            .init(label: L10n.Common.period180d, days: 180, value: averageFat(last: 180)),
+            .init(label: L10n.Common.period365d, days: 365, value: averageFat(last: 365))
         ]
     }
 
     private func averageFat(last days: Int) -> Int {
-        let source = fatDaily365.isEmpty ? last90DaysData : fatDaily365   // !!! UPDATED
+        let source = fatDaily365.isEmpty ? last90DaysData : fatDaily365
         guard !source.isEmpty else { return 0 }
 
         let calendar = Calendar.current
@@ -162,42 +219,42 @@ final class FatViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Chart Label Helper (NO unit)                      // !!! NEW
+    // MARK: - Chart Label Helper (NO unit)
     // ============================================================
 
-    private func numberOnlyLabel(_ value: Double) -> String {            // !!! NEW
-        "\(Int(value.rounded()))"                                        // !!! NEW
-    }                                                                    // !!! NEW
-
-    // ============================================================
-    // MARK: - Chart Scales (NO unit in charts)                  // !!! UPDATED
-    // ============================================================
-
-    var dailyScale: MetricScaleResult {                                   // !!! UPDATED
-        let base = MetricScaleHelper.scale(last90DaysData.map { Double($0.grams) }, for: .grams) // !!! UPDATED
-        return MetricScaleResult(                                          // !!! UPDATED
-            yAxisTicks: base.yAxisTicks,                                   // !!! UPDATED
-            yMax: base.yMax,                                               // !!! UPDATED
-            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }      // !!! UPDATED
-        )                                                                  // !!! UPDATED
+    private func numberOnlyLabel(_ value: Double) -> String {
+        "\(Int(value.rounded()))"
     }
 
-    var periodScale: MetricScaleResult {                                  // !!! UPDATED
-        let base = MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .grams) // !!! UPDATED
-        return MetricScaleResult(                                          // !!! UPDATED
-            yAxisTicks: base.yAxisTicks,                                   // !!! UPDATED
-            yMax: base.yMax,                                               // !!! UPDATED
-            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }      // !!! UPDATED
-        )                                                                  // !!! UPDATED
+    // ============================================================
+    // MARK: - Chart Scales (NO unit in charts)
+    // ============================================================
+
+    var dailyScale: MetricScaleResult {
+        let base = MetricScaleHelper.scale(last90DaysData.map { Double($0.grams) }, for: .grams)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
     }
 
-    var monthlyScale: MetricScaleResult {                                 // !!! UPDATED
-        let base = MetricScaleHelper.scale(monthlyFatData.map { Double($0.value) }, for: .grams) // !!! UPDATED
-        return MetricScaleResult(                                          // !!! UPDATED
-            yAxisTicks: base.yAxisTicks,                                   // !!! UPDATED
-            yMax: base.yMax,                                               // !!! UPDATED
-            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }      // !!! UPDATED
-        )                                                                  // !!! UPDATED
+    var periodScale: MetricScaleResult {
+        let base = MetricScaleHelper.scale(periodAverages.map { Double($0.value) }, for: .grams)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
+    }
+
+    var monthlyScale: MetricScaleResult {
+        let base = MetricScaleHelper.scale(monthlyFatData.map { Double($0.value) }, for: .grams)
+        return MetricScaleResult(
+            yAxisTicks: base.yAxisTicks,
+            yMax: base.yMax,
+            valueLabel: { [numberOnlyLabel] v in numberOnlyLabel(v) }
+        )
     }
 
     // ============================================================

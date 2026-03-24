@@ -12,6 +12,7 @@
 
 import Foundation
 import HealthKit
+import OSLog // 🟨 UPDATED
 
 // ============================================================
 // MARK: - Models
@@ -86,12 +87,18 @@ extension HealthStore {
     /// - Today: overwritten from RAW (minute-based, 00:00 → now)
     @MainActor
     func refreshRangeDailyStats90V1Async(thresholds: RangeThresholds) async {
-        if isPreview { return }
+        if isPreview {
+            GluLog.range.debug("refreshRangeDailyStats90V1Async skipped | preview=true") // 🟨 UPDATED
+            return
+        }
 
         let t = thresholds.normalized()
+        GluLog.range.notice( // 🟨 UPDATED
+            "refreshRangeDailyStats90V1Async started | min=\(t.glucoseMin, privacy: .public) max=\(t.glucoseMax, privacy: .public) veryLow=\(t.veryLowLimit, privacy: .public) veryHigh=\(t.veryHighLimit, privacy: .public)"
+        )
+
         let out = await fetchDailyRange90V1RawAsync(thresholds: t)
 
-        // Only overwrite TODAY with RAW (hybrid rule)
         let rawToday = buildDailyRangeTodayFromRawV1(thresholds: t)
 
         var merged = out
@@ -105,9 +112,11 @@ extension HealthStore {
             }
         }
 
-        await MainActor.run {
-            self.dailyRange90 = merged.sorted { $0.date < $1.date }
-        }
+        self.dailyRange90 = merged.sorted { $0.date < $1.date }
+
+        GluLog.range.notice( // 🟨 UPDATED
+            "refreshRangeDailyStats90V1Async finished | entries=\(self.dailyRange90.count, privacy: .public) todayOverwritten=\(rawToday != nil, privacy: .public)"
+        )
     }
 
     /// Recompute HYBRID period summaries (7/14/30/90):
@@ -115,33 +124,60 @@ extension HealthStore {
     /// - today (00:00 → now) from RAW (cgmSamples3Days)
     @MainActor
     func recomputeRangePeriodSummariesHybridV1(thresholds: RangeThresholds) {
-        if isPreview { return }
+        if isPreview {
+            GluLog.range.debug("recomputeRangePeriodSummariesHybridV1 skipped | preview=true") // 🟨 UPDATED
+            return
+        }
 
         let t = thresholds.normalized()
+        GluLog.range.notice( // 🟨 UPDATED
+            "recomputeRangePeriodSummariesHybridV1 started | min=\(t.glucoseMin, privacy: .public) max=\(t.glucoseMax, privacy: .public) veryLow=\(t.veryLowLimit, privacy: .public) veryHigh=\(t.veryHighLimit, privacy: .public)"
+        )
 
         let today = buildTodayRangeSummaryFromRawV1(thresholds: t)
         rangeTodaySummary = today
 
-        range7dSummary  = buildHybridRangeSummaryV1(days: 7, today: today)
+        range7dSummary = buildHybridRangeSummaryV1(days: 7, today: today)
         range14dSummary = buildHybridRangeSummaryV1(days: 14, today: today)
         range30dSummary = buildHybridRangeSummaryV1(days: 30, today: today)
         range90dSummary = buildHybridRangeSummaryV1(days: 90, today: today)
+
+        GluLog.range.notice( // 🟨 UPDATED
+            "recomputeRangePeriodSummariesHybridV1 finished | today=\(self.rangeTodaySummary != nil, privacy: .public) d7=\(self.range7dSummary != nil, privacy: .public) d14=\(self.range14dSummary != nil, privacy: .public) d30=\(self.range30dSummary != nil, privacy: .public) d90=\(self.range90dSummary != nil, privacy: .public)"
+        )
     }
 
     @MainActor
     func recomputeRangeAllHybridV1(thresholds: RangeThresholds) {
-        if isPreview { return }
+        if isPreview {
+            GluLog.range.debug("recomputeRangeAllHybridV1 skipped | preview=true") // 🟨 UPDATED
+            return
+        }
+
+        GluLog.range.notice("recomputeRangeAllHybridV1 started") // 🟨 UPDATED
         recomputeRangePeriodSummariesHybridV1(thresholds: thresholds)
+        GluLog.range.notice("recomputeRangeAllHybridV1 finished") // 🟨 UPDATED
     }
 
     /// One-shot HYBRID refresh (fills dailyRange90 + all summaries)
     @MainActor
     func refreshRangeHybridV1Async(thresholds: RangeThresholds) async {
-        if isPreview { return }
+        if isPreview {
+            GluLog.range.debug("refreshRangeHybridV1Async skipped | preview=true") // 🟨 UPDATED
+            return
+        }
 
         let t = thresholds.normalized()
+        GluLog.range.notice( // 🟨 UPDATED
+            "refreshRangeHybridV1Async started | min=\(t.glucoseMin, privacy: .public) max=\(t.glucoseMax, privacy: .public) veryLow=\(t.veryLowLimit, privacy: .public) veryHigh=\(t.veryHighLimit, privacy: .public)"
+        )
+
         await refreshRangeDailyStats90V1Async(thresholds: t)
         recomputeRangeAllHybridV1(thresholds: t)
+
+        GluLog.range.notice( // 🟨 UPDATED
+            "refreshRangeHybridV1Async finished | dailyEntries=\(self.dailyRange90.count, privacy: .public) today=\(self.rangeTodaySummary != nil, privacy: .public) d7=\(self.range7dSummary != nil, privacy: .public) d14=\(self.range14dSummary != nil, privacy: .public) d30=\(self.range30dSummary != nil, privacy: .public) d90=\(self.range90dSummary != nil, privacy: .public)"
+        )
     }
 }
 
@@ -188,11 +224,9 @@ private extension HealthStore {
             expected += max(0, e.expectedMinutes)
         }
 
-        // Past days are full days (defensive)
         let expectedPastCalendar = pastDays * 1440
         if expected < expectedPastCalendar { expected = expectedPastCalendar }
 
-        // Add TODAY (00:00 → now) from RAW
         if let today {
             veryLow += max(0, today.veryLowMinutes)
             low += max(0, today.lowMinutes)
@@ -257,7 +291,6 @@ private extension HealthStore {
             }
         }
 
-        // Clamp sum to coverage (coverage authoritative)
         let sum = veryLow + low + inRange + high + veryHigh
         if sum > coverage {
             var overflow = sum - coverage
@@ -331,7 +364,6 @@ private extension HealthStore {
             }
         }
 
-        // Clamp to coverage
         let sum = veryLow + low + inRange + high + veryHigh
         if sum > coverage {
             var overflow = sum - coverage
@@ -382,13 +414,19 @@ private extension HealthStore {
     }
 
     func fetchDailyRange90V1RawAsync(thresholds: RangeThresholds) async -> [DailyRangeEntry] {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else { return [] }
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose) else {
+            GluLog.range.error("fetchDailyRange90V1RawAsync failed | quantityTypeUnavailable=true") // 🟨 UPDATED
+            return []
+        }
 
         let cal = Calendar.current
         let now = Date()
         let todayStart = cal.startOfDay(for: now)
 
-        guard let startDate = cal.date(byAdding: .day, value: -(90 - 1), to: todayStart) else { return [] }
+        guard let startDate = cal.date(byAdding: .day, value: -(90 - 1), to: todayStart) else {
+            GluLog.range.error("fetchDailyRange90V1RawAsync failed | startDateUnavailable=true") // 🟨 UPDATED
+            return []
+        }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
@@ -406,7 +444,10 @@ private extension HealthStore {
             self.healthStore.execute(query)
         }
 
-        if samples.isEmpty { return [] }
+        if samples.isEmpty {
+            GluLog.range.debug("fetchDailyRange90V1RawAsync finished | samples=0 entries=0") // 🟨 UPDATED
+            return []
+        }
 
         var byTimestamp: [TimeInterval: (date: Date, mgdl: Double)] = [:]
         byTimestamp.reserveCapacity(samples.count)
@@ -501,6 +542,10 @@ private extension HealthStore {
             )
         }
 
-        return out.sorted { $0.date < $1.date }
+        let result = out.sorted { $0.date < $1.date }
+        GluLog.range.debug( // 🟨 UPDATED
+            "fetchDailyRange90V1RawAsync finished | samples=\(samples.count, privacy: .public) entries=\(result.count, privacy: .public)"
+        )
+        return result
     }
 }

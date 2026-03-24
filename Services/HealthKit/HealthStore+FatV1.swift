@@ -2,83 +2,232 @@
 //  HealthStore+FatV1.swift
 //  GluVibProbe
 //
-//  Nutrition V1: Fat (g) aus Apple Health
+//  Domain: Nutrition / Fat
+//  Screen Type: HealthStore Metric Extension V1
 //
-//  HealthKit-Quelle: .dietaryFatTotal
-//  - Fetch-only (SSoT = HealthStore Published Properties)
-//  - KEINE Legacy-Aliasse
-//  - V1 kompatibel
+//  Purpose
+//  - Owns the read-only Apple Health fat fetch pipeline for Fat V1.
+//  - Resolves read-auth issues via deterministic permission-only probe logic.
+//  - Publishes today, last-90-days, monthly and 365-day fat data into HealthStore.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT Published Fat Values) → ViewModels → Views
+//
+//  Key Connections
+//  - FatViewModelV1
+//  - NutritionOverviewViewModelV1
+//
+//  Important
+//  - fatReadAuthIssueV1 is set EXCLUSIVELY by probeFatReadAuthIssueV1Async().
+//  - Probe is permission-only: empty results are DATA state, never permission state.
+//  - All fetches are DATA ONLY and may be blocked only by a real read-auth issue.
 //
 
 import Foundation
 import HealthKit
-
-// ============================================================
-// MARK: - HealthStore + Fat (V1 kompatibel)
-// ============================================================
+import OSLog
 
 extension HealthStore {
 
     // ============================================================
-    // MARK: - Public API (Entry Points) — V1 kompatibel
+    // MARK: - Auth Issue Classification
     // ============================================================
 
-    /// TODAY KPI (Fat in g seit 00:00)
+    private func _isReadAuthIssueV1(_ error: Error?) -> Bool {
+        guard let ns = error as NSError? else { return false }
+        guard ns.domain == HKErrorDomain else { return false }
+        guard let code = HKError.Code(rawValue: ns.code) else { return false }
+        return code == .errorAuthorizationDenied || code == .errorAuthorizationNotDetermined
+    }
+
+    // 🟨 UPDATED
+    private func _resolveReadAuthIssueV1(
+        error: Error?
+    ) -> Bool {
+        _isReadAuthIssueV1(error)
+    }
+
+    // ============================================================
+    // MARK: - Deterministic Read-Query Probe (Single-Writer)
+    // ============================================================
+
+    @MainActor
+    func probeFatReadAuthIssueV1Async() async -> Bool {
+        if isPreview {
+            fatReadAuthIssueV1 = false
+            GluLog.fat.debug("fat probe skipped | preview=true")
+            return false
+        }
+
+        let key = ObjectIdentifier(self)
+
+        if let cached = FatProbeGateV1.cachedResultIfFresh(for: key) {
+            fatReadAuthIssueV1 = cached
+            GluLog.fat.debug("fat probe cache hit | authIssue=\(cached, privacy: .public)")
+            return cached
+        }
+
+        if let inFlight = FatProbeGateV1.inFlightTask(for: key) {
+            let v = await inFlight.value
+            fatReadAuthIssueV1 = v
+            GluLog.fat.debug("fat probe joined inFlight | authIssue=\(v, privacy: .public)")
+            return v
+        }
+
+        GluLog.fat.notice("fat probe started")
+
+        let task = Task<Bool, Never> { [weak self] in
+            guard let self else { return false }
+
+            guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else {
+                GluLog.fat.error("fat probe failed | quantityTypeUnavailable=true")
+                return true
+            }
+
+            let now = Date()
+
+            // 🟨 UPDATED
+            let predicate = HKQuery.predicateForSamples(withStart: nil, end: now, options: [])
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+            let isAuthIssue: Bool = await withCheckedContinuation { continuation in
+                let query = HKSampleQuery(
+                    sampleType: type,
+                    predicate: predicate,
+                    limit: 1,
+                    sortDescriptors: [sort]
+                ) { [weak self] _, _, error in
+                    guard let self else {
+                        continuation.resume(returning: false)
+                        return
+                    }
+
+                    // 🟨 UPDATED
+                    let resolved = self._resolveReadAuthIssueV1(error: error)
+                    continuation.resume(returning: resolved)
+                }
+
+                self.healthStore.execute(query)
+            }
+
+            return isAuthIssue
+        }
+
+        FatProbeGateV1.setInFlight(task, for: key)
+        let result = await task.value
+        FatProbeGateV1.finish(with: result, for: key)
+
+        fatReadAuthIssueV1 = result
+        GluLog.fat.notice("fat probe finished | authIssue=\(result, privacy: .public)")
+        return result
+    }
+
+    // ============================================================
+    // MARK: - Public API (Today / 90d / Monthly / 365)
+    // ============================================================
+
+    @MainActor
     func fetchFatTodayV1() {
         if isPreview {
+            fatReadAuthIssueV1 = false
             let calendar = Calendar.current
             let todayStart = calendar.startOfDay(for: Date())
             let value = previewDailyFat
                 .first(where: { calendar.isDate($0.date, inSameDayAs: todayStart) })?
                 .grams ?? 0
-
-            DispatchQueue.main.async {
-                self.todayFatGrams = max(0, value)
-            }
+            todayFatGrams = max(0, value)
+            GluLog.fat.debug("fetchFatTodayV1 preview applied | todayFat=\(self.todayFatGrams, privacy: .public)")
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else { return }
+        GluLog.fat.notice("fetchFatTodayV1 started")
 
-        let start = Calendar.current.startOfDay(for: Date())
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: Date(), options: .strictStartDate)
-
-        let query = HKStatisticsQuery(
-            quantityType: type,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum
-        ) { [weak self] _, result, _ in
-            let value = result?.sumQuantity()?.doubleValue(for: .gram()) ?? 0
-            DispatchQueue.main.async {
-                self?.todayFatGrams = max(0, Int(value.rounded()))
+        Task { @MainActor in
+            let authIssue = await probeFatReadAuthIssueV1Async()
+            if authIssue {
+                todayFatGrams = 0
+                GluLog.fat.notice("fetchFatTodayV1 aborted | authIssue=true")
+                return
             }
-        }
 
-        healthStore.execute(query)
+            guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else {
+                GluLog.fat.error("fetchFatTodayV1 failed | quantityTypeUnavailable=true")
+                return
+            }
+
+            let start = Calendar.current.startOfDay(for: Date())
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: Date(), options: .strictStartDate)
+
+            let query = HKStatisticsQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum
+            ) { [weak self] _, result, _ in
+                guard let self else { return }
+                let value = result?.sumQuantity()?.doubleValue(for: .gram()) ?? 0
+                DispatchQueue.main.async {
+                    if self.fatReadAuthIssueV1 {
+                        self.todayFatGrams = 0
+                        GluLog.fat.notice("fetchFatTodayV1 finished | blockedByAuthIssue=true")
+                        return
+                    }
+                    self.todayFatGrams = max(0, Int(value.rounded()))
+                    GluLog.fat.notice("fetchFatTodayV1 finished | todayFat=\(self.todayFatGrams, privacy: .public)")
+                }
+            }
+
+            healthStore.execute(query)
+        }
     }
 
-    /// 90d Serie (für Charts)
+    @MainActor
     func fetchLast90DaysFatV1() {
         if isPreview {
+            fatReadAuthIssueV1 = false
             let slice = Array(previewDailyFat.suffix(90)).sorted { $0.date < $1.date }
-            DispatchQueue.main.async { self.last90DaysFat = slice }
+            last90DaysFat = slice
+            GluLog.fat.debug("fetchLast90DaysFatV1 preview applied | entries=\(slice.count, privacy: .public)")
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else { return }
+        GluLog.fat.notice("fetchLast90DaysFatV1 started")
 
-        fetchDailySeriesFatV1(
-            quantityType: type,
-            unit: .gram(),
-            days: 90
-        ) { [weak self] entries in
-            self?.last90DaysFat = entries
+        Task { @MainActor in
+            let authIssue = await probeFatReadAuthIssueV1Async()
+            if authIssue {
+                last90DaysFat = []
+                GluLog.fat.notice("fetchLast90DaysFatV1 aborted | authIssue=true")
+                return
+            }
+
+            guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else {
+                GluLog.fat.error("fetchLast90DaysFatV1 failed | quantityTypeUnavailable=true")
+                return
+            }
+
+            fetchDailySeriesFatV1(
+                quantityType: type,
+                unit: .gram(),
+                days: 90
+            ) { [weak self] entries in
+                guard let self else { return }
+                DispatchQueue.main.async {
+                    if self.fatReadAuthIssueV1 {
+                        self.last90DaysFat = []
+                        GluLog.fat.notice("fetchLast90DaysFatV1 finished | blockedByAuthIssue=true")
+                        return
+                    }
+                    self.last90DaysFat = entries
+                    GluLog.fat.notice("fetchLast90DaysFatV1 finished | entries=\(entries.count, privacy: .public)")
+                }
+            }
         }
     }
 
-    /// Monatswerte (cumulativeSum pro Monat; letzte ~5 Monate)
+    @MainActor
     func fetchMonthlyFatV1() {
         if isPreview {
+            fatReadAuthIssueV1 = false
             let calendar = Calendar.current
             let today = Date()
             let startOfToday = calendar.startOfDay(for: today)
@@ -106,79 +255,138 @@ extension HealthStore {
                 )
             }
 
-            DispatchQueue.main.async { self.monthlyFat = result }
+            monthlyFat = result
+            GluLog.fat.debug("fetchMonthlyFatV1 preview applied | entries=\(result.count, privacy: .public)")
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else { return }
+        GluLog.fat.notice("fetchMonthlyFatV1 started")
 
-        let calendar = Calendar.current
-        let today = Date()
-        let startOfToday = calendar.startOfDay(for: today)
+        Task { @MainActor in
+            let authIssue = await probeFatReadAuthIssueV1Async()
+            if authIssue {
+                monthlyFat = []
+                GluLog.fat.notice("fetchMonthlyFatV1 aborted | authIssue=true")
+                return
+            }
 
-        guard
-            let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today)),
-            let startDate = calendar.date(byAdding: .month, value: -4, to: currentMonth)
-        else { return }
+            guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else {
+                GluLog.fat.error("fetchMonthlyFatV1 failed | quantityTypeUnavailable=true")
+                return
+            }
 
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: startOfToday, options: .strictStartDate)
-        let interval = DateComponents(month: 1)
+            let calendar = Calendar.current
+            let today = Date()
+            let startOfToday = calendar.startOfDay(for: today)
 
-        let query = HKStatisticsCollectionQuery(
-            quantityType: type,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum,
-            anchorDate: startDate,
-            intervalComponents: interval
-        )
+            guard
+                let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today)),
+                let startDate = calendar.date(byAdding: .month, value: -4, to: currentMonth)
+            else {
+                GluLog.fat.error("fetchMonthlyFatV1 failed | startDateUnavailable=true")
+                return
+            }
 
-        query.initialResultsHandler = { [weak self] _, results, _ in
-            guard let self, let results else { return }
+            let predicate = HKQuery.predicateForSamples(withStart: startDate, end: startOfToday, options: .strictStartDate)
+            let interval = DateComponents(month: 1)
 
-            var temp: [MonthlyMetricEntry] = []
+            let query = HKStatisticsCollectionQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum,
+                anchorDate: startDate,
+                intervalComponents: interval
+            )
 
-            results.enumerateStatistics(from: startDate, to: startOfToday) { stats, _ in
-                let value = stats.sumQuantity()?.doubleValue(for: .gram()) ?? 0
-                let monthShort = stats.startDate.formatted(.dateTime.month(.abbreviated))
-                temp.append(
-                    MonthlyMetricEntry(
-                        monthShort: monthShort,
-                        value: max(0, Int(value.rounded()))
+            query.initialResultsHandler = { [weak self] _, results, _ in
+                guard let self else { return }
+
+                if self.fatReadAuthIssueV1 {
+                    DispatchQueue.main.async { self.monthlyFat = [] }
+                    GluLog.fat.notice("fetchMonthlyFatV1 finished | blockedByAuthIssue=true")
+                    return
+                }
+
+                guard let results else {
+                    DispatchQueue.main.async { self.monthlyFat = [] }
+                    GluLog.fat.notice("fetchMonthlyFatV1 finished | resultsEmpty=true")
+                    return
+                }
+
+                var temp: [MonthlyMetricEntry] = []
+                results.enumerateStatistics(from: startDate, to: startOfToday) { stats, _ in
+                    let value = stats.sumQuantity()?.doubleValue(for: .gram()) ?? 0
+                    let monthShort = stats.startDate.formatted(.dateTime.month(.abbreviated))
+                    temp.append(
+                        MonthlyMetricEntry(
+                            monthShort: monthShort,
+                            value: max(0, Int(value.rounded()))
+                        )
                     )
-                )
+                }
+
+                DispatchQueue.main.async {
+                    if self.fatReadAuthIssueV1 {
+                        self.monthlyFat = []
+                        GluLog.fat.notice("fetchMonthlyFatV1 finished | blockedByAuthIssue=true")
+                        return
+                    }
+                    self.monthlyFat = temp
+                    GluLog.fat.notice("fetchMonthlyFatV1 finished | entries=\(temp.count, privacy: .public)")
+                }
             }
 
-            DispatchQueue.main.async {
-                self.monthlyFat = temp
-            }
+            self.healthStore.execute(query)
         }
-
-        healthStore.execute(query)
     }
 
-    /// 365d Basereihe (SSoT) — heavy (Secondary)
+    @MainActor
     func fetchFatDaily365V1() {
         if isPreview {
-            // !!! UPDATED: suffix + sort (Steps-V1 Pattern Konsistenz)
-            let slice = Array(previewDailyFat.suffix(365)).sorted { $0.date < $1.date }   // !!! UPDATED
-            DispatchQueue.main.async { self.fatDaily365 = slice }                          // !!! UPDATED
+            fatReadAuthIssueV1 = false
+            let slice = Array(previewDailyFat.suffix(365)).sorted { $0.date < $1.date }
+            fatDaily365 = slice
+            GluLog.fat.debug("fetchFatDaily365V1 preview applied | entries=\(slice.count, privacy: .public)")
             return
         }
 
-        guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else { return }
+        GluLog.fat.notice("fetchFatDaily365V1 started")
 
-        fetchDailySeriesFatV1(
-            quantityType: type,
-            unit: .gram(),
-            days: 365
-        ) { [weak self] entries in
-            self?.fatDaily365 = entries
+        Task { @MainActor in
+            let authIssue = await probeFatReadAuthIssueV1Async()
+            if authIssue {
+                fatDaily365 = []
+                GluLog.fat.notice("fetchFatDaily365V1 aborted | authIssue=true")
+                return
+            }
+
+            guard let type = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal) else {
+                GluLog.fat.error("fetchFatDaily365V1 failed | quantityTypeUnavailable=true")
+                return
+            }
+
+            fetchDailySeriesFatV1(
+                quantityType: type,
+                unit: .gram(),
+                days: 365
+            ) { [weak self] entries in
+                guard let self else { return }
+                DispatchQueue.main.async {
+                    if self.fatReadAuthIssueV1 {
+                        self.fatDaily365 = []
+                        GluLog.fat.notice("fetchFatDaily365V1 finished | blockedByAuthIssue=true")
+                        return
+                    }
+                    self.fatDaily365 = entries
+                    GluLog.fat.notice("fetchFatDaily365V1 finished | entries=\(entries.count, privacy: .public)")
+                }
+            }
         }
     }
 }
 
 // ============================================================
-// MARK: - Private Helpers (Fat V1 only)
+// MARK: - Private Helpers
 // ============================================================
 
 private extension HealthStore {
@@ -195,13 +403,12 @@ private extension HealthStore {
 
         guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
             DispatchQueue.main.async { assign([]) }
+            GluLog.fat.error("fetchDailySeriesFatV1 failed | startDateUnavailable=true")
             return
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: [])
         let interval = DateComponents(day: 1)
-
-        var daily: [DailyFatEntry] = []
 
         let query = HKStatisticsCollectionQuery(
             quantityType: quantityType,
@@ -211,8 +418,23 @@ private extension HealthStore {
             intervalComponents: interval
         )
 
-        query.initialResultsHandler = { _, results, _ in
-            results?.enumerateStatistics(from: startDate, to: now) { stats, _ in
+        query.initialResultsHandler = { [weak self] _, results, _ in
+            guard let self else { return }
+
+            if self.fatReadAuthIssueV1 {
+                DispatchQueue.main.async { assign([]) }
+                GluLog.fat.notice("fetchDailySeriesFatV1 finished | blockedByAuthIssue=true")
+                return
+            }
+
+            guard let results else {
+                DispatchQueue.main.async { assign([]) }
+                GluLog.fat.notice("fetchDailySeriesFatV1 finished | resultsEmpty=true")
+                return
+            }
+
+            var daily: [DailyFatEntry] = []
+            results.enumerateStatistics(from: startDate, to: now) { stats, _ in
                 let value = stats.sumQuantity()?.doubleValue(for: unit) ?? 0
                 daily.append(
                     DailyFatEntry(
@@ -222,11 +444,51 @@ private extension HealthStore {
                 )
             }
 
+            let result = daily.sorted { $0.date < $1.date }
+
             DispatchQueue.main.async {
-                assign(daily.sorted { $0.date < $1.date })
+                if self.fatReadAuthIssueV1 {
+                    assign([])
+                    GluLog.fat.notice("fetchDailySeriesFatV1 finished | blockedByAuthIssue=true")
+                    return
+                }
+                assign(result)
+                GluLog.fat.debug("fetchDailySeriesFatV1 finished | entries=\(result.count, privacy: .public)")
             }
         }
 
         healthStore.execute(query)
+    }
+}
+
+// ============================================================
+// MARK: - File-local Probe Gate
+// ============================================================
+
+private enum FatProbeGateV1 {
+
+    private static let ttl: TimeInterval = 10
+
+    private static var lastRun: [ObjectIdentifier: Date] = [:]
+    private static var lastResult: [ObjectIdentifier: Bool] = [:]
+    private static var inFlight: [ObjectIdentifier: Task<Bool, Never>] = [:]
+
+    static func cachedResultIfFresh(for key: ObjectIdentifier) -> Bool? {
+        guard let last = lastRun[key], let v = lastResult[key] else { return nil }
+        return (Date().timeIntervalSince(last) <= ttl) ? v : nil
+    }
+
+    static func inFlightTask(for key: ObjectIdentifier) -> Task<Bool, Never>? {
+        inFlight[key]
+    }
+
+    static func setInFlight(_ task: Task<Bool, Never>, for key: ObjectIdentifier) {
+        inFlight[key] = task
+    }
+
+    static func finish(with result: Bool, for key: ObjectIdentifier) {
+        inFlight[key] = nil
+        lastRun[key] = Date()
+        lastResult[key] = result
     }
 }

@@ -31,6 +31,7 @@ struct MetricScaleHelper {
         case heartRateBpm
         case exerciseMinutes
         case moveMinutes
+        case workoutMinutes // 🟨 UPDATED
 
         case percentInt10
 
@@ -44,9 +45,9 @@ struct MetricScaleHelper {
         case minutes0to1440
 
         // Metabolic — base-unit only
-        case glucoseMeanMgdl              // !!! NEW (IG / Mean Glucose in mg/dL)
-        case glucoseSdMgdl                // SD in mg/dL (Base)
-        case glucoseCvPercent             // CV in %
+        case glucoseMeanMgdl
+        case glucoseSdMgdl
+        case glucoseCvPercent
     }
 
     static func scale(
@@ -90,6 +91,9 @@ struct MetricScaleHelper {
         case .moveMinutes:
             return moveMinutesScale(values: cleaned)
 
+        case .workoutMinutes: // 🟨 UPDATED
+            return workoutMinutesScale(values: cleaned)
+
         case .percentInt10:
             return percentInt10Scale(values: cleaned)
 
@@ -108,8 +112,8 @@ struct MetricScaleHelper {
         case .minutes0to1440:
             return minutes0to1440Scale(values: cleaned)
 
-        case .glucoseMeanMgdl:                                        // !!! NEW
-            return glucoseMeanMgdlScale(values: cleaned)               // !!! NEW
+        case .glucoseMeanMgdl:
+            return glucoseMeanMgdlScale(values: cleaned)
 
         case .glucoseSdMgdl:
             return glucoseSdMgdlScale(values: cleaned)
@@ -149,7 +153,7 @@ struct MetricScaleHelper {
     // MARK: - IG / Mean Glucose (mg/dL) — dynamic scale (Base Unit)
     // ============================================================
 
-    private static func glucoseMeanMgdlScale(values: [Double]) -> MetricScaleResult {  // !!! NEW
+    private static func glucoseMeanMgdlScale(values: [Double]) -> MetricScaleResult {
         guard let maxValue = values.max(), maxValue > 0 else {
             let ticks: [Double] = [0, 50, 100, 150, 200, 250, 300]
             return MetricScaleResult(
@@ -308,14 +312,29 @@ struct MetricScaleHelper {
             valueLabel: { v in "\(Int(v.rounded()))" }
         )
     }
+    
+    private static func compactThousandsLabel(_ value: Double) -> String {
+        if value >= 1000 {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.minimumFractionDigits = 1
+            formatter.maximumFractionDigits = 1
 
+            let shortValue = value / 1000.0
+            let number = formatter.string(from: NSNumber(value: shortValue)) ?? "\(shortValue)"
+            return "\(number)\(L10n.Common.thousandSuffix)"
+        }
+
+        return "\(Int(value.rounded()))"
+    }
+    
     private static func energyMonthlyScale(values: [Double]) -> MetricScaleResult {
         guard let maxValue = values.max(), maxValue > 0 else {
             let ticks: [Double] = [0, 5000, 10000, 15000]
             return MetricScaleResult(
                 yAxisTicks: ticks,
                 yMax: 15000,
-                valueLabel: { v in "\(Int(v.rounded()))" }
+                valueLabel: { v in compactThousandsLabel(v) }
             )
         }
 
@@ -332,7 +351,7 @@ struct MetricScaleHelper {
         return MetricScaleResult(
             yAxisTicks: ticks,
             yMax: upper,
-            valueLabel: { v in "\(Int(v.rounded()))" }
+            valueLabel: { v in compactThousandsLabel(v) }
         )
     }
 
@@ -407,7 +426,7 @@ struct MetricScaleHelper {
                 yAxisTicks: ticks,
                 yMax: 10000,
                 valueLabel: { v in
-                    if v >= 1000 { return "\(Int(v / 1000))T" }
+                    if v >= 1000 { return "\(Int(v / 1000))\(L10n.Common.thousandSuffix)" }
                     return "\(Int(v.rounded()))"
                 }
             )
@@ -428,7 +447,7 @@ struct MetricScaleHelper {
             yAxisTicks: ticks,
             yMax: upper,
             valueLabel: { v in
-                if v >= 1000 { return "\(Int(v / 1000))T" }
+                if v >= 1000 { return "\(Int(v / 1000))\(L10n.Common.thousandSuffix)" }
                 return "\(Int(v.rounded()))"
             }
         )
@@ -589,6 +608,39 @@ struct MetricScaleHelper {
             upper = ceil(maxAbs / step) * step
         }
 
+        let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
+
+        return MetricScaleResult(
+            yAxisTicks: ticks,
+            yMax: upper,
+            valueLabel: { v in "\(Int(v.rounded()))" }
+        )
+    }
+
+    private static func workoutMinutesScale(values: [Double]) -> MetricScaleResult { // 🟨 UPDATED
+        guard let maxValue = values.max(), maxValue > 0 else {
+            let ticks: [Double] = [0, 15, 30, 45, 60]
+            return MetricScaleResult(
+                yAxisTicks: ticks,
+                yMax: 60,
+                valueLabel: { v in "\(Int(v.rounded()))" }
+            )
+        }
+
+        let upper: Double
+        let step: Double
+
+        switch maxValue {
+        case 0..<30: upper = 30; step = 5
+        case 30..<60: upper = 60; step = 10
+        case 60..<90: upper = 90; step = 15
+        case 90..<120: upper = 120; step = 15
+        case 120..<150: upper = 150; step = 30 // 🟨 UPDATED
+        case 150..<180: upper = 180; step = 30 // 🟨 UPDATED
+        default:
+            step = 30
+            upper = ceil(maxValue / step) * step
+        }
         let ticks = stride(from: 0.0, through: upper, by: step).map { $0 }
 
         return MetricScaleResult(

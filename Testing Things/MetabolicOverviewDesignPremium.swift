@@ -212,7 +212,8 @@ struct MetabolicOverviewDesignPremium: View {
                     title: "Metabolic Overview",
                     subtitle: "LAST 24 HOURS",
                     tintColor: Color.Glu.metabolicDomain,
-                    hasScrolled: hasScrolled
+                    hasScrolled: hasScrolled,
+                    permissionBadgeScope: .allDomains
                 )
             }
         }

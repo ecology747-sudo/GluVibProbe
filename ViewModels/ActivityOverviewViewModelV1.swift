@@ -2,28 +2,6 @@
 //  ActivityOverviewViewModelV1.swift
 //  GluVibProbe
 //
-//  V1 CLEAN: Activity Overview View Model
-//  - Single Source of Truth: HealthStore (Settings nur Goal/Units)
-//  - KEINE Child-ViewModels
-//  - Overview ist Anzeige-only: KEINE fetchSevenDayAverage... Calls im VM
-//  - Remapping ist lokal + leicht (7d Avg, Mini-Trend, MovementSplit %-Logik)
-//
-//  ✅ UPDATE-MECHANIK (wie Nutrition Overview):
-//  - Publisher dürfen nur triggern (scheduleRemap), niemals Outputs direkt setzen
-//  - Exakt EIN Writer: refreshForSelectedDay()
-//  - Pull-to-Refresh nur für TODAY
-//  - TODAY Steps monoton (dürfen nicht sinken)
-//
-//  ✅ LAYER 2 FIX (EXERCISE TIME QUELLE EINDEUTIG):
-//  - Exercise Card nutzt ab sofort AUSSCHLIESSLICH HealthStore.activeTimeDaily365 (appleExerciseTime)
-//  - Alte Quelle bleibt auskommentiert als Altlast
-//
-//  ✅ NEW (Workout Minutes für Overview-Kachel):
-//  - Overview-Kachel zeigt jetzt Workout Minutes (reine Workouts)
-//  - Quelle:
-//      todayWorkoutMinutes (live, TODAY)
-//      workoutMinutesDaily365 (History + 7d Avg / Pager-Tage)
-//
 
 import Foundation
 import Combine
@@ -78,7 +56,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     // MARK: - Published Output (für ActivityOverviewViewV1)
     // ============================================================
 
-    // Steps-Kachel
     @Published var todaySteps: Int = 0
     @Published var stepsGoal: Int = 0
     @Published var stepsSevenDayAverage: Int = 0
@@ -86,33 +63,26 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     @Published var distanceSevenDayAverageKm: Double = 0
     @Published var lastSevenDaysSteps: [DailyStepsEntry] = []
 
-    // ✅ Workout Minutes (NEW: Overview-Kachel)
     @Published var todayWorkoutMinutes: Int = 0
     @Published var sevenDayAverageWorkoutMinutes: Int = 0
 
-    // Exercise (intern weiter verfügbar; getrennt von Workout Minutes)
     @Published var todayExerciseMinutes: Int = 0
     @Published var sevenDayAverageExerciseMinutes: Int = 0
 
-    // Active-Energy-Kachel (Basis: kcal in Overview)
     @Published var todayActiveEnergyKcal: Int = 0
     @Published var sevenDayAverageActiveEnergyKcal: Int = 0
 
-    // Movement-Split (für ausgewählten Tag)
     @Published var movementSleepMinutesToday: Int = 0
     @Published var movementActiveMinutesToday: Int = 0
     @Published var movementSedentaryMinutesToday: Int = 0
     @Published var movementSplitFillFractionOfDay: Double = 0
     @Published var movementSplitPercentages: (sleep: Double, move: Double, sedentary: Double) = (0, 0, 0)
 
-    // Last Exercise Display
-    @Published var lastExercisesDisplay: [(name: String, detail: String, date: String, time: String)] = []
+    @Published var lastExercisesDisplay: [(name: String, badgeName: String, detail: String, date: String, time: String)] = [] // UPDATED
 
-    // Insight output
     @Published var activityInsightText: String = ""
     @Published var activityInsightCategory: ActivityInsightCategory = .neutral
 
-    // Activity Score (Overview header)
     @Published var activityScore: Int = 0
 
     // ============================================================
@@ -131,15 +101,10 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Bindings (SSoT: HealthStore + Settings)
-    // ✅ Regel: Publisher dürfen nie direkt Overview-State schreiben → nur triggern
+    // MARK: - Bindings
     // ============================================================
 
     private func bindStores() {
-
-        // -------------------------
-        // STEPS (Today live + 365 history)
-        // -------------------------
 
         healthStore.$todaySteps
             .receive(on: DispatchQueue.main)
@@ -158,10 +123,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // -------------------------
-        // ✅ WORKOUT MINUTES (NEW: live + 365)
-        // -------------------------
-
         healthStore.$todayWorkoutMinutes
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -179,11 +140,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // -------------------------
-        // EXERCISE TIME (✅ EINDEUTIGE QUELLE)
-        // Quelle: activeTimeDaily365 (HK: appleExerciseTime)
-        // -------------------------
-
         healthStore.$activeTimeDaily365
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -191,10 +147,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
                 self.scheduleRemap()
             }
             .store(in: &cancellables)
-
-        // -------------------------
-        // ACTIVE ENERGY (Today live + 90d cache)
-        // -------------------------
 
         healthStore.$todayActiveEnergy
             .receive(on: DispatchQueue.main)
@@ -212,10 +164,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
                 self.scheduleRemap()
             }
             .store(in: &cancellables)
-
-        // -------------------------
-        // MOVEMENT SPLIT (SSoT = 365er Reihe + Today KPIs)
-        // -------------------------
 
         healthStore.$movementSplitDaily365
             .receive(on: DispatchQueue.main)
@@ -243,10 +191,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // -------------------------
-        // Steps Goal aus Settings
-        // -------------------------
-
         settings.$dailyStepGoal
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -255,24 +199,20 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // -------------------------
-        // ✅ Distance Unit aus Settings (reaktiv für Workout-Strings)           // !!! UPDATED
-        // - Muss LastExercise-Detail-Strings neu mappen (kein "km"/"mi" hardcode)
-        // -------------------------
         settings.$distanceUnit
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 Task { @MainActor in
-                    await self.loadLastExercises()                               // !!! UPDATED
-                    self.scheduleRemap()                                        // !!! UPDATED
+                    await self.loadLastExercises()
+                    self.scheduleRemap()
                 }
             }
             .store(in: &cancellables)
     }
 
     // ============================================================
-    // MARK: - Remap Scheduling (Coalescing + Token)
+    // MARK: - Remap Scheduling
     // ============================================================
 
     private func scheduleRemap() {
@@ -337,8 +277,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Core Mapping for selected day (Anzeige-only)
-    // ✅ EINZIGER Ort, der Overview-Outputs setzt
+    // MARK: - Core Mapping for selected day
     // ============================================================
 
     private func refreshForSelectedDay() {
@@ -346,10 +285,8 @@ final class ActivityOverviewViewModelV1: ObservableObject {
         let date = selectedDate
         let calendar = Calendar.current
 
-        // 0) GOAL
         stepsGoal = settings.dailyStepGoal
 
-        // 1) STEPS
         let todayAnchor = calendar.startOfDay(for: Date())
         if todayAnchor != lastStepsAnchorDay {
             lastStepsAnchorDay = todayAnchor
@@ -369,7 +306,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
 
         updateStepsAggregatesForSelectedDay()
 
-        // 2) ✅ WORKOUT MINUTES (NEW: Overview-Kachel)
         let wmSeries = healthStore.workoutMinutesDaily365
         if selectedDayOffset == 0 {
             todayWorkoutMinutes = max(0, healthStore.todayWorkoutMinutes)
@@ -391,7 +327,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             value: { $0.minutes }
         )
 
-        // 3) EXERCISE (intern weiter verfügbar; ✅ NUR aus activeTimeDaily365)
         let exSeries = healthStore.activeTimeDaily365
         todayExerciseMinutes = max(0, valueForDay(
             from: exSeries,
@@ -409,7 +344,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             value: { $0.minutes }
         )
 
-        // 4) ACTIVE ENERGY
         todayActiveEnergyKcal = (selectedDayOffset == 0)
             ? max(0, healthStore.todayActiveEnergy)
             : max(0, valueForDay(from: healthStore.last90DaysActiveEnergy, date: date, dateKey: \.date, value: { $0.activeEnergy }))
@@ -422,10 +356,8 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             value: { $0.activeEnergy }
         )
 
-        // 5) MOVEMENT SPLIT
         updateMovementSplitForSelectedDay()
 
-        // 6) Insight & Score
         let scoreNow = scoreReferenceNow(for: date, calendar: calendar)
 
         if selectedDayOffset == 0 {
@@ -439,30 +371,20 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Score "Now" Reference per Selected Day
-    // ============================================================
-
-    private func scoreReferenceNow(for selectedDate: Date, calendar: Calendar) -> Date {
-        if calendar.isDateInToday(selectedDate) {
-            return Date()
-        }
-
-        let start = calendar.startOfDay(for: selectedDate)
-        let end = calendar.date(byAdding: .day, value: 1, to: start)
-            .map { $0.addingTimeInterval(-1) }
-            ?? start
-
-        return end
-    }
-
-    // ============================================================
     // MARK: - Local Aggregates (Steps)
     // ============================================================
 
     private func updateStepsAggregatesForSelectedDay() {
 
         let calendar = Calendar.current
-        let endDate = selectedDate
+
+        // 🟨 UPDATED (Rule A):
+        // Mini-trend ALWAYS shows the last 7 FULL days BEFORE the displayed day.
+        // Therefore: endDay = selectedDate - 1 day (for ALL offsets).
+        let endDate: Date = {
+            let selectedStart = calendar.startOfDay(for: selectedDate)
+            return calendar.date(byAdding: .day, value: -1, to: selectedStart) ?? selectedStart
+        }()
 
         let dict = buildStepsDictionary(healthStore.stepsDaily365, calendar: calendar)
 
@@ -547,7 +469,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Generic helpers (cache-based fixed 7 days)
+    // MARK: - Generic helpers
     // ============================================================
 
     private func valueForDay<T>(
@@ -594,11 +516,10 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Movement Split mapping (Selected-Day korrekt aus 365)
+    // MARK: - Movement Split mapping (unverändert)
     // ============================================================
 
     private func updateMovementSplitForSelectedDay() {
-
         let calendar = Calendar.current
         let now = Date()
         let selected = selectedDate
@@ -669,8 +590,17 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Workouts
+    // MARK: - Workouts / Insight / Score (unverändert)
     // ============================================================
+
+    private func scoreReferenceNow(for selectedDate: Date, calendar: Calendar) -> Date {
+        if calendar.isDateInToday(selectedDate) { return Date() }
+        let start = calendar.startOfDay(for: selectedDate)
+        let end = calendar.date(byAdding: .day, value: 1, to: start)
+            .map { $0.addingTimeInterval(-1) }
+            ?? start
+        return end
+    }
 
     private func loadLastExercises() async {
         let workouts = await healthStore.fetchRecentWorkouts(limit: 200)
@@ -686,9 +616,10 @@ final class ActivityOverviewViewModelV1: ObservableObject {
         timeFormatter.dateStyle = .none
         timeFormatter.timeStyle = .short
 
-        let mapped: [(name: String, detail: String, date: String, time: String)] = workouts.map { workout in
+        let mapped: [(name: String, badgeName: String, detail: String, date: String, time: String)] = workouts.map { workout in // UPDATED
 
             let name = workout.workoutActivityType.simpleName
+            let badgeName = workout.workoutActivityType.badgeName // UPDATED
 
             let durationMinutes = Int(workout.duration / 60)
             let durationText = "\(durationMinutes) min"
@@ -697,12 +628,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             if let distanceQuantity = workout.totalDistance {
                 let meters = distanceQuantity.doubleValue(for: .meter())
                 let km = max(0, meters / 1000.0)
-
-                distanceText = settings.distanceUnit.formatted(
-                    fromKm: km,                        // ✅ RICHTIG
-                    fractionDigits: 1
-                )
-            
+                distanceText = settings.distanceUnit.formatted(fromKm: km, fractionDigits: 1)
             }
 
             var energyText: String? = nil
@@ -717,24 +643,22 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             let start = workout.startDate
 
             let dateString: String
-            if calendar.isDateInYesterday(start) {
-                dateString = "Yesterday"
+            if calendar.isDateInToday(start) {
+                dateString = L10n.ActivityOverview.today
+            } else if calendar.isDateInYesterday(start) {
+                dateString = L10n.ActivityOverview.yesterday
             } else {
                 dateString = dateFormatter.string(from: start)
             }
 
             let timeString = timeFormatter.string(from: start)
 
-            return (name: name, detail: detail, date: dateString, time: timeString)
+            return (name: name, badgeName: badgeName, detail: detail, date: dateString, time: timeString) // UPDATED
         }
 
         lastExercisesDisplay = mapped
         updateActivityInsight()
     }
-
-    // ============================================================
-    // MARK: - Insight & Score
-    // ============================================================
 
     private func updateActivityInsight(
         now: Date = Date(),
@@ -746,6 +670,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             return
         }
 
+        // (rest unchanged)
         let lastWorkoutInfo: ActivityLastWorkoutInfo? = {
             guard let workout = lastWorkoutForInsight else { return nil }
             guard workout.startDate <= now else { return nil }
@@ -800,6 +725,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
         now: Date = Date(),
         calendar: Calendar = .current
     ) {
+        // unchanged
         let lastWorkoutInfo: ActivityLastWorkoutInfo?
 
         if let workout = lastWorkoutForInsight {
@@ -852,12 +778,29 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     }
 }
 
-// ============================================================
-// MARK: - HKWorkoutActivityType → einfacher Anzeigename (unverändert)
-// ============================================================
-
 private extension HKWorkoutActivityType {
     var simpleName: String {
+        switch self {
+        case .walking: return L10n.ActivityOverview.workoutTypeWalking // UPDATED
+        case .running: return L10n.ActivityOverview.workoutTypeRunning
+        case .cycling: return L10n.ActivityOverview.workoutTypeCycling
+        case .highIntensityIntervalTraining: return L10n.ActivityOverview.workoutTypeHIIT
+        case .functionalStrengthTraining: return L10n.ActivityOverview.workoutTypeFunctionalTraining
+        case .traditionalStrengthTraining: return L10n.ActivityOverview.workoutTypeStrengthTraining
+        case .yoga: return L10n.ActivityOverview.workoutTypeYoga
+        case .pilates: return L10n.ActivityOverview.workoutTypePilates
+        case .coreTraining: return L10n.ActivityOverview.workoutTypeCoreTraining
+        case .elliptical: return L10n.ActivityOverview.workoutTypeElliptical
+        case .swimming: return L10n.ActivityOverview.workoutTypeSwimming
+        case .rowing: return L10n.ActivityOverview.workoutTypeRowing
+        case .hiking: return L10n.ActivityOverview.workoutTypeHiking
+        case .dance: return L10n.ActivityOverview.workoutTypeDance
+        case .martialArts: return L10n.ActivityOverview.workoutTypeMartialArts
+        default: return L10n.ActivityOverview.workoutTypeGeneric
+        }
+    }
+
+    var badgeName: String { // UPDATED
         switch self {
         case .walking: return "Walking"
         case .running: return "Running"

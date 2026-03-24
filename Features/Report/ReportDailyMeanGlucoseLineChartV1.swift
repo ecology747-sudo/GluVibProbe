@@ -21,7 +21,7 @@ struct ReportDailyMeanGlucoseLineChartV1: View {
     let targetMaxMgdl: Int
 
     private let blue = Color.Glu.primaryBlue
-    private let tirGreen = Color.green
+    private let tirGreen = Color.Glu.successGreen
     private let lineColor = Color("acidCGMRed")
 
     private var unitDigits: Int { (glucoseUnit == .mgdL) ? 0 : 1 }

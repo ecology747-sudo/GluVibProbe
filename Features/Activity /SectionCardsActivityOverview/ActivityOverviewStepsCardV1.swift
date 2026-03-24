@@ -2,12 +2,6 @@
 //  ActivityOverviewStepsCardV1.swift
 //  GluVibProbe
 //
-//  Activity Overview — Steps Card (Extracted)
-//
-//  Zweck:
-//  - Ausgelagerte Card für ActivityOverviewViewV1
-//  - Read-only: bekommt alle Daten via Parameter
-//
 
 import SwiftUI
 import Charts
@@ -20,6 +14,8 @@ struct ActivityOverviewStepsCardV1: View {
 
     let distanceTodayKm: Double
     let distanceAverage7dKm: Double
+
+    // ✅ SSoT: VM liefert exakt die 7 Tage, die angezeigt werden sollen (oldest → newest)
     let last7DaysSteps: [DailyStepsEntry]
 
     let distanceUnit: DistanceUnit
@@ -30,20 +26,21 @@ struct ActivityOverviewStepsCardV1: View {
     }
 
     private var stepsAccentColor: Color {
-        hasReachedGoal ? .green : Color.Glu.activityDomain
+        hasReachedGoal ? Color.Glu.successGreen : Color.Glu.activityDomain
     }
 
     var body: some View {
         VStack(spacing: 12) {
 
-            // ✅ Card 1: Steps + Progress + 7d Mini Trend
             VStack(alignment: .leading, spacing: 8) {
                 headerRow
                 stepsBlock
 
-                let chartData = last7DaysSteps.isEmpty ? placeholderLastSevenDays() : last7DaysSteps
-                ActivityOverviewStepsMiniTrendChartV1(data: chartData)
-                    .frame(height: 60)
+                ActivityOverviewStepsMiniTrendChartV1(
+                    data: last7DaysSteps,
+                    stepsGoal: stepsGoal
+                )
+                .frame(height: 60)
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 16)
@@ -52,7 +49,6 @@ struct ActivityOverviewStepsCardV1: View {
             .contentShape(Rectangle())
             .onTapGesture { onTap() }
 
-            // ✅ Card 2: Distance + Progress (separate card) — NOT tappable
             VStack(alignment: .leading, spacing: 8) {
                 distanceBlock
             }
@@ -67,7 +63,7 @@ struct ActivityOverviewStepsCardV1: View {
     private var headerRow: some View {
         HStack {
             Label {
-                Text("Steps")
+                Text(L10n.ActivityOverview.stepsTitle) // UPDATED
                     .font(.headline.weight(.semibold))
                     .foregroundColor(Color.Glu.primaryBlue)
             } icon: {
@@ -91,12 +87,12 @@ struct ActivityOverviewStepsCardV1: View {
 
                 Text(formattedSteps(todaySteps))
                     .font(.largeTitle.bold())
-                    .foregroundColor(hasReachedGoal ? .green : Color.Glu.primaryBlue)
+                    .foregroundColor(hasReachedGoal ? Color.Glu.successGreen : Color.Glu.primaryBlue)
 
                 Spacer()
 
                 HStack(spacing: 4) {
-                    Text("Remaining")
+                    Text(L10n.ActivityOverview.stepsRemaining)
                         .font(.caption2.weight(.semibold))
                         .foregroundColor(Color.Glu.primaryBlue)
 
@@ -128,7 +124,7 @@ struct ActivityOverviewStepsCardV1: View {
 
             HStack(spacing: 4) {
                 Spacer()
-                Text("Target")
+                Text(L10n.ActivityOverview.stepsTarget)
                     .font(.caption2.weight(.semibold))
                     .foregroundColor(Color.Glu.primaryBlue)
 
@@ -146,7 +142,7 @@ struct ActivityOverviewStepsCardV1: View {
                 Image(systemName: distanceUnit == .miles ? "road.lanes" : "ruler")
                     .foregroundColor(Color.Glu.activityDomain)
 
-                Text("Distance")
+                Text(L10n.ActivityOverview.distanceTitle)
                     .font(.headline.weight(.semibold))
                     .foregroundColor(Color.Glu.primaryBlue)
             }
@@ -160,7 +156,7 @@ struct ActivityOverviewStepsCardV1: View {
                 Spacer()
 
                 HStack(spacing: 6) {
-                    Text("7-day avg")
+                    Text(L10n.ActivityOverview.average7d)
                         .font(.caption2.weight(.semibold))
                         .foregroundColor(Color.Glu.primaryBlue)
 
@@ -191,21 +187,6 @@ struct ActivityOverviewStepsCardV1: View {
         }
     }
 
-    private func placeholderLastSevenDays() -> [DailyStepsEntry] {
-        let calendar = Calendar.current
-        let endDay = calendar.startOfDay(for: Date())
-
-        var result: [DailyStepsEntry] = []
-        result.reserveCapacity(7)
-
-        for offset in (0..<7).reversed() {
-            guard let date = calendar.date(byAdding: .day, value: -offset, to: endDay) else { continue }
-            let day = calendar.startOfDay(for: date)
-            result.append(DailyStepsEntry(date: day, steps: 0))
-        }
-        return result
-    }
-
     private func formattedSteps(_ value: Int) -> String {
         let f = NumberFormatter()
         f.numberStyle = .decimal
@@ -217,21 +198,19 @@ struct ActivityOverviewStepsCardV1: View {
     }
 
     private func trendArrowSymbol() -> String {
-        guard last7DaysSteps.count >= 2 else { return "arrow.right" }
-
         let sorted = last7DaysSteps.sorted { $0.date < $1.date }
-        let count = sorted.count
-        let yesterdayIndex = count - 2
-        guard yesterdayIndex > 0 else { return "arrow.right" }
+        guard sorted.count >= 4 else { return "arrow.right" }
 
-        let yesterdaySteps = sorted[yesterdayIndex].steps
-        let startIndex = max(0, yesterdayIndex - 3)
-        let previousSlice = sorted[startIndex..<yesterdayIndex]
+        let lastIndex = sorted.count - 1
+        let lastDaySteps = sorted[lastIndex].steps
+
+        let startIndex = max(0, lastIndex - 3)
+        let previousSlice = sorted[startIndex..<lastIndex]
         guard !previousSlice.isEmpty else { return "arrow.right" }
 
         let sumPrev = previousSlice.reduce(0) { $0 + $1.steps }
         let avgPrev = Double(sumPrev) / Double(previousSlice.count)
-        let diff = Double(yesterdaySteps) - avgPrev
+        let diff = Double(lastDaySteps) - avgPrev
         let threshold: Double = 1_000
 
         if diff > threshold { return "arrow.up.right" }
@@ -240,23 +219,21 @@ struct ActivityOverviewStepsCardV1: View {
     }
 
     private func trendArrowColor() -> Color {
-        guard last7DaysSteps.count >= 2 else { return Color.Glu.primaryBlue }
-
         let sorted = last7DaysSteps.sorted { $0.date < $1.date }
-        let count = sorted.count
-        let yesterdayIndex = count - 2
-        guard yesterdayIndex > 0 else { return Color.Glu.primaryBlue }
+        guard sorted.count >= 4 else { return Color.Glu.primaryBlue }
 
-        let yesterdaySteps = sorted[yesterdayIndex].steps
-        let startIndex = max(0, yesterdayIndex - 3)
-        let previousSlice = sorted[startIndex..<yesterdayIndex]
+        let lastIndex = sorted.count - 1
+        let lastDaySteps = sorted[lastIndex].steps
+
+        let startIndex = max(0, lastIndex - 3)
+        let previousSlice = sorted[startIndex..<lastIndex]
         guard !previousSlice.isEmpty else { return Color.Glu.primaryBlue }
 
         let sumPrev = previousSlice.reduce(0) { $0 + $1.steps }
         let avgPrev = Double(sumPrev) / Double(previousSlice.count)
-        let diff = Double(yesterdaySteps) - avgPrev
+        let diff = Double(lastDaySteps) - avgPrev
 
-        if diff > 0 { return .green }
+        if diff > 0 { return Color.Glu.successGreen }
         if diff < 0 { return .red }
         return Color.Glu.primaryBlue
     }
@@ -267,6 +244,7 @@ struct ActivityOverviewStepsCardV1: View {
 private struct ActivityOverviewStepsMiniTrendChartV1: View {
 
     let data: [DailyStepsEntry]
+    let stepsGoal: Int
 
     var body: some View {
         Chart(data) { entry in
@@ -275,28 +253,45 @@ private struct ActivityOverviewStepsMiniTrendChartV1: View {
                 y: .value("Steps", entry.steps)
             )
             .cornerRadius(4)
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [
-                        Color.Glu.activityDomain.opacity(0.25),
-                        Color.Glu.activityDomain
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .annotation(position: .top, alignment: .center) {
+            .foregroundStyle(barGradient(for: entry.steps))
+            .annotation(position: entry.steps == 0 ? .bottom : .top, alignment: .center) {
                 Text(formattedStepsK(entry.steps))
                     .font(.caption2.weight(.semibold))
                     .foregroundColor(Color.Glu.primaryBlue)
-                    .padding(.bottom, 2)
+                    .padding(entry.steps == 0 ? .top : .bottom, 2)
             }
         }
-        .chartXAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day)) { value in
+                AxisGridLine().foregroundStyle(Color.clear)
+                AxisTick().foregroundStyle(Color.clear)
+                AxisValueLabel(centered: true) { // UPDATED
+                    if let date = value.as(Date.self) {
+                        Text(weekday2(date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(Color.Glu.primaryBlue.opacity(0.75))
+                    }
+                }
+            }
+        }
         .chartYAxis(.hidden)
         .chartPlotStyle { plotArea in
             plotArea.background(Color.clear)
         }
+    }
+
+    private func barGradient(for steps: Int) -> LinearGradient {
+        let hitGoal = stepsGoal > 0 && steps >= stepsGoal
+        let c = hitGoal ? Color.Glu.successGreen : Color.Glu.activityDomain
+
+        return LinearGradient(
+            colors: [
+                c.opacity(0.25),
+                c
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     private func formattedStepsK(_ steps: Int) -> String {
@@ -305,11 +300,16 @@ private struct ActivityOverviewStepsMiniTrendChartV1: View {
 
         let value = Double(steps) / 1_000.0
         let rounded = (value * 10).rounded() / 10
-        return String(format: "%.1fT", rounded)
+        return String(format: "%.1f%@", rounded, L10n.Common.thousandSuffix) // UPDATED
+    }
+
+    private func weekday2(_ date: Date) -> String { // UPDATED
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.dateFormat = "EE"
+        return f.string(from: date).replacingOccurrences(of: ".", with: "")
     }
 }
-
-// MARK: - Preview (minimal, ohne zusätzliche Layout-Mods)
 
 #Preview("Activity Steps Card V1") {
     let calendar = Calendar.current
@@ -317,16 +317,16 @@ private struct ActivityOverviewStepsMiniTrendChartV1: View {
 
     let data: [DailyStepsEntry] = (0..<7).map { i in
         let date = calendar.date(byAdding: .day, value: -(6 - i), to: today) ?? today
-        let steps = [4200, 8559, 10320, 7600, 12050, 9800, 6400][i]
+        let steps = [5200, 4200, 8559, 10320, 7600, 12050, 9800][i]
         return DailyStepsEntry(date: date, steps: steps)
     }
 
     ActivityOverviewStepsCardV1(
-        todaySteps: 900,
+        todaySteps: 1005,
         stepsGoal: 10_000,
         stepsAverage7d: 9_120,
-        distanceTodayKm: 6.8,
-        distanceAverage7dKm: 7.4,
+        distanceTodayKm: 0.8,
+        distanceAverage7dKm: 5.1,
         last7DaysSteps: data,
         distanceUnit: .kilometers,
         onTap: {}

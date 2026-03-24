@@ -2,204 +2,186 @@
 //  BMIViewModelV1.swift
 //  GluVibProbe
 //
-//  V1: BMI-ViewModel (kein Fetch im VM)
-//  - SSoT: HealthStore
-//  - BMI bleibt durchgehend Double (kein Int*10, keine Quantisierung)
-//  - Period Averages bleiben Int (weil PeriodAverageEntry im Projekt Int ist)
-//    -> wir runden hier konsistent auf 1 Nachkommastelle (als Double),
-//       und liefern für PeriodAverageEntry ein Int "×10", ABER NUR für die Anzeige-Engine,
-//       NICHT als BMI-Datenhaltung. (Card/Charts bekommen Double direkt.)
-//  - Daily Chart / Scales laufen Double-only über BodySectionCardScaledV2 (Double-Init)
+//  Body V1 — BMI ViewModel
+//
+//  Purpose
+//  - Maps HealthStore BMI data into UI-facing KPI, chart and hint outputs.
+//  - Does not fetch data.
+//  - Uses localized Body-domain BMI texts and shared period labels.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → BMIViewModelV1 → BMIViewV1
 //
 
 import Foundation
 import Combine
 import SwiftUI
 
-// ============================================================
-// MARK: - Local Double Period Average Entry (BMI)
-// ============================================================
-
-struct PeriodAverageEntryDouble: Identifiable, Equatable {
-    let id = UUID()
-    let label: String
-    let days: Int
-    let value: Double
-}
-
 @MainActor
 final class BMIViewModelV1: ObservableObject {
 
     // ============================================================
-    // MARK: - Published Outputs (View)
+    // MARK: - Published Outputs (View-facing)
     // ============================================================
 
     @Published var todayBMI: Double = 0
     @Published var last90DaysBMIRaw: [BMIEntry] = []
-    @Published var monthlyBMIData: [MonthlyMetricEntry] = []
-
-    /// Secondary (365d) – wird vom Store geladen (refreshBodySecondary)
     @Published var bmiDaily365Raw: [BMIEntry] = []
+    @Published var monthlyForChart: [MonthlyMetricEntry] = []
 
-    // ✅ Double-first Outputs (für Double-Charts)
-    @Published var last90DaysForChart: [DailyDoubleEntry] = []                 // ✅ Double
-    @Published var periodAveragesDouble: [PeriodAverageEntryDouble] = []       // ✅ Double
-    @Published var monthlyForChart: [MonthlyMetricEntry] = []                  // passthrough
-
-    // ✅ Scales (Double)
-    @Published var dailyScale: MetricScaleResult = MetricScaleHelper.scale([0], for: .weightKg)
-    @Published var periodScale: MetricScaleResult = MetricScaleHelper.scale([0], for: .weightKg)
-    @Published var monthlyScale: MetricScaleResult = MetricScaleHelper.scale([0], for: .weightKg)
-
-    // ✅ KPI Text
-    @Published var currentText: String = "–"
+    @Published var bmiReadAuthIssueV1: Bool = false
 
     // ============================================================
     // MARK: - Dependencies
     // ============================================================
 
     private let healthStore: HealthStore
+    private let settings: SettingsModel
     private var cancellables = Set<AnyCancellable>()
 
     // ============================================================
     // MARK: - Init
     // ============================================================
 
-    init(healthStore: HealthStore = .shared) {
+    init(
+        healthStore: HealthStore = .shared,
+        settings: SettingsModel = .shared
+    ) {
         self.healthStore = healthStore
+        self.settings = settings
 
-        bind()
-        syncInitial()
+        bindHealthStore()
+        syncFromStores()
     }
 
     // ============================================================
-    // MARK: - Bindings (trigger remap only)
+    // MARK: - Bindings
     // ============================================================
 
-    private func bind() {
+    private func bindHealthStore() {
 
         healthStore.$todayBMI
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.remap()
-            }
+            .sink { [weak self] in self?.todayBMI = $0 }
             .store(in: &cancellables)
 
         healthStore.$last90DaysBMI
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.remap()
-            }
-            .store(in: &cancellables)
-
-        healthStore.$monthlyBMI
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.remap()
-            }
+            .sink { [weak self] in self?.last90DaysBMIRaw = $0 }
             .store(in: &cancellables)
 
         healthStore.$bmiDaily365
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.remap()
-            }
+            .sink { [weak self] in self?.bmiDaily365Raw = $0 }
+            .store(in: &cancellables)
+
+        healthStore.$monthlyBMI
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.monthlyForChart = $0 }
+            .store(in: &cancellables)
+
+        healthStore.$bmiReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.bmiReadAuthIssueV1 = $0 }
             .store(in: &cancellables)
     }
 
-    private func syncInitial() {
-        remap()
+    private func syncFromStores() {
+        todayBMI = healthStore.todayBMI
+        last90DaysBMIRaw = healthStore.last90DaysBMI
+        bmiDaily365Raw = healthStore.bmiDaily365
+        monthlyForChart = healthStore.monthlyBMI
+        bmiReadAuthIssueV1 = healthStore.bmiReadAuthIssueV1
     }
 
     // ============================================================
-    // MARK: - Core Mapping
+    // MARK: - Availability (Today)
     // ============================================================
 
-    private func remap() {
+    private var hasTodayDatapoint: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
 
-        // 1) Pull from SSoT
-        todayBMI = max(0, healthStore.todayBMI)
-        last90DaysBMIRaw = healthStore.last90DaysBMI
-        monthlyBMIData = healthStore.monthlyBMI
-        bmiDaily365Raw = healthStore.bmiDaily365
+        let in90 = last90DaysBMIRaw.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
 
-        // 2) KPI text (1 decimal)
-        currentText = formatOneDecimal(todayBMI)
+        let in365 = bmiDaily365Raw.contains {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
 
-        // 3) Daily (Last 90) chart series (Double)
-        let sorted90 = last90DaysBMIRaw
+        return in90 || in365
+    }
+
+    private var hasTodayPositiveBMI: Bool {
+        todayBMI > 0
+    }
+
+    // ============================================================
+    // MARK: - KPI Formatting
+    // ============================================================
+
+    var currentText: String {
+        guard hasTodayDatapoint || hasTodayPositiveBMI else { return "–" }
+        return formatOneDecimal(todayBMI)
+    }
+
+    // ============================================================
+    // MARK: - Info Hint (Today) — Goldstandard Body
+    // ============================================================
+
+    var todayInfoText: String? {
+        if settings.showPermissionWarnings && bmiReadAuthIssueV1 { // 🟨 UPDATED
+            return L10n.BMI.hintNoDataOrPermission
+        }
+
+        if hasTodayDatapoint || hasTodayPositiveBMI {
+            return nil
+        }
+
+        let hasAnyHistoryPositive =
+            last90DaysBMIRaw.contains { $0.bmi > 0 } ||
+            bmiDaily365Raw.contains { $0.bmi > 0 }
+
+        if !hasAnyHistoryPositive {
+            return L10n.BMI.hintNoDataOrPermission
+        }
+
+        return L10n.BMI.hintNoToday
+    }
+
+    // ============================================================
+    // MARK: - Chart Adapters
+    // ============================================================
+
+    var last90DaysForChart: [DailyDoubleEntry] {
+        last90DaysBMIRaw
             .filter { $0.bmi > 0 }
             .sorted { $0.date < $1.date }
-
-        last90DaysForChart = sorted90.map {
-            DailyDoubleEntry(date: $0.date, value: max(0, $0.bmi))
-        }
-
-        // 4) Period averages (Double)
-        periodAveragesDouble = makePeriodAveragesDouble()
-
-        // 5) Monthly passthrough
-        monthlyForChart = monthlyBMIData
-
-        // 6) Scales (Double)
-        dailyScale = MetricScaleResult(
-            yAxisTicks: MetricScaleHelper.scale(last90DaysForChart.map { $0.value }, for: .weightKg).yAxisTicks,
-            yMax: MetricScaleHelper.scale(last90DaysForChart.map { $0.value }, for: .weightKg).yMax,
-            valueLabel: { tick in
-                self.formatOneDecimal(Double(tick))
-            }
-        )
-
-        periodScale = MetricScaleResult(
-            yAxisTicks: MetricScaleHelper.scale(periodAveragesDouble.map { $0.value }, for: .weightKg).yAxisTicks,
-            yMax: MetricScaleHelper.scale(periodAveragesDouble.map { $0.value }, for: .weightKg).yMax,
-            valueLabel: { tick in
-                self.formatOneDecimal(Double(tick))
-            }
-        )
-
-        monthlyScale = MetricScaleResult(
-            yAxisTicks: MetricScaleHelper.scale(monthlyForChart.map { Double($0.value) }, for: .weightKg).yAxisTicks,
-            yMax: MetricScaleHelper.scale(monthlyForChart.map { Double($0.value) }, for: .weightKg).yMax,
-            valueLabel: { tick in
-                // MonthlyMetricEntry ist Int -> wir zeigen 1 Nachkommastelle trotzdem sauber
-                self.formatOneDecimal(Double(tick))
-            }
-        )
+            .map { DailyDoubleEntry(date: $0.date, value: $0.bmi) }
     }
 
     // ============================================================
-    // MARK: - Public Outputs for Views (Bridge)
+    // MARK: - Period Averages
     // ============================================================
 
-    /// ✅ Für BodySectionCardScaledV2 (Period Chart) brauchst du aktuell PeriodAverageEntry (Int).
-    /// Wir bridgen Double → Int nur an dieser Stelle (0.1 Auflösung), ohne interne Int-Datenhaltung.
     var periodAverages: [PeriodAverageEntry] {
-        periodAveragesDouble.map { e in
-            .init(label: e.label, days: e.days, value: Int((e.value * 10.0).rounded()))
-        }
-    }
-
-    /// ✅ Falls deine AveragePeriodsScaledBarChart NUR Int kann:
-    /// Dann musst du im Chart die valueLabel aus periodScale nutzen (liefert wieder "xx.x").
-    /// (Das passt zu deinem bestehenden Scale-Pattern.)
-    
-    // ============================================================
-    // MARK: - Helpers
-    // ============================================================
-
-    private func makePeriodAveragesDouble() -> [PeriodAverageEntryDouble] {
         [
-            .init(label: "7T",   days: 7,   value: averageBMI(last: 7)),
-            .init(label: "14T",  days: 14,  value: averageBMI(last: 14)),
-            .init(label: "30T",  days: 30,  value: averageBMI(last: 30)),
-            .init(label: "90T",  days: 90,  value: averageBMI(last: 90)),
-            .init(label: "180T", days: 180, value: averageBMI(last: 180)),
-            .init(label: "365T", days: 365, value: averageBMI(last: 365))
+            .init(label: L10n.Common.period7d, days: 7, value: int10(averageBMI(last: 7))), // 🟨 UPDATED
+            .init(label: L10n.Common.period14d, days: 14, value: int10(averageBMI(last: 14))),
+            .init(label: L10n.Common.period30d, days: 30, value: int10(averageBMI(last: 30))),
+            .init(label: L10n.Common.period90d, days: 90, value: int10(averageBMI(last: 90))),
+            .init(label: L10n.Common.period180d, days: 180, value: int10(averageBMI(last: 180))),
+            .init(label: L10n.Common.period365d, days: 365, value: int10(averageBMI(last: 365)))
         ]
     }
 
     private func averageBMI(last days: Int) -> Double {
+        let source = days > 90 && !bmiDaily365Raw.isEmpty
+            ? bmiDaily365Raw
+            : last90DaysBMIRaw
+
+        guard !source.isEmpty else { return 0 }
 
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -209,11 +191,6 @@ final class BMIViewModelV1: ObservableObject {
             let startDate = calendar.date(byAdding: .day, value: -days, to: today)
         else { return 0 }
 
-        let source: [BMIEntry] = {
-            if days > 90, !bmiDaily365Raw.isEmpty { return bmiDaily365Raw }
-            return last90DaysBMIRaw
-        }()
-
         let values = source
             .filter {
                 let d = calendar.startOfDay(for: $0.date)
@@ -222,23 +199,41 @@ final class BMIViewModelV1: ObservableObject {
             .map(\.bmi)
 
         guard !values.isEmpty else { return 0 }
-
-        let avg = values.reduce(0, +) / Double(values.count)
-
-        // ✅ konsistent auf 1 Nachkommastelle
-        return (avg * 10.0).rounded() / 10.0
+        return values.reduce(0, +) / Double(values.count)
     }
 
-    private func formatOneDecimal(_ v: Double) -> String {
-        guard v > 0 else { return "–" }
-        return oneDecimalFormatter.string(from: NSNumber(value: v)) ?? "\(v)"
+    private func int10(_ value: Double) -> Int {
+        Int((value * 10).rounded())
     }
 
-    private let oneDecimalFormatter: NumberFormatter = {
+    // ============================================================
+    // MARK: - Scales
+    // ============================================================
+
+    var dailyScale: MetricScaleResult {
+        let values = last90DaysForChart.map(\.value)
+        return MetricScaleHelper.scale(values.isEmpty ? [0] : values, for: .weightKg)
+    }
+
+    var periodScale: MetricScaleResult {
+        let values = periodAverages.map { Double($0.value) / 10.0 }
+        return MetricScaleHelper.scale(values.isEmpty ? [0] : values, for: .weightKg)
+    }
+
+    var monthlyScale: MetricScaleResult {
+        let values = monthlyForChart.map { Double($0.value) }
+        return MetricScaleHelper.scale(values.isEmpty ? [0] : values, for: .weightKg)
+    }
+
+    // ============================================================
+    // MARK: - Formatting Helper
+    // ============================================================
+
+    private func formatOneDecimal(_ value: Double) -> String {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.minimumFractionDigits = 1
         f.maximumFractionDigits = 1
-        return f
-    }()
+        return f.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
 }

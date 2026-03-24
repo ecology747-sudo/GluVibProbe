@@ -4,8 +4,11 @@
 //
 //  V1: Glucose CV (Metabolic)
 //  - KEIN Fetch im ViewModel
-//  - SSoT: HealthStore (dailyGlucoseStats90 + last24hGlucoseCvPercent)
-//  - Averages: ignorieren Tage ohne Coverage (coverageMinutes == 0)
+//  - SSoT: HealthStore
+//    - dailyGlucoseStats90 (Daily chart series only)
+//    - last24hGlucoseCvPercent (rolling 24h, end = last CGM sample)
+//    - rollingGlucoseCvPercent7/14/30/90 (Dexcom-like rolling windows, end = last CGM sample)
+//  - RULE: NO parallel CV methods in VM (no daily averaging for KPIs/Periods/Report)
 //
 
 import Foundation
@@ -15,10 +18,27 @@ import SwiftUI
 @MainActor
 final class GlucoseCVViewModelV1: ObservableObject {
 
+    enum GlucoseCVInfoState { // 🟨 NEW
+        case noHistory
+        case noTodayData
+    }
+
+    // Daily chart series (ok to stay daily-based)
     @Published var last90DaysDaily: [DailyGlucoseStatsEntry] = []
 
-    @Published var todayCVPercent: Double = 0
+    // KPI tiles (Last 24h / Current / Last 90d)
     @Published var last24hCVPercent: Double = 0
+    @Published var currentCVPercent: Double = 0
+    @Published var last90dCVPercent: Double = 0
+
+    // Rolling windows for Period chart (Dexcom-like)
+    @Published private(set) var rolling7dCVPercent: Double = 0
+    @Published private(set) var rolling14dCVPercent: Double = 0
+    @Published private(set) var rolling30dCVPercent: Double = 0
+    @Published private(set) var rolling90dCVPercent: Double = 0
+
+    @Published var glucoseReadAuthIssueV1: Bool = false
+    @Published private(set) var todayCoverageMinutes: Int = 0 // 🟨 NEW
 
     private let healthStore: HealthStore
     private let settings: SettingsModel
@@ -37,80 +57,146 @@ final class GlucoseCVViewModelV1: ObservableObject {
 
     private func bindHealthStore() {
 
+        // Daily series (chart)
         healthStore.$dailyGlucoseStats90
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 self?.last90DaysDaily = $0
-                self?.todayCVPercent = Self.todayCV(from: $0)
             }
             .store(in: &cancellables)
 
+        // KPI: Last 24h (rolling)
         healthStore.$last24hGlucoseCvPercent
             .receive(on: DispatchQueue.main)
             .sink { [weak self] v in
                 self?.last24hCVPercent = max(0, v ?? 0)
             }
             .store(in: &cancellables)
+
+        // Dexcom-like rolling windows (end = last CGM sample)
+        healthStore.$rollingGlucoseCvPercent7
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] v in
+                let value = max(0, v ?? 0)
+                self?.rolling7dCVPercent = value
+                self?.currentCVPercent = value
+            }
+            .store(in: &cancellables)
+
+        healthStore.$rollingGlucoseCvPercent14
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] v in
+                self?.rolling14dCVPercent = max(0, v ?? 0)
+            }
+            .store(in: &cancellables)
+
+        healthStore.$rollingGlucoseCvPercent30
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] v in
+                self?.rolling30dCVPercent = max(0, v ?? 0)
+            }
+            .store(in: &cancellables)
+
+        healthStore.$rollingGlucoseCvPercent90
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] v in
+                let value = max(0, v ?? 0)
+                self?.rolling90dCVPercent = value
+                self?.last90dCVPercent = value
+            }
+            .store(in: &cancellables)
+
+        healthStore.$glucoseReadAuthIssueV1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.glucoseReadAuthIssueV1 = $0
+            }
+            .store(in: &cancellables)
+
+        healthStore.$todayGlucoseCoverageMinutes
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.todayCoverageMinutes = max(0, $0)
+            }
+            .store(in: &cancellables)
     }
 
     private func syncFromStores() {
         last90DaysDaily = healthStore.dailyGlucoseStats90
-        todayCVPercent = Self.todayCV(from: healthStore.dailyGlucoseStats90)
+
         last24hCVPercent = max(0, healthStore.last24hGlucoseCvPercent ?? 0)
+
+        rolling7dCVPercent  = max(0, healthStore.rollingGlucoseCvPercent7  ?? 0)
+        rolling14dCVPercent = max(0, healthStore.rollingGlucoseCvPercent14 ?? 0)
+        rolling30dCVPercent = max(0, healthStore.rollingGlucoseCvPercent30 ?? 0)
+        rolling90dCVPercent = max(0, healthStore.rollingGlucoseCvPercent90 ?? 0)
+
+        currentCVPercent = rolling7dCVPercent
+        last90dCVPercent = rolling90dCVPercent
+
+        glucoseReadAuthIssueV1 = healthStore.glucoseReadAuthIssueV1
+        todayCoverageMinutes = max(0, healthStore.todayGlucoseCoverageMinutes)
     }
 
     // ============================================================
-    // MARK: - Formatting
+    // MARK: - Goldstandard Hint State
     // ============================================================
 
-    var formattedTodayCV: String {
-        todayCVPercent > 0 ? String(format: "%.1f%%", todayCVPercent) : "–"
+    var todayInfoState: GlucoseCVInfoState? { // 🟨 NEW
+
+        if glucoseReadAuthIssueV1 {
+            return .noHistory
+        }
+
+        if todayCoverageMinutes > 0 { return nil }
+
+        let hasAnyHistory =
+            rolling90dCVPercent > 0 ||
+            last90DaysDaily.contains { max(0, $0.coefficientOfVariationPercent) > 0 }
+
+        if !hasAnyHistory {
+            return .noHistory
+        }
+
+        return .noTodayData
     }
 
-    var formattedLast24hCV: String {
-        last24hCVPercent > 0 ? String(format: "%.1f%%", last24hCVPercent) : "–"
-    }
-
-    var formatted90dCV: String {
-        let v = averageCVPercent(last: 90)
-        return v > 0 ? String(format: "%.1f%%", v) : "–"
-    }
-
-    // !!! NEW: Whole-number KPI strings (View stays slim like Bolus)
-    var formattedTodayCVWhole: String {
-        guard todayCVPercent > 0 else { return "–" }
-        return "\(Int(todayCVPercent.rounded()))"
-    }
+    // ============================================================
+    // MARK: - KPI Formatting (Whole numbers)
+    // ============================================================
 
     var formattedLast24hCVWhole: String {
         guard last24hCVPercent > 0 else { return "–" }
         return "\(Int(last24hCVPercent.rounded()))"
     }
 
+    var formattedCurrentCVWhole: String {
+        guard currentCVPercent > 0 else { return "–" }
+        return "\(Int(currentCVPercent.rounded()))"
+    }
+
     var formatted90dCVWhole: String {
-        let v = averageCVPercent(last: 90)
-        guard v > 0 else { return "–" }
-        return "\(Int(v.rounded()))"
+        guard last90dCVPercent > 0 else { return "–" }
+        return "\(Int(last90dCVPercent.rounded()))"
     }
 
     // ============================================================
-    // MARK: - Report Access (SSoT passthrough)  // UPDATED
+    // MARK: - Report Access (Dexcom-like Rolling)
     // ============================================================
 
-    /// Report expects a pure numeric CV text WITHOUT '%' (unit is rendered in ReportRangeSectionView).
-    func cvTextForReport(windowDays: Int) -> String { // UPDATED
+    func cvTextForReport(windowDays: Int) -> String {
         let v: Double
         switch windowDays {
-        case 7:  v = averageCVPercent(last: 7)
-        case 14: v = averageCVPercent(last: 14)
-        case 30: v = averageCVPercent(last: 30)
-        case 90: v = averageCVPercent(last: 90)
+        case 7:  v = rolling7dCVPercent
+        case 14: v = rolling14dCVPercent
+        case 30: v = rolling30dCVPercent
+        case 90: v = rolling90dCVPercent
         default: return "–"
         }
-        return formatOneDecimalNumberOnly(v) // UPDATED
+        return formatOneDecimalNumberOnly(v)
     }
 
-    private func formatOneDecimalNumberOnly(_ value: Double) -> String { // UPDATED
+    private func formatOneDecimalNumberOnly(_ value: Double) -> String {
         guard value > 0 else { return "–" }
         return String(format: "%.1f", value)
     }
@@ -127,20 +213,20 @@ final class GlucoseCVViewModelV1: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Period Averages (7/14/30/90)
+    // MARK: - Period Averages (Dexcom-like Rolling)
     // ============================================================
 
     var periodAverages: [PeriodAverageEntry] {
         [
-            .init(label: "7T",  days: 7,  value: Int(averageCVPercent(last: 7).rounded())),
-            .init(label: "14T", days: 14, value: Int(averageCVPercent(last: 14).rounded())),
-            .init(label: "30T", days: 30, value: Int(averageCVPercent(last: 30).rounded())),
-            .init(label: "90T", days: 90, value: Int(averageCVPercent(last: 90).rounded()))
+            .init(label: L10n.Common.period7d,  days: 7,  value: Int(rolling7dCVPercent.rounded())),
+            .init(label: L10n.Common.period14d, days: 14, value: Int(rolling14dCVPercent.rounded())),
+            .init(label: L10n.Common.period30d, days: 30, value: Int(rolling30dCVPercent.rounded())),
+            .init(label: L10n.Common.period90d, days: 90, value: Int(rolling90dCVPercent.rounded()))
         ]
     }
 
     // ============================================================
-    // MARK: - Scales (Daily vs Period)  // !!! NEW
+    // MARK: - Scales (Daily vs Period)
     // ============================================================
 
     var dailyScale: MetricScaleResult {
@@ -149,42 +235,13 @@ final class GlucoseCVViewModelV1: ObservableObject {
     }
 
     var periodScale: MetricScaleResult {
-        let values = periodAverages.map { Double(max(0, $0.value)) }.filter { $0 > 0 }
+        let values = [
+            rolling7dCVPercent,
+            rolling14dCVPercent,
+            rolling30dCVPercent,
+            rolling90dCVPercent
+        ].filter { $0 > 0 }
+
         return MetricScaleHelper.scale(values.isEmpty ? [0] : values, for: .glucoseCvPercent)
-    }
-
-    // ============================================================
-    // MARK: - Internals
-    // ============================================================
-
-    private func averageCVPercent(last days: Int) -> Double {
-        guard !last90DaysDaily.isEmpty else { return 0 }
-
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-
-        guard
-            let endDate = cal.date(byAdding: .day, value: -1, to: today),
-            let startDate = cal.date(byAdding: .day, value: -days, to: today)
-        else { return 0 }
-
-        let filtered = last90DaysDaily.filter { entry in
-            let d = cal.startOfDay(for: entry.date)
-            let cov = max(0, entry.coverageMinutes)
-            let v = max(0, entry.coefficientOfVariationPercent)
-            return d >= startDate && d <= endDate && cov > 0 && v > 0
-        }
-
-        guard !filtered.isEmpty else { return 0 }
-
-        let sum = filtered.reduce(0.0) { $0 + max(0, $1.coefficientOfVariationPercent) }
-        return sum / Double(filtered.count)
-    }
-
-    private static func todayCV(from daily: [DailyGlucoseStatsEntry]) -> Double {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        guard let e = daily.first(where: { cal.isDate($0.date, inSameDayAs: today) }) else { return 0 }
-        return e.coverageMinutes > 0 ? max(0, e.coefficientOfVariationPercent) : 0
     }
 }

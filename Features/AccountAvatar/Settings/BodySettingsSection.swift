@@ -2,42 +2,65 @@
 //  BodySettingsSection.swift
 //  GluVibProbe
 //
-//  Domain: BODY – Targets only (V1)
+//  Settings — Body Section
+//  Purpose:
+//  - Renders target weight and target sleep settings for the body domain.
+//  - Displays target weight in the selected unit while storing the SSoT value in kg.
 //
-//  UI scaled to match Units & Metabolic Settings
-//  - Uses the shared WheelPickerSheet (Apple-style, consistent everywhere)
-//  - Displays Target Weight in the currently selected weight unit (kg/lbs)
-//  - Stores targetWeightKg as base unit (kg) in SettingsModel (SSoT)
+//  Data Flow (SSoT):
+//  - SettingsDomainCardScreen local @State -> bindings -> BodySettingsSection -> UI
+//  - Weight unit display depends on SettingsModel.shared
+//
+//  Key Connections:
+//  - SettingsModel.shared
+//  - WheelPickerSheet
+//  - targetWeightKg binding
+//  - dailySleepGoalMinutes binding
 //
 
 import SwiftUI
 
 struct BodySettingsSection: View {
 
-    // MARK: - Bindings (SSoT)
+    // ============================================================
+    // MARK: - Inputs
+    // ============================================================
 
     @Binding var targetWeightKg: Int
     @Binding var dailySleepGoalMinutes: Int
 
-    // MARK: - Settings (Units)
+    // ============================================================
+    // MARK: - Dependencies
+    // ============================================================
 
     @ObservedObject private var settings = SettingsModel.shared
 
-    // MARK: - Sheet Flags
+    // ============================================================
+    // MARK: - Local State
+    // ============================================================
 
     @State private var showWeightPicker: Bool = false
     @State private var showSleepPicker: Bool = false
 
-    // MARK: - Units-Style Tokens (MATCH UnitsSettingsSection)
-
-    private let titleColor: Color = Color.Glu.primaryBlue
-    private let sectionTitleFont: Font = .title3.weight(.semibold)
-    private let segmentFont: Font = .body.weight(.bold)
-    private let blockSpacing: CGFloat = 14
-
-    // MARK: - Conversions (base = kg)
+    // ============================================================
+    // MARK: - Constants
+    // ============================================================
 
     private let kgToLbsFactor: Double = 2.2046226218
+
+    // ============================================================
+    // MARK: - Styling
+    // ============================================================
+
+    private let titleColor: Color = Color.Glu.systemForeground
+    private let sectionTitleFont: Font = .title3.weight(.semibold)
+    private let segmentFont: Font = .body.weight(.bold)
+    private let sectionSpacing: CGFloat = 18
+    private let blockSpacing: CGFloat = 14
+
+    // ============================================================
+    // MARK: - Conversion Helpers
+    // ============================================================
 
     private func kgToLbs(_ kg: Int) -> Int {
         Int((Double(kg) * kgToLbsFactor).rounded())
@@ -47,41 +70,45 @@ struct BodySettingsSection: View {
         Int((Double(lbs) / kgToLbsFactor).rounded())
     }
 
-    // MARK: - Labels
+    // ============================================================
+    // MARK: - Display Mapping
+    // ============================================================
 
     private var weightUnitLabel: String {
         settings.weightUnit.label
     }
 
-    private func weightDisplayText(fromKg kg: Int) -> String {
+    private func weightDisplayText(fromKg kg: Int) -> String { // 🟨 UPDATED
         switch settings.weightUnit {
         case .kg:
-            return "\(kg) \(weightUnitLabel)"
+            return L10n.Avatar.BodySettings.weightValue(kg, unit: weightUnitLabel)
         case .lbs:
-            return "\(kgToLbs(kg)) \(weightUnitLabel)"
+            return L10n.Avatar.BodySettings.weightValue(kgToLbs(kg), unit: weightUnitLabel)
         }
     }
 
-    private func sleepLabel(_ minutes: Int) -> String {
+    private func sleepLabel(_ minutes: Int) -> String { // 🟨 UPDATED
         let h = minutes / 60
         let m = minutes % 60
-        return m == 0 ? "\(h) h" : "\(h) h \(m) min"
+        return m == 0
+            ? L10n.Avatar.BodySettings.sleepHoursOnly(h)
+            : L10n.Avatar.BodySettings.sleepHoursMinutes(h, m)
     }
 
-    // MARK: - Picker Values (in display unit)
+    // ============================================================
+    // MARK: - Picker Values
+    // ============================================================
 
     private var weightPickerValues: [Int] {
         switch settings.weightUnit {
         case .kg:
             return Array(40...250)
         case .lbs:
-            let minLbs = kgToLbs(40)   // ~88
-            let maxLbs = kgToLbs(250)  // ~551
+            let minLbs = kgToLbs(40)
+            let maxLbs = kgToLbs(250)
             return Array(minLbs...maxLbs)
         }
     }
-
-    // MARK: - Display Binding (Int) for WheelPickerSheet
 
     private var displayedWeightBinding: Binding<Int> {
         Binding<Int>(
@@ -104,10 +131,12 @@ struct BodySettingsSection: View {
         )
     }
 
+    // ============================================================
     // MARK: - Body
+    // ============================================================
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
 
             VStack(alignment: .leading, spacing: blockSpacing) {
                 targetWeightRow
@@ -122,14 +151,22 @@ struct BodySettingsSection: View {
         .padding(.vertical, 6)
     }
 
-    // MARK: - Rows (TYPO MATCH Units)
+    // ============================================================
+    // MARK: - Local Helper Views
+    // ============================================================
 
     private var targetWeightRow: some View {
         Button { showWeightPicker = true } label: {
             HStack {
-                Text("Target Weight")
-                    .font(sectionTitleFont)
-                    .foregroundColor(titleColor)
+                Text(
+                    String(
+                        localized: "Target Weight",
+                        defaultValue: "Target Weight",
+                        comment: "Section title for target weight in body settings"
+                    )
+                ) // 🟨 UPDATED
+                .font(sectionTitleFont)
+                .foregroundColor(titleColor)
 
                 Spacer()
 
@@ -146,13 +183,16 @@ struct BodySettingsSection: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showWeightPicker) {
-
             WheelPickerSheet<Int>(
-                title: "Target Weight",
+                title: String(
+                    localized: "Target Weight",
+                    defaultValue: "Target Weight",
+                    comment: "Wheel picker title for target weight in body settings"
+                ),
                 selection: displayedWeightBinding,
                 values: weightPickerValues,
-                valueLabel: { "\($0) \(weightUnitLabel)" },
-                detent: .fraction(0.75) // per deinem aktuellen Wunsch ~70–75%
+                valueLabel: { L10n.Avatar.BodySettings.weightValue($0, unit: weightUnitLabel) },
+                detent: .fraction(0.75)
             )
         }
     }
@@ -160,9 +200,15 @@ struct BodySettingsSection: View {
     private var targetSleepRow: some View {
         Button { showSleepPicker = true } label: {
             HStack {
-                Text("Target Sleep")
-                    .font(sectionTitleFont)
-                    .foregroundColor(titleColor)
+                Text(
+                    String(
+                        localized: "Target Sleep",
+                        defaultValue: "Target Sleep",
+                        comment: "Section title for target sleep in body settings"
+                    )
+                ) // 🟨 UPDATED
+                .font(sectionTitleFont)
+                .foregroundColor(titleColor)
 
                 Spacer()
 
@@ -179,11 +225,14 @@ struct BodySettingsSection: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showSleepPicker) {
-
             let values = Array(stride(from: 300, through: 720, by: 15))
 
             WheelPickerSheet<Int>(
-                title: "Target Sleep",
+                title: String(
+                    localized: "Target Sleep",
+                    defaultValue: "Target Sleep",
+                    comment: "Wheel picker title for target sleep in body settings"
+                ),
                 selection: $dailySleepGoalMinutes,
                 values: values,
                 valueLabel: { sleepLabel($0) },
@@ -193,7 +242,9 @@ struct BodySettingsSection: View {
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("BodySettingsSection – Scaled") {
     NavigationStack {
@@ -203,6 +254,6 @@ struct BodySettingsSection: View {
                 dailySleepGoalMinutes: .constant(8 * 60)
             )
         }
-        .tint(Color.Glu.primaryBlue)
+        .tint(Color.Glu.systemForeground)
     }
 }

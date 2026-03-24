@@ -32,6 +32,15 @@ struct MainChartCacheItemV1: Identifiable {
     }
 }
 
+// ============================================================
+// MARK: - 🟨 NEW: In-flight guard (prevents duplicate per-day cache builds)
+// ============================================================
+
+@MainActor
+private enum MainChartCacheBuildGateV1 {
+    static var inFlightIDs: Set<String> = []
+}
+
 // MARK: - HealthStore Cache API
 
 extension HealthStore {
@@ -104,13 +113,33 @@ extension HealthStore {
             return
         }
 
-        // CHANGE: Ältere Tage (-3 ... -9) laden CGM + Bolus + Basal (Events) + Carbs + Protein symmetrisch per Day-Fetch
+        // 🟨 NEW: in-flight guard (avoid duplicate builds for same day)
+        if MainChartCacheBuildGateV1.inFlightIDs.contains(id) {
+            return
+        }
+        MainChartCacheBuildGateV1.inFlightIDs.insert(id)
+        defer { MainChartCacheBuildGateV1.inFlightIDs.remove(id) }
+
+        // ============================================================
+        // ✅ UPDATED (Option A): Gate insulin day-fetches by Settings
+        // - If Insulin is OFF (or CGM off) => do NOT fetch insulinDelivery for -3...-9
+        // - This prevents History warmup from hammering insulin queries unnecessarily
+        // ============================================================
+
+        let s = SettingsModel.shared
+        let therapyEnabled = (s.hasCGM && s.isInsulinTreated) // ✅ UPDATED
+
         async let cgm = fetchCGMSamplesForDayV1(dayStart: dayStart)
-        async let bolus = fetchBolusEventsForDayV1(dayStart: dayStart)
-        async let basal = fetchBasalEventsForDayV1(dayStart: dayStart) // CHANGE: Segments -> Events
 
         async let carbs = fetchCarbEventsForDayV1(dayStart: dayStart)
         async let protein = fetchProteinEventsForDayV1(dayStart: dayStart)
+
+        // 🟨 NEW: Workouts/Activity overlay for -3...-9 cache builds
+        async let activity: [ActivityOverlayEvent] = fetchWorkoutOverlayEventsForDayV1(dayStart: dayStart)
+
+        // ✅ UPDATED: only fetch insulin events when therapyEnabled
+        async let bolus: [InsulinBolusEvent] = therapyEnabled ? fetchBolusEventsForDayV1(dayStart: dayStart) : []
+        async let basal: [InsulinBasalEvent] = therapyEnabled ? fetchBasalEventsForDayV1(dayStart: dayStart) : []
 
         let rawCarbs = await carbs
         let rawProtein = await protein
@@ -118,11 +147,11 @@ extension HealthStore {
         let clusteredCarbs = clusterNutritionEventsV1(rawCarbs, windowMinutes: 10)
         let clusteredProtein = clusterNutritionEventsV1(rawProtein, windowMinutes: 10)
 
-        // ✅ NEW: Insulin clustering (10 min) – matches Nutrition behavior
+        // ✅ UPDATED: Insulin clustering only when therapyEnabled (otherwise keep empty arrays)
         let rawBolus = await bolus
         let rawBasal = await basal
-        let clusteredBolus = clusterBolusEventsV1(rawBolus, windowMinutes: 10)   // !!! NEW
-        let clusteredBasal = clusterBasalEventsV1(rawBasal, windowMinutes: 10)   // !!! NEW
+        let clusteredBolus = therapyEnabled ? clusterBolusEventsV1(rawBolus, windowMinutes: 10) : []
+        let clusteredBasal = therapyEnabled ? clusterBasalEventsV1(rawBasal, windowMinutes: 10) : []
 
         let profile = MainChartDayProfileV1(
             id: UUID(),
@@ -130,11 +159,11 @@ extension HealthStore {
             builtAt: Date(),
             isToday: Calendar.current.isDate(dayStart, inSameDayAs: Date()),
             cgm: await cgm,
-            bolus: clusteredBolus,                // !!! UPDATED
-            basal: clusteredBasal,                // !!! UPDATED
+            bolus: clusteredBolus,
+            basal: clusteredBasal,
             carbs: clusteredCarbs,
             protein: clusteredProtein,
-            activity: [],
+            activity: await activity, // 🟨 UPDATED: was []
             finger: []
         )
 
@@ -200,8 +229,8 @@ extension HealthStore {
         let basalRaw = basalFiltered.sorted { $0.timestamp < $1.timestamp }
 
         // ✅ NEW: Insulin clustering (10 min) – matches Nutrition behavior
-        let bolus = clusterBolusEventsV1(bolusRaw, windowMinutes: 10)            // !!! NEW
-        let basal = clusterBasalEventsV1(basalRaw, windowMinutes: 10)            // !!! NEW
+        let bolus = clusterBolusEventsV1(bolusRaw, windowMinutes: 10)
+        let basal = clusterBasalEventsV1(basalRaw, windowMinutes: 10)
 
         // Meal-Cluster (10 Min) pro Kind
         let rawCarbs = carbEvents3Days
@@ -229,8 +258,8 @@ extension HealthStore {
             builtAt: Date(),
             isToday: isToday,
             cgm: cgm,
-            bolus: bolus,                         // !!! UPDATED
-            basal: basal,                         // !!! UPDATED
+            bolus: bolus,
+            basal: basal,
             carbs: carbs,
             protein: protein,
             activity: activity,
@@ -300,7 +329,7 @@ extension HealthStore {
     }
 
     // ============================================================
-    // MARK: - Insulin Cluster Helper (10 Min Window)   // ✅ NEW
+    // MARK: - Insulin Cluster Helper (10 Min Window)
     // ============================================================
 
     private func clusterBolusEventsV1(
@@ -495,7 +524,6 @@ extension HealthStore {
         }
     }
 
-    // CHANGE: Basal = Event (wie Bolus), kein Segment-Fetch mehr
     private func fetchBasalEventsForDayV1(dayStart: Date) async -> [InsulinBasalEvent] {
         if isPreview { return [] }
         guard let type = HKQuantityType.quantityType(forIdentifier: .insulinDelivery) else { return [] }
@@ -536,10 +564,6 @@ extension HealthStore {
             self.healthStore.execute(query)
         }
     }
-
-    // ============================================================
-    // MARK: - Nutrition Fetch (per-day) – Carbs / Protein
-    // ============================================================
 
     private func fetchCarbEventsForDayV1(dayStart: Date) async -> [NutritionEvent] {
         if isPreview { return [] }
@@ -607,5 +631,42 @@ extension HealthStore {
 
             self.healthStore.execute(query)
         }
+    }
+
+    // 🟨 NEW: Workouts per day -> ActivityOverlayEvent(kind: .workout)
+    private func fetchWorkoutOverlayEventsForDayV1(dayStart: Date) async -> [ActivityOverlayEvent] {
+        if isPreview { return [] }
+
+        let cal = Calendar.current
+        let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
+        let type = HKObjectType.workoutType()
+        let predicate = HKQuery.predicateForSamples(withStart: dayStart, end: dayEnd, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        let raw: [HKWorkout] = await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, _ in
+                continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
+            }
+            self.healthStore.execute(query)
+        }
+
+        guard !raw.isEmpty else { return [] }
+
+        let events = raw.map {
+            ActivityOverlayEvent(
+                id: UUID(),
+                start: $0.startDate,
+                end: $0.endDate,
+                kind: .workout
+            )
+        }
+
+        return events.sorted { $0.start < $1.start }
     }
 }

@@ -2,17 +2,29 @@
 //  HistoryView.swift
 //  GluVibProbe
 //
-//  HISTORY — Content (Rows only)
-//  - NO OverviewHeader
-//  - NO Background
-//  - NO Refresh / Task
-//  - NO ViewModel
-//  - Used by HistoryOverviewViewV1 (the only History screen)
+//  History V1 — Content Composition
+//
+//  Purpose
+//  - Renders the pure History content for day sections, section headers and event rows.
+//  - Does not own background, header, refresh, task orchestration or ViewModel state.
+//  - Is embedded by HistoryOverviewViewV1 as the only History screen.
+//
+//  Data Flow (SSoT)
+//  HealthStore / HistoryViewModelV1 → HistoryOverviewViewV1 (composition / grouping) → HistoryView (content only) → row / header subviews
+//
+//  Key Connections
+//  - HistoryOverviewViewV1: owns screen composition, refresh and routing.
+//  - HistoryDaySection: UI-only grouping model for day-based History sections.
+//  - HistoryEventRowCard: renders the visual History tile.
+//  - HistoryOverviewRoute: used for overview-based navigation from row taps.
+//  - HistoryMetricRoute: passed through for compatibility with the existing History flow.
 //
 
 import SwiftUI
 
+// ============================================================
 // MARK: - Day Section Model (UI-only)
+// ============================================================
 
 struct HistoryDaySection: Hashable {
     let date: Date
@@ -20,20 +32,27 @@ struct HistoryDaySection: Hashable {
     let items: [HistoryListEvent]
 }
 
-// MARK: - Wrapper Row (Card only, NO Chevron)
+// ============================================================
+// MARK: - Row Wrapper (Card only, No Chevron)
+// ============================================================
 
 struct HistoryListRow: View {
 
     let model: HistoryEventRowCardModel
-    let onTapOverview: () -> Void        // ✅ UPDATED: tile navigates to overview only
+    let onTapOverview: () -> Void
 
     var body: some View {
-        // ✅ UPDATED: Entire tile navigates (no separate chevron)
-        HistoryEventRowCard(model: model, onTapTile: onTapOverview)
+        HistoryEventRowCard(
+            model: model,
+            onTapTile: onTapOverview
+        )
     }
 }
 
-// MARK: - Day Header (Today / Yesterday / Date + MainChart shortcut)
+// ============================================================
+// MARK: - Day Header
+// Today / Yesterday / Date + MainChart shortcut
+// ============================================================
 
 struct HistoryDayHeader: View {
 
@@ -41,12 +60,12 @@ struct HistoryDayHeader: View {
     let isChartEnabled: Bool
     let onTapDayChart: () -> Void
 
-    // ✅ Requirement: day line (Today/Yesterday/Date) must be Acid CGM Red
-    private var dayAccent: Color { Color.Glu.acidCGMRed.opacity(0.90) }
+    private var dayAccent: Color {
+        Color.Glu.acidCGMRed.opacity(0.90)
+    }
 
     var body: some View {
         HStack(alignment: .center) {
-
             Text(title)
                 .font(.callout.weight(.bold))
                 .foregroundStyle(dayAccent)
@@ -59,14 +78,17 @@ struct HistoryDayHeader: View {
                     .foregroundStyle(dayAccent)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open day chart")
+            .accessibilityLabel(String(localized: "Open day chart")) // 🟨 UPDATED
             .disabled(!isChartEnabled)
             .opacity(isChartEnabled ? 1.0 : 0.35)
         }
     }
 }
 
-// MARK: - Pure Content (Sections + Rows)
+// ============================================================
+// MARK: - Pure Content
+// Sections + Rows only
+// ============================================================
 
 struct HistoryListContentView: View {
 
@@ -84,19 +106,22 @@ struct HistoryListContentView: View {
     var body: some View {
         VStack(spacing: sectionSpacing) {
             ForEach(sections, id: \.date) { section in
-
                 HistoryDayHeader(
                     title: section.title,
                     isChartEnabled: isChartEnabled,
-                    onTapDayChart: { onTapDayChart(section.date) }
+                    onTapDayChart: {
+                        onTapDayChart(section.date)
+                    }
                 )
                 .padding(.horizontal, horizontalInset)
 
                 VStack(spacing: rowSpacing) {
-                    ForEach(section.items) { e in
+                    ForEach(section.items) { event in
                         HistoryListRow(
-                            model: e.cardModel,
-                            onTapOverview: { onTapOverview(e.overviewRoute) }   // ✅ UPDATED
+                            model: event.cardModel,
+                            onTapOverview: {
+                                onTapOverview(event.overviewRoute)
+                            }
                         )
                     }
                 }
@@ -106,7 +131,10 @@ struct HistoryListContentView: View {
     }
 }
 
-// MARK: - Legacy Wrapper (kept only so the file still offers a View type named "HistoryView")
+// ============================================================
+// MARK: - Legacy Wrapper
+// Keeps the existing external API for embedded content usage
+// ============================================================
 
 struct HistoryView: View {
 
@@ -116,7 +144,6 @@ struct HistoryView: View {
     let onTapMetric: (HistoryMetricRoute) -> Void
     let onTapOverview: (HistoryOverviewRoute) -> Void
 
-    // Layout defaults (keeps call-sites simple)
     private let horizontalInset: CGFloat = 16
     private let sectionSpacing: CGFloat = 16
     private let rowSpacing: CGFloat = 10
@@ -129,13 +156,16 @@ struct HistoryView: View {
             rowSpacing: rowSpacing,
             isChartEnabled: isChartEnabled,
             onTapDayChart: onTapDayChart,
-            onTapMetric: onTapMetric,               // kept for call-site stability (unused now)
+            onTapMetric: onTapMetric,
             onTapOverview: onTapOverview
         )
     }
 }
 
-// MARK: - Preview (content-only)
+// ============================================================
+// MARK: - Preview
+// Content-only embedded preview
+// ============================================================
 
 #Preview("History Content (Embedded)") {
     VStack(spacing: 16) {
@@ -143,7 +173,7 @@ struct HistoryView: View {
             sections: [
                 .init(
                     date: Calendar.current.startOfDay(for: Date()),
-                    title: "Today",
+                    title: L10n.History.Section.today, // 🟨 UPDATED
                     items: []
                 )
             ],

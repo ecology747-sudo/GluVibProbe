@@ -31,7 +31,7 @@ struct AveragePeriodsScaledBarChart: View {
 
     /// Kleine Luft nach oben, damit Labels über hohen Balken nicht abgeschnitten werden
     private var yMaxWithHeadroom: Double {
-        yMax * 1.06      // 8 % Headroom
+        yMax * 1.16      // 8 % Headroom
     }
 
     // MARK: - Init
@@ -99,7 +99,7 @@ struct AveragePeriodsScaledBarChart: View {
                     y: .value("Goal", goalValue)
                 )
                 .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.Glu.successGreen)
             }
         }
 
@@ -139,7 +139,7 @@ struct AveragePeriodsScaledBarChart: View {
 
                 AxisValueLabel {
                     if let raw = value.as(String.self) {
-                        let numberPart = raw.trimmingCharacters(in: .letters)
+                        let numberPart = raw.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
 
                         HStack(spacing: 0) {
                             Text("Ø")

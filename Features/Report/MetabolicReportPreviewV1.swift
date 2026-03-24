@@ -12,9 +12,11 @@ struct MetabolicReportPreviewV1: View {
     // ============================================================
 
     let windowDays: Int
+    let includeDailyChartsInReport: Bool // 🟨 NEW
 
-    init(windowDays: Int = 30) {
+    init(windowDays: Int = 30, includeDailyChartsInReport: Bool = false) { // 🟨 UPDATED
         self.windowDays = windowDays
+        self.includeDailyChartsInReport = includeDailyChartsInReport
     }
 
     // ============================================================
@@ -80,6 +82,29 @@ struct MetabolicReportPreviewV1: View {
     // UPDATED: During auto-forward we show ONLY the loading UI (no report body flash).
     private var isAutoForwardPhase: Bool {
         !didAutoForwardToExport && !showExportFlow
+    }
+
+    // ============================================================
+    // MARK: - Appendix Config (Last 9 Full Days)
+    // ============================================================
+
+    private let appendixDayOffsets: [Int] = [-1, -2, -3, -4, -5, -6, -7, -8, -9]
+
+    private var appendixPages: [AnyView] {
+        let groups: [[Int]] = [
+            [-1, -2, -3],
+            [-4, -5, -6],
+            [-7, -8, -9]
+        ]
+
+        return groups.map { group in
+            AnyView(
+                ReportLast9DaysMainChartAppendixPageV1(dayOffsets: group)
+                    .environmentObject(healthStore)
+                    .environmentObject(settings)
+                    .background(Color.white)
+            )
+        }
     }
 
     // ============================================================
@@ -166,7 +191,7 @@ struct MetabolicReportPreviewV1: View {
     // ============================================================
 
     private var pdfExportPages: [AnyView] {
-        [
+        let basePages: [AnyView] = [
             AnyView(
                 MetabolicReportBodyV1(
                     windowDays: windowDays,
@@ -204,6 +229,9 @@ struct MetabolicReportPreviewV1: View {
                 .background(Color.white)
             )
         ]
+
+        // ✅ FIX: appendix must be OPTIONAL
+        return includeDailyChartsInReport ? (basePages + appendixPages) : basePages
     }
 
     // ============================================================
@@ -223,11 +251,18 @@ struct MetabolicReportPreviewV1: View {
             guard !didAutoForwardToExport else { return }
 
             isLoading = true
+
             await healthStore.refreshMetabolicReport(.navigation, windowDays: windowDays)
             await coordinator.loadGlucosePercentileProfile(windowDays: windowDays)
-            isLoading = false
 
-            // UPDATED: open export after load (preview stays on loading screen, so no flash)
+            // ✅ FIX: only warm cache when appendix is enabled
+            if includeDailyChartsInReport {
+                for offset in appendixDayOffsets {
+                    await healthStore.ensureMainChartCachedV1(dayOffset: offset, forceRefetch: false)
+                }
+            }
+
+            isLoading = false
             showExportFlow = true
         }
         .onChange(of: settings.veryLowLimit) { _, _ in
@@ -261,9 +296,9 @@ struct MetabolicReportPreviewV1: View {
         .fullScreenCover(isPresented: $showExportFlow) {
             ReportExportFlow(
                 fileName: "GluVib_Metabolic_Report_\(windowDays)d",
+                renderKey: "\(windowDays)-\(includeDailyChartsInReport ? "charts" : "nocharts")", // ✅ FIX
                 pdfPages: { pdfExportPages },
 
-                // UPDATED: closures must return AnyView
                 pageHeader: {
                     AnyView(
                         ReportHeaderSectionView(
@@ -275,7 +310,6 @@ struct MetabolicReportPreviewV1: View {
                     )
                 },
 
-                // UPDATED: closures must return AnyView
                 pageFooter: {
                     AnyView(
                         Text(reportFootnoteText)
@@ -286,14 +320,13 @@ struct MetabolicReportPreviewV1: View {
                 },
 
                 onClose: {
-                    // UPDATED: Close export AND preview (return to Metabolic Overview)
                     showExportFlow = false
-                    dismiss()}
+                    dismiss()
+                }
             )
             .environmentObject(healthStore)
             .environmentObject(settings)
             .onAppear {
-                // UPDATED: mark auto-forward only AFTER export is actually on-screen (prevents flash)
                 didAutoForwardToExport = true
             }
         }

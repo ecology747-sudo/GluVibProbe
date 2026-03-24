@@ -2,41 +2,150 @@
 //  HealthStore+MovementSplitV1.swift
 //  GluVibProbe
 //
-//  V1: Movement Split (kein UI-Fetch, alles in HealthStore Published Values)
-//  - todayMoveMinutes / todaySedentaryMinutes / todaySleepSplitMinutes
-//  - movementSplitDaily365 (365er Reihe für Charts + Averages)
+//  Domain: Activity / Movement Split
+//  Screen Type: HealthStore Metric Extension V1
 //
-//  Regeln:
-//  - Tage werden strikt im Fenster 0–24 Uhr lokaler Zeit berechnet
-//  - Sleep wird über sleepAnalysis Samples berechnet und in die Kalendertage gesplittet
-//  - Active = PRIORITÄT appleStandTime, Fallback: Exercise, Fallback: Workout
-//  - Sedentary = minutesSoFar(today) bzw. 1440(past days) - Sleep - Active
+//  Purpose
+//  - Owns the read-only Apple Health movement-split aggregation for Movement Split V1.
+//  - Publishes todayMoveMinutes, todaySedentaryMinutes, todaySleepSplitMinutes
+//    and movementSplitDaily365 into HealthStore.
+//  - Merges Sleep + Stand Time + Exercise Time + Workout Minutes into one day-based split.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT Published Movement Split Values) → ViewModels → Views
+//
+//  Key Connections
+//  - MovementSplitViewModelV1
+//  - ActivityOverviewViewModelV1
+//  - Bootstrap async wrapper fetchMovementSplitFastSliceAsync(last:)
+//
+//  Important
+//  - Days are computed strictly in the local 0–24h window.
+//  - Sleep is split into calendar-day segments from sleepAnalysis samples.
+//  - Active source priority: appleStandTime → Exercise Time → Workout Minutes.
+//  - Sedentary = minutesSoFar(today) or 1440(past days) - Sleep - Active.
+//  - standTimeReadAuthIssueV1 is set EXCLUSIVELY by probeStandTimeReadAuthIssueV1Async().
+//  - Probe is permission-only: empty results are DATA state, never permission state.
 //
 
 import Foundation
 import HealthKit
+import OSLog
 
 // ============================================================
-// MARK: - HealthStore + Movement Split (V1)
+// MARK: - HealthStore + Movement Split
 // ============================================================
 
 extension HealthStore {
 
     // ============================================================
-    // MARK: - Public V1 API (Entry Points)
+    // MARK: - Stand Time Auth Issue Classification
+    // ============================================================
+
+    private func _standTimeIsReadAuthIssueV1(_ error: Error?) -> Bool {
+        guard let ns = error as NSError? else { return false }
+        guard ns.domain == HKErrorDomain else { return false }
+        guard let code = HKError.Code(rawValue: ns.code) else { return false }
+        return code == .errorAuthorizationDenied || code == .errorAuthorizationNotDetermined
+    }
+
+    // 🟨 UPDATED
+    private func _standTimeResolveReadAuthIssueV1(
+        error: Error?
+    ) -> Bool {
+        _standTimeIsReadAuthIssueV1(error)
+    }
+
+    // ============================================================
+    // MARK: - Deterministic Read-Query Probe (Single-Writer)
+    // ============================================================
+
+    @MainActor
+    func probeStandTimeReadAuthIssueV1Async() async -> Bool {
+        if isPreview {
+            standTimeReadAuthIssueV1 = false // 🟨 UPDATED
+            GluLog.healthStore.debug("standTime probe skipped | preview=true")
+            return false
+        }
+
+        let key = ObjectIdentifier(self)
+
+        if let cached = StandTimeProbeGateV1.cachedResultIfFresh(for: key) {
+            standTimeReadAuthIssueV1 = cached
+            GluLog.healthStore.debug("standTime probe cache hit | authIssue=\(cached, privacy: .public)")
+            return cached
+        }
+
+        if let inFlight = StandTimeProbeGateV1.inFlightTask(for: key) {
+            let value = await inFlight.value
+            standTimeReadAuthIssueV1 = value
+            GluLog.healthStore.debug("standTime probe joined inFlight | authIssue=\(value, privacy: .public)")
+            return value
+        }
+
+        GluLog.healthStore.notice("standTime probe started")
+
+        let task = Task<Bool, Never> { [weak self] in
+            guard let self else { return false }
+
+            guard let type = HKQuantityType.quantityType(forIdentifier: .appleStandTime) else {
+                GluLog.healthStore.error("standTime probe failed | quantityTypeUnavailable=true")
+                return true
+            }
+
+            let now = Date()
+
+            // 🟨 UPDATED
+            let predicate = HKQuery.predicateForSamples(withStart: nil, end: now, options: [])
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+            let isAuthIssue: Bool = await withCheckedContinuation { continuation in
+                let query = HKSampleQuery(
+                    sampleType: type,
+                    predicate: predicate,
+                    limit: 1,
+                    sortDescriptors: [sort]
+                ) { [weak self] _, _, error in
+                    guard let self else {
+                        continuation.resume(returning: false)
+                        return
+                    }
+
+                    // 🟨 UPDATED
+                    let resolved = self._standTimeResolveReadAuthIssueV1(error: error)
+                    continuation.resume(returning: resolved)
+                }
+
+                self.healthStore.execute(query)
+            }
+
+            return isAuthIssue
+        }
+
+        StandTimeProbeGateV1.setInFlight(task, for: key)
+        let result = await task.value
+        StandTimeProbeGateV1.finish(with: result, for: key)
+
+        standTimeReadAuthIssueV1 = result
+        GluLog.healthStore.notice("standTime probe finished | authIssue=\(result, privacy: .public)")
+        return result
+    }
+
+    // ============================================================
+    // MARK: - Public API
     // ============================================================
 
     func fetchMovementSplitTodayV1() {
+        GluLog.healthStore.notice("fetchMovementSplitTodayV1 started")
         fetchMovementSplitDaily365V1(last: 1, completion: nil)
     }
 
-    // ✅ UPDATED: optional completion, damit Bootstrap "awaiten" kann
     func fetchMovementSplitDaily365V1(
         last days: Int = 365,
         completion: (() -> Void)? = nil
     ) {
 
-        // MARK: - Date Context (shared)
+        GluLog.healthStore.notice("fetchMovementSplitDaily365V1 started | days=\(days, privacy: .public)")
 
         let calendar = Calendar.current
         let now = Date()
@@ -62,113 +171,119 @@ extension HealthStore {
                         minutesSoFar - self.todaySleepSplitMinutes - self.todayMoveMinutes
                     )
 
-                    // !!! NEW: Preview Source (default = standTime, damit kein Hinweis erscheint)
-                    self.movementSplitActiveSourceTodayV1 = (today.activeMinutes > 0 ? .standTime : .none) // !!! NEW
+                    self.movementSplitActiveSourceTodayV1 = (today.activeMinutes > 0 ? .standTime : .none)
                 } else {
                     self.todayMoveMinutes = 0
                     self.todaySleepSplitMinutes = 0
                     self.todaySedentaryMinutes = 0
-                    self.movementSplitActiveSourceTodayV1 = .none                                          // !!! NEW
+                    self.movementSplitActiveSourceTodayV1 = .none
                 }
+
+                GluLog.healthStore.debug(
+                    "fetchMovementSplitDaily365V1 preview applied | entries=\(self.movementSplitDaily365.count, privacy: .public) todayMove=\(self.todayMoveMinutes, privacy: .public) todaySleep=\(self.todaySleepSplitMinutes, privacy: .public) todaySedentary=\(self.todaySedentaryMinutes, privacy: .public) source=\(self.movementSplitActiveSourceTodayV1.rawValue, privacy: .public)"
+                )
 
                 completion?()
             }
             return
         }
 
-        // ---------------------------------------
-        // MARK: - Orchestration (Sleep -> Stand -> Exercise -> Workout -> Merge)
-        // ---------------------------------------
+        Task { @MainActor in
+            _ = await self.probeSleepReadAuthIssueV1Async()
+            _ = await self.probeStandTimeReadAuthIssueV1Async()
+            _ = await self.probeExerciseTimeReadAuthIssueV1Async()
+            _ = await self.probeWorkoutMinutesReadAuthIssueV1Async()
 
-        fetchSleepSplitDailyV1(last: days) { [weak self] sleepPerDay in
-            guard let self else { return }
+            GluLog.healthStore.debug(
+                "fetchMovementSplitDaily365V1 probes finished | sleepAuthIssue=\(self.sleepReadAuthIssueV1, privacy: .public) standAuthIssue=\(self.standTimeReadAuthIssueV1, privacy: .public) exerciseAuthIssue=\(self.exerciseTimeReadAuthIssueV1, privacy: .public) workoutAuthIssue=\(self.workoutMinutesReadAuthIssueV1, privacy: .public)"
+            )
 
-            self.fetchStandMinutesDailyV1(last: days) { standPerDay in
+            self.fetchSleepSplitDailyV1(last: days) { [weak self] sleepPerDay in
+                guard let self else { return }
 
-                // ✅ MoveTime wird NICHT mehr für Active verwendet.
-                self.fetchExerciseMinutesDailyV1(last: days) { exercisePerDay in
+                self.fetchStandMinutesDailyV1(last: days) { standPerDay in
 
-                    self.fetchWorkoutMinutesDailyV1(last: days) { workoutPerDay in
+                    self.fetchExerciseMinutesDailyV1(last: days) { exercisePerDay in
 
-                        var out: [DailyMovementSplitEntry] = []
-                        out.reserveCapacity(days)
+                        self.fetchWorkoutMinutesDailyV1(last: days) { workoutPerDay in
 
-                        // !!! NEW: Today Source merken (für UX-Hinweis / ViewModel)
-                        var todaySource: MovementSplitActiveSourceTodayV1 = .none                          // !!! NEW
+                            var out: [DailyMovementSplitEntry] = []
+                            out.reserveCapacity(days)
 
-                        for offset in stride(from: days - 1, through: 0, by: -1) {
-                            guard let date = calendar.date(byAdding: .day, value: -offset, to: todayStart) else { continue }
-                            let dayKey = calendar.startOfDay(for: date)
+                            var todaySource: MovementSplitActiveSourceTodayV1 = .none
 
-                            let sleep = sleepPerDay[dayKey] ?? (morning: 0, evening: 0, total: 0)
-                            let stand = standPerDay[dayKey] ?? 0
-                            let ex    = exercisePerDay[dayKey] ?? 0
-                            let wo    = workoutPerDay[dayKey] ?? 0
+                            for offset in stride(from: days - 1, through: 0, by: -1) {
+                                guard let date = calendar.date(byAdding: .day, value: -offset, to: todayStart) else { continue }
+                                let dayKey = calendar.startOfDay(for: date)
 
-                            // ✅ ACTIVE PRIORITY (verbindlich, genau EINE Quelle)
-                            let active: Int
-                            let source: MovementSplitActiveSourceTodayV1                                     // !!! NEW
+                                let sleep = sleepPerDay[dayKey] ?? (morning: 0, evening: 0, total: 0)
+                                let stand = standPerDay[dayKey] ?? 0
+                                let ex    = exercisePerDay[dayKey] ?? 0
+                                let wo    = workoutPerDay[dayKey] ?? 0
 
-                            if stand > 0 {
-                                active = stand
-                                source = .standTime                                                         // !!! NEW
-                            } else if ex > 0 {
-                                active = ex
-                                source = .exerciseMinutes                                                    // !!! NEW
-                            } else if wo > 0 {
-                                active = wo
-                                source = .workoutMinutes                                                     // !!! NEW
-                            } else {
-                                active = 0
-                                source = .none                                                              // !!! NEW
-                            }
+                                let active: Int
+                                let source: MovementSplitActiveSourceTodayV1
 
-                            // ✅ Sedentary Logik UNVERÄNDERT (Restwert)
-                            let isToday = calendar.isDate(dayKey, inSameDayAs: todayStart)
-                            let minutesWindow = isToday ? Int(now.timeIntervalSince(todayStart) / 60.0) : 1440
-                            let sedentary = max(0, minutesWindow - sleep.total - active)
+                                if stand > 0 {
+                                    active = stand
+                                    source = .standTime
+                                } else if ex > 0 {
+                                    active = ex
+                                    source = .exerciseMinutes
+                                } else if wo > 0 {
+                                    active = wo
+                                    source = .workoutMinutes
+                                } else {
+                                    active = 0
+                                    source = .none
+                                }
 
-                            out.append(
-                                DailyMovementSplitEntry(
-                                    date: date,
-                                    sleepMorningMinutes: sleep.morning,
-                                    sleepEveningMinutes: sleep.evening,
-                                    sedentaryMinutes: sedentary,
-                                    activeMinutes: active
-                                )
-                            )
+                                let isToday = calendar.isDate(dayKey, inSameDayAs: todayStart)
+                                let minutesWindow = isToday ? Int(now.timeIntervalSince(todayStart) / 60.0) : 1440
+                                let sedentary = max(0, minutesWindow - sleep.total - active)
 
-                            // !!! NEW: Nur für TODAY merken (UX-Hinweis)
-                            if isToday {                                                                     // !!! NEW
-                                todaySource = source                                                         // !!! NEW
-                            }                                                                                // !!! NEW
-                        }
-
-                        DispatchQueue.main.async {
-                            self.movementSplitDaily365 = out
-
-                            if let today = out.last(where: { calendar.isDate($0.date, inSameDayAs: todayStart) }) {
-                                self.todayMoveMinutes = today.activeMinutes
-                                self.todaySleepSplitMinutes = today.sleepMorningMinutes + today.sleepEveningMinutes
-
-                                let minutesSoFar = Int(now.timeIntervalSince(todayStart) / 60.0)
-                                self.todaySedentaryMinutes = max(
-                                    0,
-                                    minutesSoFar - self.todaySleepSplitMinutes - self.todayMoveMinutes
+                                out.append(
+                                    DailyMovementSplitEntry(
+                                        date: date,
+                                        sleepMorningMinutes: sleep.morning,
+                                        sleepEveningMinutes: sleep.evening,
+                                        sedentaryMinutes: sedentary,
+                                        activeMinutes: active
+                                    )
                                 )
 
-                                // !!! NEW: Active Source Today publishen
-                                self.movementSplitActiveSourceTodayV1 = todaySource                          // !!! NEW
-                            } else {
-                                self.todayMoveMinutes = 0
-                                self.todaySleepSplitMinutes = 0
-                                self.todaySedentaryMinutes = 0
-
-                                // !!! NEW: fallback
-                                self.movementSplitActiveSourceTodayV1 = .none                                // !!! NEW
+                                if isToday {
+                                    todaySource = source
+                                }
                             }
 
-                            completion?()
+                            DispatchQueue.main.async {
+                                self.movementSplitDaily365 = out
+
+                                if let today = out.last(where: { calendar.isDate($0.date, inSameDayAs: todayStart) }) {
+                                    self.todayMoveMinutes = today.activeMinutes
+                                    self.todaySleepSplitMinutes = today.sleepMorningMinutes + today.sleepEveningMinutes
+
+                                    let minutesSoFar = Int(now.timeIntervalSince(todayStart) / 60.0)
+                                    self.todaySedentaryMinutes = max(
+                                        0,
+                                        minutesSoFar - self.todaySleepSplitMinutes - self.todayMoveMinutes
+                                    )
+
+                                    self.movementSplitActiveSourceTodayV1 = todaySource
+                                } else {
+                                    self.todayMoveMinutes = 0
+                                    self.todaySleepSplitMinutes = 0
+                                    self.todaySedentaryMinutes = 0
+                                    self.movementSplitActiveSourceTodayV1 = .none
+                                }
+
+                                GluLog.healthStore.notice(
+                                    "fetchMovementSplitDaily365V1 finished | entries=\(self.movementSplitDaily365.count, privacy: .public) todayMove=\(self.todayMoveMinutes, privacy: .public) todaySleep=\(self.todaySleepSplitMinutes, privacy: .public) todaySedentary=\(self.todaySedentaryMinutes, privacy: .public) source=\(self.movementSplitActiveSourceTodayV1.rawValue, privacy: .public)"
+                                )
+
+                                completion?()
+                            }
                         }
                     }
                 }
@@ -177,14 +292,21 @@ extension HealthStore {
     }
 
     // ============================================================
-    // MARK: - Sleep Split (HealthKit)  ✅ UNVERÄNDERT
+    // MARK: - Sleep Split
     // ============================================================
 
     private func fetchSleepSplitDailyV1(
         last days: Int,
         completion: @escaping ([Date: (morning: Int, evening: Int, total: Int)]) -> Void
     ) {
+        guard sleepReadAuthIssueV1 == false else {
+            GluLog.healthStore.debug("fetchSleepSplitDailyV1 skipped | authIssue=true")
+            completion([:])
+            return
+        }
+
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            GluLog.healthStore.error("fetchSleepSplitDailyV1 failed | sleepTypeUnavailable=true")
             completion([:])
             return
         }
@@ -194,6 +316,7 @@ extension HealthStore {
         let todayStart = calendar.startOfDay(for: now)
 
         guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
+            GluLog.healthStore.error("fetchSleepSplitDailyV1 failed | startDateUnavailable=true")
             completion([:])
             return
         }
@@ -209,14 +332,17 @@ extension HealthStore {
             limit: HKObjectQueryNoLimit,
             sortDescriptors: [sortDescriptor]
         ) { _, samples, _ in
-            guard let samples = samples as? [HKCategorySample], !samples.isEmpty else {
+
+            let allSamples = (samples as? [HKCategorySample]) ?? []
+            let filteredSamples = allSamples.filter { Self.isAsleepSample($0) }
+
+            guard !filteredSamples.isEmpty else {
                 DispatchQueue.main.async { completion(result) }
+                GluLog.healthStore.debug("fetchSleepSplitDailyV1 finished | asleepSamples=0 days=0")
                 return
             }
 
-            for sample in samples {
-                if sample.value == HKCategoryValueSleepAnalysis.awake.rawValue { continue }
-
+            for sample in filteredSamples {
                 let sampleStart = max(sample.startDate, startDate)
                 let sampleEnd   = min(sample.endDate, now)
                 if sampleEnd <= sampleStart { continue }
@@ -260,20 +386,28 @@ extension HealthStore {
             }
 
             DispatchQueue.main.async { completion(result) }
+            GluLog.healthStore.debug("fetchSleepSplitDailyV1 finished | asleepSamples=\(filteredSamples.count, privacy: .public) days=\(result.count, privacy: .public)")
         }
 
         healthStore.execute(query)
     }
 
     // ============================================================
-    // MARK: - Stand Time (appleStandTime) PRIORITY ✅ UNVERÄNDERT
+    // MARK: - Stand Time (Priority #1)
     // ============================================================
 
     private func fetchStandMinutesDailyV1(
         last days: Int,
         completion: @escaping ([Date: Int]) -> Void
     ) {
+        guard standTimeReadAuthIssueV1 == false else {
+            GluLog.healthStore.debug("fetchStandMinutesDailyV1 skipped | authIssue=true")
+            completion([:])
+            return
+        }
+
         guard let standType = HKQuantityType.quantityType(forIdentifier: .appleStandTime) else {
+            GluLog.healthStore.error("fetchStandMinutesDailyV1 failed | standTypeUnavailable=true")
             completion([:])
             return
         }
@@ -283,6 +417,7 @@ extension HealthStore {
         let todayStart = calendar.startOfDay(for: now)
 
         guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
+            GluLog.healthStore.error("fetchStandMinutesDailyV1 failed | startDateUnavailable=true")
             completion([:])
             return
         }
@@ -303,6 +438,7 @@ extension HealthStore {
         query.initialResultsHandler = { _, results, _ in
             guard let results else {
                 DispatchQueue.main.async { completion(values) }
+                GluLog.healthStore.debug("fetchStandMinutesDailyV1 finished | entries=0 resultsEmpty=true")
                 return
             }
 
@@ -313,20 +449,28 @@ extension HealthStore {
             }
 
             DispatchQueue.main.async { completion(values) }
+            GluLog.healthStore.debug("fetchStandMinutesDailyV1 finished | entries=\(values.count, privacy: .public)")
         }
 
         healthStore.execute(query)
     }
 
     // ============================================================
-    // MARK: - Exercise Time (appleExerciseTime) Priority #2 ✅ UNVERÄNDERT
+    // MARK: - Exercise Time (Priority #2)
     // ============================================================
 
     private func fetchExerciseMinutesDailyV1(
         last days: Int,
         completion: @escaping ([Date: Int]) -> Void
     ) {
+        guard exerciseTimeReadAuthIssueV1 == false else {
+            GluLog.healthStore.debug("fetchExerciseMinutesDailyV1 skipped | authIssue=true")
+            completion([:])
+            return
+        }
+
         guard let exType = HKQuantityType.quantityType(forIdentifier: .appleExerciseTime) else {
+            GluLog.healthStore.error("fetchExerciseMinutesDailyV1 failed | exerciseTypeUnavailable=true")
             completion([:])
             return
         }
@@ -336,6 +480,7 @@ extension HealthStore {
         let todayStart = calendar.startOfDay(for: now)
 
         guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
+            GluLog.healthStore.error("fetchExerciseMinutesDailyV1 failed | startDateUnavailable=true")
             completion([:])
             return
         }
@@ -356,6 +501,7 @@ extension HealthStore {
         query.initialResultsHandler = { _, results, _ in
             guard let results else {
                 DispatchQueue.main.async { completion(values) }
+                GluLog.healthStore.debug("fetchExerciseMinutesDailyV1 finished | entries=0 resultsEmpty=true")
                 return
             }
 
@@ -366,24 +512,32 @@ extension HealthStore {
             }
 
             DispatchQueue.main.async { completion(values) }
+            GluLog.healthStore.debug("fetchExerciseMinutesDailyV1 finished | entries=\(values.count, privacy: .public)")
         }
 
         healthStore.execute(query)
     }
 
     // ============================================================
-    // MARK: - Workout Minutes (HKWorkout) Priority #3  // !!! NEW
+    // MARK: - Workout Minutes (Priority #3)
     // ============================================================
 
     private func fetchWorkoutMinutesDailyV1(
         last days: Int,
         completion: @escaping ([Date: Int]) -> Void
     ) {
+        guard workoutMinutesReadAuthIssueV1 == false else {
+            GluLog.healthStore.debug("fetchWorkoutMinutesDailyV1 skipped | authIssue=true")
+            completion([:])
+            return
+        }
+
         let calendar = Calendar.current
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
 
         guard let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: todayStart) else {
+            GluLog.healthStore.error("fetchWorkoutMinutesDailyV1 failed | startDateUnavailable=true")
             completion([:])
             return
         }
@@ -401,11 +555,11 @@ extension HealthStore {
         ) { _, samples, _ in
             guard let workouts = samples as? [HKWorkout], !workouts.isEmpty else {
                 DispatchQueue.main.async { completion(values) }
+                GluLog.healthStore.debug("fetchWorkoutMinutesDailyV1 finished | workouts=0 entries=0")
                 return
             }
 
             for w in workouts {
-                // Workout kann über Mitternacht gehen → wir splitten strikt 0–24h wie bei Sleep.
                 let workoutStart = max(w.startDate, startDate)
                 let workoutEnd   = min(w.endDate, now)
                 if workoutEnd <= workoutStart { continue }
@@ -426,8 +580,41 @@ extension HealthStore {
             }
 
             DispatchQueue.main.async { completion(values) }
+            GluLog.healthStore.debug("fetchWorkoutMinutesDailyV1 finished | workouts=\(workouts.count, privacy: .public) entries=\(values.count, privacy: .public)")
         }
 
         healthStore.execute(query)
+    }
+}
+
+// ============================================================
+// MARK: - File-local Probe Gate
+// ============================================================
+
+private enum StandTimeProbeGateV1 {
+
+    private static let ttl: TimeInterval = 10
+
+    private static var lastRun: [ObjectIdentifier: Date] = [:]
+    private static var lastResult: [ObjectIdentifier: Bool] = [:]
+    private static var inFlight: [ObjectIdentifier: Task<Bool, Never>] = [:]
+
+    static func cachedResultIfFresh(for key: ObjectIdentifier) -> Bool? {
+        guard let last = lastRun[key], let value = lastResult[key] else { return nil }
+        return (Date().timeIntervalSince(last) <= ttl) ? value : nil
+    }
+
+    static func inFlightTask(for key: ObjectIdentifier) -> Task<Bool, Never>? {
+        inFlight[key]
+    }
+
+    static func setInFlight(_ task: Task<Bool, Never>, for key: ObjectIdentifier) {
+        inFlight[key] = task
+    }
+
+    static func finish(with result: Bool, for key: ObjectIdentifier) {
+        inFlight[key] = nil
+        lastRun[key] = Date()
+        lastResult[key] = result
     }
 }

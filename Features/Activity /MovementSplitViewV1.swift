@@ -2,23 +2,59 @@
 //  MovementSplitViewV1.swift
 //  GluVibProbe
 //
+//  Activity V1 — Movement Split Detail Screen
+//
+//  Purpose
+//  - Renders the movement split metric detail screen for the Activity domain.
+//  - Shows the combined movement split hint state, KPI content, daily chart,
+//    and the shared activity metric chip navigation.
+//
+//  Data Flow (SSoT)
+//  Apple Health → HealthStore (SSoT) → MovementSplitViewModelV1 (mapping / formatting) → MovementSplitViewV1 (render only)
+//
+//  Key Connections
+//  - MovementSplitViewModelV1: provides today hint state, KPI texts, chart input data and active-source hint text.
+//  - HealthStore: provides the central activity badge / attention sources and refresh entry points.
+//  - AppState: handles navigation and metric routing.
+//  - ActivitySectionCardScaledV2: shared activity card shell for chips, KPIs and charts.
+//  - MovementSplitDailyChart: renders the custom daily stacked chart for the metric.
+//  - L10n: localized titles and labels for the movement split metric.
+//
 
 import SwiftUI
 
 struct MovementSplitViewV1: View {
 
+    // ============================================================
+    // MARK: - Dependencies (Environment)
+    // ============================================================
+
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var healthStore: HealthStore
+    @EnvironmentObject var settings: SettingsModel
+
+    // ============================================================
+    // MARK: - ViewModel
+    // ============================================================
 
     @StateObject private var viewModel: MovementSplitViewModelV1
 
+    // ============================================================
+    // MARK: - Inputs
+    // ============================================================
+
     let onMetricSelected: (String) -> Void
+
+    // ============================================================
+    // MARK: - Init
+    // ============================================================
 
     init(
         viewModel: MovementSplitViewModelV1? = nil,
         onMetricSelected: @escaping (String) -> Void = { _ in }
     ) {
         self.onMetricSelected = onMetricSelected
+
         if let viewModel {
             _viewModel = StateObject(wrappedValue: viewModel)
         } else {
@@ -26,9 +62,29 @@ struct MovementSplitViewV1: View {
         }
     }
 
+    // ============================================================
+    // MARK: - Today Hint
+    // ============================================================
+
+    private var localizedTodayHint: String? { // 🟨 UPDATED
+        guard settings.showPermissionWarnings else { return nil }
+        guard let state = viewModel.todayInfoState else { return nil }
+
+        switch state {
+        case .noHistory:
+            return L10n.MovementSplit.hintNoDataOrPermission
+        case .noTodayData:
+            return L10n.MovementSplit.hintNoToday
+        }
+    }
+
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
+
     var body: some View {
         MetricDetailScaffold(
-            headerTitle: "Activity",
+            headerTitle: L10n.Common.activity,
             headerTint: Color.Glu.activityDomain,
             onBack: {
                 appState.currentStatsScreen = .none
@@ -36,6 +92,7 @@ struct MovementSplitViewV1: View {
             onRefresh: {
                 await healthStore.refreshActivity(.pullToRefresh)
             },
+            showsPermissionBadge: settings.showPermissionWarnings && healthStore.movementSplitAnyAttentionForBadgesV1, // 🟨 UPDATED
             background: {
                 LinearGradient(
                     colors: [
@@ -49,22 +106,24 @@ struct MovementSplitViewV1: View {
         ) {
             VStack(alignment: .leading, spacing: 10) {
 
-                // ------------------------------------------------------------
-                // Card
-                // ------------------------------------------------------------
+                // Today info / hint text from ViewModel
+                if let hint = localizedTodayHint { // 🟨 UPDATED
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(Color.Glu.primaryBlue)
+                        .padding(.horizontal, 2)
+                }
+
+                // Shared Activity metric card shell
                 ActivitySectionCardScaledV2(
                     sectionTitle: "",
-                    title: "Movement Split",
-
-                    // Standard KPI-Inputs bleiben "neutral", weil wir customKpiContent nutzen
-                    kpiTitle: "Today",
+                    title: L10n.MovementSplit.title,
+                    kpiTitle: L10n.MovementSplit.kpiToday,
                     kpiTargetText: "–",
                     kpiCurrentText: "–",
                     kpiDeltaText: "–",
                     kpiDeltaColor: nil,
                     hasTarget: false,
-
-                    // ✅ TRICK wie Steps: Period Picker braucht "daily series" → wir geben Dates mit (activeMinutes als steps)
                     last90DaysData: viewModel.movementSplitDaily365.map { entry in
                         DailyStepsEntry(date: entry.date, steps: max(0, entry.activeMinutes))
                     },
@@ -74,25 +133,22 @@ struct MovementSplitViewV1: View {
                     periodScale: MetricScaleHelper.scale([], for: .exerciseMinutes),
                     monthlyScale: MetricScaleHelper.scale([], for: .exerciseMinutes),
                     goalValue: nil,
-
-                    onMetricSelected: onMetricSelected,
+                    onMetricSelected: { metric in
+                        appState.handleMetricTap(metricName: metric, settings: settings)
+                    },
                     metrics: AppState.activityVisibleMetrics,
                     showsDailyChart: true,
                     showsPeriodChart: false,
                     showsMonthlyChart: false,
-
-                    // ✅ KPI: nur KPIs (Hint ist OUTSIDE Card)
                     customKpiContent: AnyView(
                         HStack(alignment: .top, spacing: 10) {
-                            KPICard(title: "Sleep Today",  valueText: viewModel.kpiSleepText,     unit: nil, domain: .activity)
-                            KPICard(title: "Active Today", valueText: viewModel.kpiActiveText,    unit: nil, domain: .activity)
-                            KPICard(title: "Not Active",   valueText: viewModel.kpiSedentaryText, unit: nil, domain: .activity)
+                            KPICard(title: L10n.MovementSplit.sleepToday, valueText: viewModel.kpiSleepText, unit: nil, domain: .activity)
+                            KPICard(title: L10n.MovementSplit.activeToday, valueText: viewModel.kpiActiveText, unit: nil, domain: .activity)
+                            KPICard(title: L10n.MovementSplit.notActive, valueText: viewModel.kpiSedentaryText, unit: nil, domain: .activity)
                         }
                         .padding(.bottom, 10)
                     ),
-
                     customChartContent: nil,
-
                     customDailyChartBuilder: { period, filtered in
                         let calendar = Calendar.current
                         let allowedDays = Set(filtered.map { calendar.startOfDay(for: $0.date) })
@@ -114,20 +170,31 @@ struct MovementSplitViewV1: View {
                             MovementSplitDailyChart(data: slice, barWidth: barWidth)
                         )
                     },
+                    dailyScaleType: nil,
+                    showsWarningBadgeForMetric: { metric in
+                        guard settings.showPermissionWarnings else { return false }
 
-                    dailyScaleType: nil
+                        switch metric {
+                        case L10n.Steps.title:
+                            return healthStore.stepsAnyAttentionForBadgesV1
+                        case L10n.WorkoutMinutes.title:
+                            return healthStore.workoutMinutesAnyAttentionForBadgesV1
+                        case L10n.ActivityEnergy.title:
+                            return healthStore.activeEnergyAnyAttentionForBadgesV1
+                        case L10n.MovementSplit.title:
+                            return healthStore.movementSplitAnyAttentionForBadgesV1 // 🟨 UPDATED
+                        default:
+                            return false
+                        }
+                    }
                 )
 
-                // ------------------------------------------------------------
-                // ✅ Hint OUTSIDE Card (linksbündig zur Card-Kante)
-                // ------------------------------------------------------------
                 if let hint = viewModel.activeSourceHintText {
                     MovementSplitHintOutsideCard(text: hint)
                         .padding(.top, 2)
                 }
             }
-            // ✅ Wichtig: erzwingt “hart” linksbündig für ALLE Kinder (Card + Hint)
-            .frame(maxWidth: .infinity, alignment: .leading) // !!! FIX
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task {
             await healthStore.refreshActivity(.navigation)
@@ -135,11 +202,14 @@ struct MovementSplitViewV1: View {
     }
 }
 
-// MARK: - Hint (Outside Card + Fade-In)
+// ============================================================
+// MARK: - Helper View
+// ============================================================
 
 private struct MovementSplitHintOutsideCard: View {
 
     let text: String
+
     @State private var isVisible = false
 
     var body: some View {
@@ -149,30 +219,30 @@ private struct MovementSplitHintOutsideCard: View {
                 .foregroundStyle(Color.Glu.primaryBlue.opacity(0.85))
 
             Text(text)
-                .font(.subheadline.weight(.semibold))          // ✅ etwas größer
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.Glu.primaryBlue)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Spacer(minLength: 0)                               // ✅ hält’s links ruhig
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)       // ✅ harte Leading-Führung
+        .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(isVisible ? 1 : 0)
         .onAppear {
             guard !isVisible else { return }
-            withAnimation(.easeInOut(duration: 0.28)) {        // ✅ leichtes Fade-In
+            withAnimation(.easeInOut(duration: 0.28)) {
                 isVisible = true
             }
         }
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("MovementSplitViewV1 – Activity (Hint: Exercise)") {
-    // ✅ Preview-Store (keine echten HK-Queries)
     let previewStore = HealthStore(isPreview: true)
 
-    // ✅ Dummy-Day (Today) + ein bisschen History, damit dein Chart/Picker was sieht
     let calendar = Calendar.current
     let today = calendar.startOfDay(for: Date())
 
@@ -200,13 +270,10 @@ private struct MovementSplitHintOutsideCard: View {
         )
     ]
 
-    // ✅ SSoT: Series + Today KPIs
     previewStore.movementSplitDaily365 = entries
     previewStore.todaySleepSplitMinutes = 360
     previewStore.todayMoveMinutes = 60
     previewStore.todaySedentaryMinutes = 780
-
-    // ✅ Hint erzwingen (nicht StandTime)
     previewStore.movementSplitActiveSourceTodayV1 = .exerciseMinutes
 
     let previewVM = MovementSplitViewModelV1(healthStore: previewStore)
@@ -215,4 +282,5 @@ private struct MovementSplitHintOutsideCard: View {
     return MovementSplitViewV1(viewModel: previewVM)
         .environmentObject(previewStore)
         .environmentObject(previewState)
+        .environmentObject(SettingsModel.shared)
 }

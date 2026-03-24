@@ -14,6 +14,8 @@ import UIKit
 
 struct GlassyBubbleCard: View {
 
+    @Environment(\.colorScheme) private var colorScheme // UPDATED
+
     // ============================================================
     // MARK: - Inputs
     // ============================================================
@@ -38,7 +40,55 @@ struct GlassyBubbleCard: View {
     // MARK: - Style Tokens
     // ============================================================
 
-    private let blue = Color.Glu.primaryBlue
+    private var titleColor: Color { // UPDATED
+        colorScheme == .dark
+            ? Color.white.opacity(0.96)
+            : Color.Glu.primaryBlue
+    }
+
+    private var secondaryTextColor: Color { // UPDATED
+        colorScheme == .dark
+            ? Color.white.opacity(0.82)
+            : Color.Glu.primaryBlue.opacity(0.80)
+    }
+
+    private var messageColor: UIColor { // UPDATED
+        UIColor(
+            colorScheme == .dark
+                ? Color.white.opacity(0.84)
+                : Color.Glu.primaryBlue.opacity(0.78)
+        )
+    }
+
+    private var primaryButtonTextColor: Color { // UPDATED
+        colorScheme == .dark
+            ? Color.white.opacity(0.96)
+            : Color.Glu.primaryBlue
+    }
+
+    private var primaryButtonFill: Color { // UPDATED
+        colorScheme == .dark
+            ? Color.white.opacity(0.12)
+            : Color.white.opacity(0.30)
+    }
+
+    private var cardStroke: Color { // UPDATED
+        colorScheme == .dark
+            ? Color.white.opacity(0.10)
+            : Color.black.opacity(0.06)
+    }
+
+    private var buttonStroke: Color { // UPDATED
+        colorScheme == .dark
+            ? Color.white.opacity(0.06)
+            : Color.clear
+    }
+
+    private var shadowColor: Color { // UPDATED
+        colorScheme == .dark
+            ? .black.opacity(0.22)
+            : .clear
+    }
 
     // ============================================================
     // MARK: - Body
@@ -56,15 +106,15 @@ struct GlassyBubbleCard: View {
             VStack(spacing: 14) {
 
                 Text(title)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(blue)
+                    .font(.title3.weight(colorScheme == .dark ? .regular : .bold)) // UPDATED
+                    .foregroundStyle(titleColor) // UPDATED
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
 
                 NoHyphenationText(
                     text: message,
                     font: UIFont.systemFont(ofSize: 17, weight: .regular),
-                    color: UIColor(Color.Glu.primaryBlue.opacity(0.78))
+                    color: messageColor // UPDATED
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -74,12 +124,22 @@ struct GlassyBubbleCard: View {
                     onPrimary()
                 } label: {
                     Text(primaryTitle)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(blue)
+                        .font(
+                            colorScheme == .dark
+                                ? .system(size: 18, weight: .semibold)
+                                : .headline.weight(.semibold)
+                        ) // UPDATED
+                        .foregroundStyle(primaryButtonTextColor) // UPDATED
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.white.opacity(0.30))
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(primaryButtonFill) // UPDATED
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(buttonStroke, lineWidth: 1) // UPDATED
+                        )
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 6)
@@ -89,7 +149,7 @@ struct GlassyBubbleCard: View {
                 } label: {
                     Text(secondaryTitle)
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(blue.opacity(0.80))
+                        .foregroundStyle(secondaryTextColor) // UPDATED
                         .frame(maxWidth: .infinity)
                         .padding(.top, 2)
                 }
@@ -100,14 +160,25 @@ struct GlassyBubbleCard: View {
             .padding(.top, 18)
             .padding(.bottom, 18)
             .frame(maxWidth: maxCardWidth)
-            .background(
-                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
+            .background {
+                if colorScheme == .dark { // UPDATED
+                    ZStack {
+                        RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                            .fill(.ultraThinMaterial)
+
+                        RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                            .fill(Color.black.opacity(0.56))
+                    }
+                } else {
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
-                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                    .stroke(cardStroke, lineWidth: 1) // UPDATED
             )
+            .shadow(color: shadowColor, radius: 18, x: 0, y: 10) // UPDATED
             .padding(.horizontal, 18)
         }
     }

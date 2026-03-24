@@ -76,7 +76,7 @@ struct GlucoseSummaryKPIsSectionV1: View {
     }
 
     private func statusColorHigherIsWorse(value: Double, target: Double, warnBuffer: Double) -> Color {
-        if value <= target { return Color.green }
+        if value <= target { return Color.Glu.successGreen }
         if value <= (target + warnBuffer) { return Color.yellow.opacity(0.85) }
         return Color.Glu.acidCGMRed
     }

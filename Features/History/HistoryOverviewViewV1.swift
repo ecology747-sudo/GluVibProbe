@@ -12,16 +12,12 @@
 
 import SwiftUI
 
-// MARK: - Scroll Offset Preference (Sticky Header)
-
 private struct HistoryScrollOffsetKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
     }
 }
-
-// MARK: - History Overview (V1)
 
 struct HistoryOverviewViewV1: View {
 
@@ -31,26 +27,21 @@ struct HistoryOverviewViewV1: View {
 
     @StateObject private var viewModel = HistoryViewModelV1()
 
-    // Sticky Header
     @State private var hasScrolled: Bool = false
     @State private var didInitialLoad: Bool = false
+    @State private var didForceDisableCGM: Bool = false
 
-    // ============================================================
-    // MARK: - History Metric Picker (MainChart-style)
-    // ============================================================
+    private var showActivity: Binding<Bool> { $settings.historyShowActivity }
+    private var showCarbs: Binding<Bool>    { $settings.historyShowCarbs }
+    private var showWeight: Binding<Bool>   { $settings.historyShowWeight }
+    private var showBolus: Binding<Bool>    { $settings.historyShowBolus }
+    private var showBasal: Binding<Bool>    { $settings.historyShowBasal }
+    private var showCGM: Binding<Bool>      { $settings.historyShowCGM }
 
-    @State private var showActivity: Bool = true
-    @State private var showCarbs: Bool = true
-    @State private var showWeight: Bool = true
-    @State private var showBolus: Bool = true
-    @State private var showBasal: Bool = true
-    @State private var showCGM: Bool = true              // controls glucose markers + CGM-dependent UI
-
-    private var isTherapyEnabled: Bool {                 // matches MainChart gating
+    private var isTherapyEnabled: Bool {
         settings.hasCGM && settings.isInsulinTreated
     }
 
-    // UPDATED: must match OverviewHeader height so pinned header sticks BELOW it
     private let overviewHeaderHeight: CGFloat = 44
 
     var body: some View {
@@ -68,7 +59,6 @@ struct HistoryOverviewViewV1: View {
             ZStack(alignment: .top) {
 
                 ScrollView {
-                    // Sticky Metric-Picker via pinned section header (Apple-conform)
                     LazyVStack(spacing: contentSpacing, pinnedViews: [.sectionHeaders]) {
 
                         GeometryReader { geo in
@@ -81,7 +71,6 @@ struct HistoryOverviewViewV1: View {
                         .frame(height: 0)
 
                         Section {
-                            // ✅ Embedding the rows-only HistoryView (no duplicated layout/UI logic elsewhere)
                             HistoryView(
                                 sections: sectionedEvents,
                                 isChartEnabled: settings.hasCGM,
@@ -103,11 +92,9 @@ struct HistoryOverviewViewV1: View {
                                 .background(pinnedHeaderBackground)
                         }
                     }
-                    // UPDATED: tighter top padding because safeAreaInset reserves the header height
                     .padding(.top, topContentPadding)
                     .padding(.bottom, 24)
                 }
-                // UPDATED: reserve space INSIDE the scroll view so pinned header never hides under OverviewHeader
                 .safeAreaInset(edge: .top, spacing: 0) {
                     Color.clear.frame(height: overviewHeaderHeight)
                 }
@@ -130,10 +117,11 @@ struct HistoryOverviewViewV1: View {
                 }
 
                 OverviewHeader(
-                    title: "History",
+                    title: L10n.History.Section.title, // 🟨 UPDATED
                     subtitle: nil,
                     tintColor: Color.Glu.primaryBlue,
-                    hasScrolled: hasScrolled
+                    hasScrolled: hasScrolled,
+                    permissionBadgeScope: .none
                 )
             }
         }
@@ -148,21 +136,18 @@ struct HistoryOverviewViewV1: View {
     }
 
     // ============================================================
-    // MARK: - Layout Helpers (Sticky Picker + Tight Spacing)
+    // MARK: - Layout Helpers
     // ============================================================
 
     private var topContentPadding: CGFloat {
-        // UPDATED: when only 1 picker row, move content up (less air above chips)
         settings.hasCGM ? 12 : 6
     }
 
     private var contentSpacing: CGFloat {
-        // keep sections visually compact when CGM is OFF (1 row)
         settings.hasCGM ? 16 : 10
     }
 
     private var pickerBottomPadding: CGFloat {
-        // remove “empty line” feeling when only 1 row
         settings.hasCGM ? 6 : 0
     }
 
@@ -173,7 +158,7 @@ struct HistoryOverviewViewV1: View {
     }
 
     // ============================================================
-    // MARK: - Picker UI (MainChart-style)
+    // MARK: - Picker UI
     // ============================================================
 
     private var historyMetricPicker: some View {
@@ -186,38 +171,36 @@ struct HistoryOverviewViewV1: View {
 
                 VStack(alignment: .leading, spacing: 12) {
 
-                    // Row 1 (3 fixed)
                     HStack(spacing: spacing) {
-                        historyChip("Activity", isOn: $showActivity, accent: Color.Glu.activityDomain)
+                        historyChip(L10n.History.Picker.activity, isOn: showActivity, accent: Color.Glu.activityDomain) // 🟨 UPDATED
                             .frame(width: chipWidth)
 
-                        historyChip("Carbs", isOn: $showCarbs, accent: Color.Glu.nutritionDomain)
+                        historyChip(L10n.History.Picker.carbs, isOn: showCarbs, accent: Color.Glu.nutritionDomain) // 🟨 UPDATED
                             .frame(width: chipWidth)
 
-                        historyChip("Weight", isOn: $showWeight, accent: Color.Glu.bodyDomain)
+                        historyChip(L10n.History.Picker.weight, isOn: showWeight, accent: Color.Glu.bodyDomain) // 🟨 UPDATED
                             .frame(width: chipWidth)
                     }
 
-                    // Row 2 renders ONLY when CGM is enabled
                     if settings.hasCGM {
                         HStack(spacing: spacing) {
 
                             if isTherapyEnabled {
 
-                                historyChip("Bolus", isOn: $showBolus, accent: Color("acidBolusDarkGreen"))
+                                historyChip(L10n.History.Picker.bolus, isOn: showBolus, accent: Color("acidBolusDarkGreen")) // 🟨 UPDATED
                                     .frame(width: chipWidth)
 
-                                historyChip("Basal", isOn: $showBasal, accent: Color("GluBasalMagenta").opacity(0.5))
+                                historyChip(L10n.History.Picker.basal, isOn: showBasal, accent: Color("GluBasalMagenta").opacity(0.5)) // 🟨 UPDATED
                                     .frame(width: chipWidth)
 
-                                historyChip("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                historyChip(L10n.History.Picker.cgm, isOn: showCGM, accent: Color.Glu.acidCGMRed) // 🟨 UPDATED
                                     .frame(width: chipWidth)
 
                             } else {
 
                                 Color.clear.frame(width: chipWidth, height: 1)
 
-                                historyChip("CGM", isOn: $showCGM, accent: Color.Glu.acidCGMRed)
+                                historyChip(L10n.History.Picker.cgm, isOn: showCGM, accent: Color.Glu.acidCGMRed) // 🟨 UPDATED
                                     .frame(width: chipWidth)
 
                                 Color.clear.frame(width: chipWidth, height: 1)
@@ -227,7 +210,6 @@ struct HistoryOverviewViewV1: View {
                 }
                 .frame(width: geo.size.width, alignment: .leading)
             }
-            // Dynamic height (1 row when CGM OFF, 2 rows when CGM ON)
             .frame(height: settings.hasCGM ? 82 : 44)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -301,34 +283,31 @@ struct HistoryOverviewViewV1: View {
     // MARK: - Apply Gating (Display-only)
     // ============================================================
 
-    // NEW: remembers if we forced CGM off due to hasCGM == false
-    @State private var didForceDisableCGM: Bool = false
-
     @MainActor
     private func applyGatingIfNeeded() {
 
-        // If CGM is OFF, force-disable CGM + therapy and remember it was forced
         if !settings.hasCGM {
-            if showCGM { didForceDisableCGM = true }   // NEW
-            showCGM = false
-            showBolus = false
-            showBasal = false
+            if settings.historyShowCGM { didForceDisableCGM = true }
+            settings.historyShowCGM = false
+            settings.historyShowBolus = false
+            settings.historyShowBasal = false
             return
         }
 
-        // If CGM is back ON and we previously forced CGM off, restore default ON
-        if settings.hasCGM, didForceDisableCGM {       // NEW
-            showCGM = true
+        if settings.hasCGM, didForceDisableCGM {
+            settings.historyShowCGM = true
             didForceDisableCGM = false
         }
 
-        // If Therapy is NOT enabled, force therapy chips OFF
         if !isTherapyEnabled {
-            showBolus = false
-            showBasal = false
+            settings.historyShowBolus = false
+            settings.historyShowBasal = false
         }
     }
+
+    // ============================================================
     // MARK: - Routing
+    // ============================================================
 
     private func routeToMainChart(for dayStart: Date) {
         guard settings.hasCGM else { return }
@@ -405,7 +384,6 @@ struct HistoryOverviewViewV1: View {
         let today = cal.startOfDay(for: Date())
         let yesterday = cal.date(byAdding: .day, value: -1, to: today) ?? today
 
-        // display-only filter (visibility) + CGM marker stripping
         let filtered = filteredEventsForDisplay(viewModel.events)
 
         let grouped = Dictionary(grouping: filtered) { e in
@@ -418,8 +396,8 @@ struct HistoryOverviewViewV1: View {
                 guard let items = grouped[day], !items.isEmpty else { return nil }
 
                 let title: String
-                if day == today { title = "Today" }
-                else if day == yesterday { title = "Yesterday" }
+                if day == today { title = L10n.History.Section.today } // 🟨 UPDATED
+                else if day == yesterday { title = L10n.History.Section.yesterday } // 🟨 UPDATED
                 else {
                     let df = DateFormatter()
                     df.dateStyle = .medium
@@ -437,30 +415,28 @@ struct HistoryOverviewViewV1: View {
 
     private func filteredEventsForDisplay(_ input: [HistoryListEvent]) -> [HistoryListEvent] {
 
-        let allowCGMMarkers = settings.hasCGM && showCGM
+        let allowCGMMarkers = settings.hasCGM && settings.historyShowCGM
 
         return input.compactMap { e in
 
-            // 1) Visibility per metric toggle + premium gating (DISPLAY ONLY)
             switch e.metricRoute {
 
             case .workoutMinutes:
-                guard showActivity else { return nil }
+                guard settings.historyShowActivity else { return nil }
 
             case .carbs:
-                guard showCarbs else { return nil }
+                guard settings.historyShowCarbs else { return nil }
 
             case .weight:
-                guard showWeight else { return nil }
+                guard settings.historyShowWeight else { return nil }
 
             case .bolus:
-                guard isTherapyEnabled, showBolus else { return nil }
+                guard isTherapyEnabled, settings.historyShowBolus else { return nil }
 
             case .basal:
-                guard isTherapyEnabled, showBasal else { return nil }
+                guard isTherapyEnabled, settings.historyShowBasal else { return nil }
             }
 
-            // 2) If CGM OFF (or CGM chip OFF), strip markers everywhere
             if allowCGMMarkers {
                 return e
             } else {
@@ -484,8 +460,6 @@ struct HistoryOverviewViewV1: View {
         }
     }
 }
-
-// MARK: - Preview
 
 #Preview("History Overview V1") {
     HistoryOverviewViewV1()

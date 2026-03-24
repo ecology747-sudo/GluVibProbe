@@ -2,22 +2,9 @@
 //  ReportRangeSectionView.swift
 //  GluVibProbe
 //
-//  GluVib Report (V1) — Range Section (Report Layout)
-//
-//  FINAL (SSoT-compliant):
-//  - Presentation-only: NO period/window computations, NO metric recompute
-//  - KPI grid order: Mean (top-left), GMI (top-right), CV (bottom-left), SD (bottom-right)
-//  - GMI is passed in (1:1 from GMIViewModelV1 upstream)
-//  - Range distribution is based ONLY on summaryWindow (already period-consistent upstream)
-//  - Removes all unused / duplicate VM state (no local GMIViewModelV1, no gmiValueForWindow)
-//
-//  UPDATED (PDF alignment):
-//  - Prevent LEFT block from stretching to full width (causes left-hugging in A4/PDF).
-//  - Give the percent column a fixed width and center the whole section within the available report width.
-//  - Keeps iPhone preview visually consistent, improves PDF balance.
-//
 
 import SwiftUI
+import Charts
 
 struct ReportRangeSectionView: View {
 
@@ -30,9 +17,11 @@ struct ReportRangeSectionView: View {
 
     let meanText: String
     let gmiText: String
-
     let cvText: String
     let sdText: String
+
+    let tirDailySeries: [DailyTIREntry]
+    let tirTargetPercent: Int
 
     let onTap: (() -> Void)?
 
@@ -42,49 +31,75 @@ struct ReportRangeSectionView: View {
 
     private let barWidth: CGFloat = 28
     private let barHeight: CGFloat = 150
+
     private let dotSize: CGFloat = 6
     private let valueFont: Font = .caption.weight(.semibold)
 
-    private let kpiGridSpacing: CGFloat = 10
-    private let kpiTileCornerRadius: CGFloat = 10
-
-    // UPDATED: Give KPI grid more room so "Ø Glukose" isn't truncated
-    private let kpiGridWidth: CGFloat = 210
-
-    // Dot/% vertical distribution
     private let rowsTopBottomPadding: CGFloat = 14
     private let rowsOuterSpacing: CGFloat = 10
     private let rowsInnerSpacing: CGFloat = 6
 
-    // UPDATED: fixed width for left % column (prevents PDF left-block stretching)
     private let percentColumnWidth: CGFloat = 92
-
-    // UPDATED: keep report sections optically centered on A4
     private let reportMaxContentWidth: CGFloat = 520
+
+    // pull charts apart more (no vertical divider)
+    private let colGap: CGFloat = 26
+    private let colInnerGap: CGFloat = 12
+
+    // UPDATED: range block further right
+    private let rangeBlockLeadingInset: CGFloat = 22 // UPDATED
+
+    // TIR chart sizing
+    private let tirChartWidth: CGFloat = 260
+    private var tirChartHeight: CGFloat { barHeight } // UPDATED: match range height exactly
+
+    // UPDATED: push TIR chart further right
+    private let tirBlockLeadingInset: CGFloat = 16 // UPDATED
+
+    // Layout spacing
+    private let sectionVStackSpacing: CGFloat = 10
+
+    // KPI boxes
+    private let kpiRowSpacing: CGFloat = 10
+    private let kpiTileCornerRadius: CGFloat = 10
+
+    // Trendline style (dashed, red)
+    private let trendStroke = StrokeStyle(
+        lineWidth: 1.8,
+        lineCap: .round,
+        lineJoin: .round,
+        miterLimit: 1,
+        dash: [5, 4],
+        dashPhase: 0
+    )
+    private let trendColor = Color("acidCGMRed")
 
     // ============================================================
     // MARK: - Body
     // ============================================================
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        VStack(alignment: .leading, spacing: sectionVStackSpacing) {
 
-            // LEFT: Range Distribution (bar + dots/%)
-            HStack(alignment: .top, spacing: 12) {
+            // Charts row (NO individual headings, NO vertical divider)
+            HStack(alignment: .top, spacing: colGap) {
 
-                rangeStackBar
-                    .frame(width: barWidth, height: barHeight)
+                leftRangeBlock
 
-                percentDotsColumn
-                    .frame(width: percentColumnWidth, alignment: .leading) // UPDATED
-                    .frame(height: barHeight)
+                tirBlock
+                    .frame(width: tirChartWidth, height: tirChartHeight, alignment: .topLeading) // UPDATED
+                    .padding(.leading, tirBlockLeadingInset) // UPDATED
             }
 
-            // RIGHT: KPI 2x2 Grid
-            kpiGrid
-                .frame(width: kpiGridWidth, alignment: .top)
+            // KPI boxes (centered, no dividers, no separator above)
+            HStack(spacing: kpiRowSpacing) {
+                kpiBox(title: "Ø Glucose", value: meanText)
+                kpiBox(title: "GMI", value: gmiText == "–" ? "–" : "\(gmiText)%")
+                kpiBox(title: "CV", value: cvTextPercentNormalized) // UPDATED
+                kpiBox(title: "SD", value: sdText)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        // UPDATED: Center the whole section within a controlled report width (balances PDF layout)
         .frame(maxWidth: reportMaxContentWidth)
         .frame(maxWidth: .infinity, alignment: .center)
         .contentShape(Rectangle())
@@ -92,8 +107,21 @@ struct ReportRangeSectionView: View {
     }
 
     // ============================================================
-    // MARK: - LEFT: Chart
+    // MARK: - LEFT: Range Block
     // ============================================================
+
+    private var leftRangeBlock: some View {
+        HStack(alignment: .top, spacing: colInnerGap) {
+
+            rangeStackBar
+                .frame(width: barWidth, height: barHeight)
+
+            percentDotsColumn
+                .frame(width: percentColumnWidth, alignment: .leading)
+                .frame(height: barHeight)
+        }
+        .padding(.leading, rangeBlockLeadingInset) // UPDATED
+    }
 
     private var rangeStackBar: some View {
         GeometryReader { geo in
@@ -141,10 +169,6 @@ struct ReportRangeSectionView: View {
     private var colorHigh: Color { Color.yellow.opacity(0.80) }
     private var colorVeryHigh: Color { Color.Glu.acidCGMRed }
 
-    // ============================================================
-    // MARK: - LEFT: Dots + % Column
-    // ============================================================
-
     private var percentDotsColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
 
@@ -156,7 +180,7 @@ struct ReportRangeSectionView: View {
             percentDotRow(color: colorHigh, text: highPctText, valueColor: ReportStyle.textColor.opacity(0.92))
             Spacer(minLength: rowsInnerSpacing)
 
-            percentDotRow(color: colorInRange, text: inRangePctText, valueColor: Color.green)
+            percentDotRow(color: colorInRange, text: inRangePctText, valueColor: Color.Glu.successGreen)
             Spacer(minLength: rowsInnerSpacing)
 
             percentDotRow(color: colorLow, text: lowPctText, valueColor: ReportStyle.textColor.opacity(0.92))
@@ -183,10 +207,6 @@ struct ReportRangeSectionView: View {
         }
     }
 
-    // ============================================================
-    // MARK: - Percent Helpers (coverage-based; uses summaryWindow only)
-    // ============================================================
-
     private var coverageMinutesSafe: Int { max(0, summaryWindow?.coverageMinutes ?? 0) }
 
     private func pctText(minutes: Int) -> String {
@@ -209,25 +229,160 @@ struct ReportRangeSectionView: View {
     private var veryLowPctText: String { pctText(minutes: summaryWindow?.veryLowMinutes ?? 0) }
 
     // ============================================================
-    // MARK: - RIGHT: KPI Grid (2x2)
+    // MARK: - RIGHT: TIR Block
     // ============================================================
 
-    private var kpiGrid: some View {
-        VStack(alignment: .leading, spacing: kpiGridSpacing) {
-
-            HStack(spacing: kpiGridSpacing) {
-                kpiTile(title: "Ø Glucose", value: meanText, unit: "")
-                kpiTile(title: "GMI", value: gmiText, unit: "%")
-            }
-
-            HStack(spacing: kpiGridSpacing) {
-                kpiTile(title: "CV", value: cvText, unit: "%")
-                kpiTile(title: "SD", value: sdText, unit: "")
-            }
-        }
+    private var tirBlock: some View {
+        tirMicroChart
+            .frame(height: tirChartHeight, alignment: .topLeading) // UPDATED
     }
 
-    private func kpiTile(title: String, value: String, unit: String) -> some View {
+    private struct TIRPoint: Identifiable {
+        let id = UUID()
+        let date: Date
+        let value: Double
+    }
+
+    private var tirPoints: [TIRPoint] {
+        tirDailySeries.map { .init(date: $0.date, value: Double(tirPercentValue(from: $0))) }
+    }
+
+    private var tirMicroChart: some View {
+        let series = tirPoints
+        let fixedBarW = reportBarWidth(for: windowDays)
+        let trend = linearTrend(series)
+
+        return Chart {
+
+            ForEach(series) { p in
+                BarMark(
+                    x: .value("Date", p.date),
+                    y: .value("TIR", p.value),
+                    width: .fixed(fixedBarW)
+                )
+                .foregroundStyle(Color.Glu.metabolicDomain.opacity(0.70))
+                .cornerRadius(2)
+            }
+
+            if tirTargetPercent > 0 {
+                RuleMark(y: .value("Target", Double(tirTargetPercent)))
+                    .foregroundStyle(Color.Glu.successGreen)
+                    .lineStyle(StrokeStyle(lineWidth: 1.4))
+            }
+
+            if let trend {
+                LineMark(
+                    x: .value("Start", trend.x0),
+                    y: .value("y0", trend.y0)
+                )
+                .foregroundStyle(trendColor)
+                .lineStyle(trendStroke)
+
+                LineMark(
+                    x: .value("End", trend.x1),
+                    y: .value("y1", trend.y1)
+                )
+                .foregroundStyle(trendColor)
+                .lineStyle(trendStroke)
+            }
+        }
+        .chartLegend(.hidden)
+        .chartYScale(domain: 0...100)
+        .chartXScale(range: .plotDimension(padding: 12))
+        .chartXAxis {
+            AxisMarks(values: .automatic) { _ in
+                AxisGridLine().foregroundStyle(Color.clear)
+                AxisTick().foregroundStyle(Color.clear)
+                AxisValueLabel { EmptyView() }
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.8))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.12))
+                AxisTick(stroke: StrokeStyle(lineWidth: 1.0))
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.45))
+                AxisValueLabel {
+                    if let v = value.as(Double.self) {
+                        Text("\(Int(v.rounded()))")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.Glu.primaryBlue.opacity(0.85))
+                            .monospacedDigit()
+                    }
+                }
+            }
+        }
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                let frame = geo[proxy.plotAreaFrame]
+                Path { p in
+                    p.move(to: CGPoint(x: frame.minX, y: frame.minY))
+                    p.addLine(to: CGPoint(x: frame.minX, y: frame.maxY))
+                    p.move(to: CGPoint(x: frame.minX, y: frame.maxY))
+                    p.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY))
+                }
+                .stroke(
+                    Color.Glu.primaryBlue.opacity(0.35),
+                    style: StrokeStyle(lineWidth: 0.9, lineCap: .butt)
+                )
+            }
+        }
+        .frame(height: tirChartHeight) // UPDATED: force chart height == range height
+    }
+
+    private func reportBarWidth(for days: Int) -> CGFloat {
+        if days <= 30 { return 6 }
+        if days <= 60 { return 4 }
+        return 3
+    }
+
+    private func tirPercentValue(from entry: DailyTIREntry) -> Int {
+        let cov = max(0, entry.coverageMinutes)
+        guard cov > 0 else { return 0 }
+        let inRange = max(0, entry.inRangeMinutes)
+        let pct = Int((Double(inRange) / Double(cov) * 100.0).rounded())
+        return max(0, min(100, pct))
+    }
+
+    private func linearTrend(_ series: [TIRPoint]) -> (x0: Date, y0: Double, x1: Date, y1: Double)? {
+        guard series.count >= 2 else { return nil }
+
+        let n = Double(series.count)
+        let xs = series.indices.map { Double($0) }
+        let ys = series.map(\.value)
+
+        let sumX = xs.reduce(0, +)
+        let sumY = ys.reduce(0, +)
+        let sumXX = xs.reduce(0) { $0 + $1 * $1 }
+        let sumXY = zip(xs, ys).reduce(0) { $0 + $1.0 * $1.1 }
+
+        let denom = (n * sumXX - sumX * sumX)
+        guard abs(denom) > 0.000001 else { return nil }
+
+        let slope = (n * sumXY - sumX * sumY) / denom
+        let intercept = (sumY - slope * sumX) / n
+
+        let x0i = 0.0
+        let x1i = Double(series.count - 1)
+
+        let y0 = max(0, min(100, slope * x0i + intercept))
+        let y1 = max(0, min(100, slope * x1i + intercept))
+
+        return (series.first!.date, y0, series.last!.date, y1)
+    }
+
+    // ============================================================
+    // MARK: - KPI Boxes
+    // ============================================================
+
+    private var cvTextPercentNormalized: String {
+        let t = cvText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty || t == "–" { return "–" }
+        if t.contains("%") { return t }
+        return "\(t)%"
+    }
+
+    private func kpiBox(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
 
             Text(title)
@@ -236,27 +391,17 @@ struct ReportRangeSectionView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.90)
 
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-
-                Text(value)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(ReportStyle.textColor.opacity(0.95))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-
-                if !unit.isEmpty, value != "–" {
-                    Text(unit)
-                        .font(.caption2)
-                        .foregroundStyle(ReportStyle.textColor.opacity(0.60))
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(ReportStyle.textColor.opacity(0.95))
+                .lineLimit(1)
+                .minimumScaleFactor(0.80)
+                .monospacedDigit()
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
+        .frame(width: 118, alignment: .topLeading)
+        .frame(minHeight: 52)
         .background(Color.white.opacity(0.30))
         .overlay(
             RoundedRectangle(cornerRadius: kpiTileCornerRadius)
@@ -264,36 +409,4 @@ struct ReportRangeSectionView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: kpiTileCornerRadius))
     }
-}
-
-// MARK: - Preview
-#Preview("ReportRangeSectionView — Range + KPI Grid") {
-
-    let sample30 = RangePeriodSummaryEntry(
-        id: UUID(),
-        days: 30,
-        veryLowMinutes: 5,
-        lowMinutes: 10,
-        inRangeMinutes: 410,
-        highMinutes: 70,
-        veryHighMinutes: 10,
-        coverageMinutes: 495,
-        expectedMinutes: 500,
-        coverageRatio: 0.99,
-        isPartial: false
-    )
-
-    return VStack(alignment: .leading, spacing: 12) {
-        ReportRangeSectionView(
-            windowDays: 30,
-            summaryWindow: sample30,
-            meanText: "142",
-            gmiText: "6.7",
-            cvText: "34.2",
-            sdText: "48",
-            onTap: nil
-        )
-    }
-    .padding(16)
-    .background(Color.white)
 }
