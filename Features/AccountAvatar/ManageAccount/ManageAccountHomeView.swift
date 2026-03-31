@@ -1,6 +1,36 @@
 //
 //  ManageAccountHomeView.swift
-//  GluVibProbe
+//  GluVib
+//
+//  Area: Account / Monetization Status
+//  File Role:
+//  - User-facing status screen for GluVib access state and metabolic visibility controls.
+//  - Reads the central monetization truth from EntitlementManager instead of calculating
+//    premium / trial / free locally inside the View.
+//
+//  Purpose:
+//  - Show the current commercial access state:
+//    - Premium
+//    - Trial
+//    - Free
+//  - Expose the current metabolic visibility intent:
+//    - Show sensor data (CGM)
+//    - Show insulin data
+//  - Keep the current TestFlight transition flow working while the app is migrated
+//    toward the dedicated monetization layer.
+//
+//  System Role:
+//  - This View is user-facing UI.
+//  - This View does NOT define the commercial truth itself.
+//  - This View does NOT resolve capabilities itself.
+//  - This View consumes EntitlementManager and triggers refresh / enforcement when
+//    transition-state toggles change.
+//
+//  Key Connections:
+//  - SettingsModel
+//  - AppState
+//  - HealthStore
+//  - EntitlementManager
 //
 
 import SwiftUI
@@ -8,51 +38,37 @@ import HealthKit
 
 struct ManageAccountHomeView: View {
 
+    // ============================================================
+    // MARK: - Dependencies
+    // ============================================================
+
     @EnvironmentObject private var settings: SettingsModel
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var healthStore: HealthStore
+    @EnvironmentObject private var entitlementManager: EntitlementManager // 🟨 UPDATED
 
+    // ============================================================
     // MARK: - Style
+    // ============================================================
 
     private let titleColor: Color = Color.Glu.systemForeground
     private let captionColor: Color = Color.Glu.systemForeground.opacity(0.70)
 
-    // Premium highlight styling
     private let premiumTint: Color = .yellow
     private let premiumCardFill: Color = .yellow.opacity(0.10)
     private let premiumCardStroke: Color = .yellow.opacity(0.35)
 
-    // 🟨 UPDATED: Metabolic highlight styling for App Status card (matches Premium card pattern)
     private let metabolicTint: Color = Color.Glu.metabolicDomain
     private let metabolicCardFill: Color = Color.Glu.metabolicDomain.opacity(0.10)
     private let metabolicCardStroke: Color = Color.Glu.metabolicDomain.opacity(0.35)
 
-    // MARK: - Status Logic
+    // ============================================================
+    // MARK: - Derived Status
+    // ============================================================
 
-    private enum AccessStatus {
-        case premiumPurchased
-        case trial(daysLeft: Int?)
-        case free
-    }
-
-    private var accessStatus: AccessStatus {
-        if settings.isPremiumEnabled || settings.hasMetabolicPremium {
-            return .premiumPurchased
-        }
-        if settings.isTrialActive {
-            return .trial(daysLeft: settings.trialDaysRemaining)
-        }
-        return .free
-    }
-
-    private var isPremium: Bool {
-        if case .premiumPurchased = accessStatus { return true }
-        return false
-    }
-
-    private var statusTitle: String { // 🟨 UPDATED
-        switch accessStatus {
-        case .premiumPurchased:
+    private var statusTitle: String {
+        switch entitlementManager.entitlementStatus {
+        case .premium:
             return L10n.Avatar.Status.premium
         case .trial:
             return String(
@@ -66,24 +82,24 @@ struct ManageAccountHomeView: View {
     }
 
     private var statusIcon: String {
-        switch accessStatus {
-        case .premiumPurchased: return "crown.fill"
+        switch entitlementManager.entitlementStatus {
+        case .premium: return "crown.fill"
         case .trial: return "hourglass"
         case .free: return "sparkles"
         }
     }
 
     private var statusIconColor: Color {
-        switch accessStatus {
-        case .premiumPurchased: return .yellow
+        switch entitlementManager.entitlementStatus {
+        case .premium: return .yellow
         case .trial: return Color.Glu.bodyDomain
         case .free: return Color.Glu.primaryBlue
         }
     }
 
-    private var statusLine2: String { // 🟨 UPDATED
-        switch accessStatus {
-        case .premiumPurchased:
+    private var statusLine2: String {
+        switch entitlementManager.entitlementStatus {
+        case .premium:
             return L10n.Avatar.Status.unlockedOnThisDevice
         case .trial:
             return L10n.Avatar.Status.active
@@ -92,41 +108,46 @@ struct ManageAccountHomeView: View {
         }
     }
 
-    private var trialDaysLeftTextV1: String? { // 🟨 UPDATED
-        guard case .trial(let daysLeft) = accessStatus else { return nil }
-        guard let d = daysLeft else { return nil }
-        return L10n.Avatar.Status.trialDaysLeft(d)
+    private var trialDaysLeftTextV1: String? {
+        guard let days = entitlementManager.trialDaysRemaining else { return nil }
+        return L10n.Avatar.Status.trialDaysLeft(days)
     }
 
-    private var modeStatusLineV1: String { // 🟨 UPDATED
+    private var modeStatusLineV1: String {
         if settings.hasCGM == false { return L10n.Avatar.Mode.cgmOff }
         return settings.isInsulinTreated
             ? L10n.Avatar.Mode.cgmOnInsulinOn
             : L10n.Avatar.Mode.cgmOnInsulinOff
     }
 
+    private var isTrial: Bool {
+        entitlementManager.isTrial
+    }
+
+    private var isPremium: Bool {
+        entitlementManager.isPremium
+    }
+
     private var canUseMetabolicControls: Bool {
-        settings.hasMetabolicPremiumEffective
+        entitlementManager.canAccessMetabolic
     }
 
     // ============================================================
-    // MARK: - Toggle Edge Tracking (Post-onboarding upgrades)
+    // MARK: - Toggle Edge Tracking
     // ============================================================
 
     @State private var lastHasCGM: Bool = false
     @State private var lastIsInsulinTreated: Bool = false
 
+    // ============================================================
     // MARK: - Body
+    // ============================================================
 
     var body: some View {
-
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-
                 statusHeaderCenteredV1
-
                 appStatusCard
-
                 premiumAccessCard
             }
             .padding(.horizontal, 16)
@@ -168,34 +189,48 @@ struct ManageAccountHomeView: View {
                 )
             }
         }
+        .onChange(of: settings.isPremiumEnabled) { _ in // 🟨 UPDATED
+            Task { @MainActor in
+                await entitlementManager.refresh()
+                appState.enforceAccessAfterPremiumChange(
+                    settings: settings,
+                    entitlementManager: entitlementManager
+                )
+            }
+        }
+        .onChange(of: entitlementManager.entitlementStatus) { _ in // 🟨 UPDATED
+            appState.enforceAccessAfterPremiumChange(
+                settings: settings,
+                entitlementManager: entitlementManager
+            )
+        }
     }
 
-    // MARK: - Snapshot Key (single onChange)
+    // ============================================================
+    // MARK: - Snapshot Key
+    // ============================================================
 
     private var settingsSnapshotKeyV1: String {
         [
             settings.isPremiumEnabled ? "P1" : "P0",
-            settings.hasMetabolicPremium ? "M1" : "M0",
-            settings.hasMetabolicPremiumEffective ? "E1" : "E0",
             settings.hasCGM ? "C1" : "C0",
             settings.isInsulinTreated ? "I1" : "I0",
             settings.trialStartDate != nil ? "T1" : "T0"
         ].joined(separator: "|")
     }
 
-    // MARK: - Header (centered)
+    // ============================================================
+    // MARK: - Header
+    // ============================================================
 
     private var statusHeaderCenteredV1: some View {
         VStack(spacing: 6) {
-
             HStack(spacing: 8) {
-
                 Image(systemName: statusIcon)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(statusIconColor)
 
-                if case .trial = accessStatus {
-
+                if isTrial {
                     Text(
                         String(
                             localized: "Trial",
@@ -212,9 +247,7 @@ struct ManageAccountHomeView: View {
                             .foregroundStyle(titleColor.opacity(0.80))
                             .baselineOffset(-1)
                     }
-
                 } else {
-
                     Text(statusTitle)
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(titleColor)
@@ -222,9 +255,7 @@ struct ManageAccountHomeView: View {
             }
             .frame(maxWidth: .infinity, alignment: .center)
 
-            if case .trial = accessStatus {
-                EmptyView()
-            } else if isPremium == false {
+            if isTrial == false, isPremium == false {
                 Text(statusLine2)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(captionColor)
@@ -239,11 +270,12 @@ struct ManageAccountHomeView: View {
         .padding(.top, 2)
     }
 
-    // MARK: - Card A: App Status (toggles) — Metabolic styled
+    // ============================================================
+    // MARK: - Card A: App Status
+    // ============================================================
 
     private var appStatusCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-
             if canUseMetabolicControls == false {
                 Text(
                     String(
@@ -321,7 +353,6 @@ struct ManageAccountHomeView: View {
             }
             .tint(metabolicTint)
             .disabled(!canUseMetabolicControls || !settings.hasCGM)
-
         }
         .padding(16)
         .background(
@@ -343,11 +374,12 @@ struct ManageAccountHomeView: View {
         )
     }
 
-    // MARK: - Card B: Premium Access (highlighted)
+    // ============================================================
+    // MARK: - Card B: Premium Access
+    // ============================================================
 
     private var premiumAccessCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-
             Text(
                 String(
                     localized: "Premium Access",
@@ -382,7 +414,6 @@ struct ManageAccountHomeView: View {
                 .foregroundStyle(titleColor)
             }
             .tint(premiumTint)
-
         }
         .padding(16)
         .background(
@@ -404,11 +435,12 @@ struct ManageAccountHomeView: View {
         )
     }
 
-    // MARK: - One Canonical Path
+    // ============================================================
+    // MARK: - Canonical State Enforcement
+    // ============================================================
 
     private func applyGatingRulesSaveEnforceV1() {
-
-        if settings.hasMetabolicPremiumEffective == false {
+        if canUseMetabolicControls == false {
             settings.hasCGM = false
             settings.isInsulinTreated = false
         }
@@ -418,11 +450,15 @@ struct ManageAccountHomeView: View {
         }
 
         settings.saveToDefaults()
-        appState.enforceAccessAfterPremiumChange(settings: settings)
+
+        appState.enforceAccessAfterPremiumChange(
+            settings: settings,
+            entitlementManager: entitlementManager
+        )
     }
 
     // ============================================================
-    // MARK: - Post-toggle Authorization + Probe Trigger (V1)
+    // MARK: - Post-toggle Authorization + Refresh
     // ============================================================
 
     @MainActor
@@ -430,7 +466,7 @@ struct ManageAccountHomeView: View {
         prevHasCGM: Bool,
         prevIsInsulinTreated: Bool
     ) async {
-        guard settings.hasMetabolicPremiumEffective else { return }
+        guard canUseMetabolicControls else { return }
 
         let cgmJustEnabled = (prevHasCGM == false && settings.hasCGM == true)
         let insulinJustEnabled = (prevIsInsulinTreated == false && settings.isInsulinTreated == true)
@@ -459,7 +495,9 @@ struct ManageAccountHomeView: View {
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview("ManageAccountHomeView") {
     NavigationStack {
@@ -467,5 +505,6 @@ struct ManageAccountHomeView: View {
             .environmentObject(SettingsModel.shared)
             .environmentObject(AppState())
             .environmentObject(HealthStore.preview())
+            .environmentObject(EntitlementManager()) // 🟨 UPDATED
     }
 }

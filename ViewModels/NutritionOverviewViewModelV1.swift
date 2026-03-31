@@ -100,9 +100,9 @@ final class NutritionOverviewViewModelV1: ObservableObject {
 
     // --- Insight (TODAY only)
     @Published var insightText: String = ""
+    @Published var insightSecondaryText: String = ""
 
-    // 🟨 UPDATED: Energy Balance 7D (SSoT window; oldest → newest; ends at selected day)
-    @Published var last7DaysEnergyBalance: [EnergyBalanceTrendPointV1] = [] // 🟨 UPDATED
+    @Published var last7DaysEnergyBalance: [EnergyBalanceTrendPointV1] = []
 
     // ============================================================
     // MARK: - Init
@@ -139,6 +139,15 @@ final class NutritionOverviewViewModelV1: ObservableObject {
         healthStore.$carbsDaily365
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleRemap() }
+            .store(in: &cancellables)
+
+        healthStore.$carbsDaypartsDaily90V1
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                guard self.selectedDayOffset == 0 else { return }
+                self.scheduleRemap()
+            }
             .store(in: &cancellables)
 
         // --- Sugar live + history
@@ -264,6 +273,11 @@ final class NutritionOverviewViewModelV1: ObservableObject {
         settings.$dailyCalories
             .receive(on: DispatchQueue.main)
             .sink { [weak self] (_: Int) in self?.scheduleRemap() }
+            .store(in: &cancellables)
+
+        settings.$hasCGM
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] (_: Bool) in self?.scheduleRemap() } // 🟨 UPDATED
             .store(in: &cancellables)
     }
 
@@ -411,9 +425,9 @@ final class NutritionOverviewViewModelV1: ObservableObject {
         }
 
         // ---------------------------------------------------------
-        // 🟨 UPDATED: 2b) Energy Balance 7D window (ends at selected day)
+        // 2b) Energy Balance 7D window (ends at selected day)
         // ---------------------------------------------------------
-        last7DaysEnergyBalance = buildLast7DaysEnergyBalance(endingAt: date) // 🟨 UPDATED
+        last7DaysEnergyBalance = buildLast7DaysEnergyBalance(endingAt: date)
 
         // ---------------------------------------------------------
         // 3) UI-Derivations (✅ für ALLE Tage)
@@ -425,24 +439,33 @@ final class NutritionOverviewViewModelV1: ObservableObject {
         // ---------------------------------------------------------
         if selectedDayOffset == 0 {
 
+            let todaysCarbDayparts = carbsDaypartsForSelectedDay(date: date, calendar: calendar)
+
             let input = NutritionInsightEngineV1.Input(
                 isToday: true,
                 carbsGrams: todayCarbsGrams,
+                sugarGrams: todaySugarGrams,
                 proteinGrams: todayProteinGrams,
                 fatGrams: todayFatGrams,
                 targetCarbsGrams: targetCarbsGrams,
+                targetSugarGrams: targetSugarGrams,
                 targetProteinGrams: targetProteinGrams,
                 targetFatGrams: targetFatGrams,
+                targetCalories: max(0, settings.dailyCalories),
                 nutritionEnergyKcal: todayNutritionEnergyKcal,
                 activeEnergyKcal: todayActiveEnergyKcal,
-                restingEnergyKcal: restingEnergyKcal
+                restingEnergyKcal: restingEnergyKcal,
+                carbsMorningGrams: todaysCarbDayparts.morningGrams,
+                carbsAfternoonGrams: todaysCarbDayparts.afternoonGrams,
+                carbsNightGrams: todaysCarbDayparts.nightGrams
             )
 
             let out = insightEngine.evaluate(input)
 
             nutritionScore = out.score
             scoreColor = out.scoreColor
-            insightText = out.insightText
+            insightText = out.primaryText
+            insightSecondaryText = shouldShowMetabolicCarbSplitContextV1 ? (out.secondaryText ?? "") : "" // 🟨 UPDATED
 
             carbsGoalPercent = out.carbsGoalPercent
             proteinGoalPercent = out.proteinGoalPercent
@@ -457,11 +480,11 @@ final class NutritionOverviewViewModelV1: ObservableObject {
             formattedEnergyBalanceValue = out.formattedEnergyBalanceValue
             energyBalanceLabelText = out.energyBalanceLabelText
 
-            // 🟨 UPDATED: Sugar percent deterministic (engine doesn't know Sugar)
             sugarGoalPercent = percent(value: todaySugarGrams, target: targetSugarGrams)
 
         } else {
             insightText = ""
+            insightSecondaryText = ""
             nutritionScore = 0
             scoreColor = Color.Glu.nutritionDomain
         }
@@ -485,7 +508,6 @@ final class NutritionOverviewViewModelV1: ObservableObject {
         proteinGoalPercent = percent(value: todayProteinGrams, target: targetProteinGrams)
         fatGoalPercent = percent(value: todayFatGrams, target: targetFatGrams)
 
-        // Pie uses only macros (Sugar excluded by design)
         let total = max(0, todayCarbsGrams) + max(0, todayProteinGrams) + max(0, todayFatGrams)
         if total > 0 {
             carbsShare = Double(todayCarbsGrams) / Double(total)
@@ -533,13 +555,32 @@ final class NutritionOverviewViewModelV1: ObservableObject {
             .map(value) ?? 0
     }
 
-    // 🟨 UPDATED: 7D window builder (oldest → newest), ends at selected day
-    private func buildLast7DaysEnergyBalance(endingAt endDate: Date) -> [EnergyBalanceTrendPointV1] { // 🟨 UPDATED
+    private func carbsDaypartsForSelectedDay(
+        date: Date,
+        calendar: Calendar = .current
+    ) -> (morningGrams: Int, afternoonGrams: Int, nightGrams: Int) {
+        guard let entry = healthStore.carbsDaypartsDaily90V1.first(
+            where: { calendar.isDate($0.date, inSameDayAs: date) }
+        ) else {
+            return (0, 0, 0)
+        }
+
+        return (
+            morningGrams: max(0, entry.morningGrams),
+            afternoonGrams: max(0, entry.afternoonGrams),
+            nightGrams: max(0, entry.nightGrams)
+        )
+    }
+
+    private var shouldShowMetabolicCarbSplitContextV1: Bool { // 🟨 UPDATED
+        EntitlementManager.shared.canAccessMetabolic && settings.hasCGM
+    }
+
+    private func buildLast7DaysEnergyBalance(endingAt endDate: Date) -> [EnergyBalanceTrendPointV1] {
 
         let cal = Calendar.current
         let endDay = cal.startOfDay(for: endDate)
 
-        // 7 calendar days: endDay-6 ... endDay
         let days: [Date] = (0..<7).compactMap { i in
             cal.date(byAdding: .day, value: -(6 - i), to: endDay)
         }
@@ -551,12 +592,10 @@ final class NutritionOverviewViewModelV1: ObservableObject {
             let resting: Int
 
             if cal.isDate(day, inSameDayAs: cal.startOfDay(for: Date())) {
-                // Today: use live KPIs (0 is valid)
                 intake = max(0, healthStore.todayNutritionEnergyKcal)
                 active = max(0, healthStore.todayActiveEnergy)
                 resting = max(0, healthStore.todayRestingEnergyKcal)
             } else {
-                // Past days: use SSoT series (no guessing, no fetching)
                 intake = max(0, valueForDay(
                     from: healthStore.nutritionEnergyDaily365,
                     date: day,
@@ -582,8 +621,6 @@ final class NutritionOverviewViewModelV1: ObservableObject {
                 ))
             }
 
-            // balance semantics for diverging chart:
-            // positive = surplus (intake - burned), negative = deficit
             let burned = active + resting
             let balance = intake - burned
 

@@ -1,16 +1,47 @@
 //
 //  SectionHeader.swift
-//  GluVibProbe
+//  GluVib
+//
+//  Area: Shared / Header
+//  File Role:
+//  - Reusable section header used across GluVib screens.
+//  - Displays title / subtitle, optional back action, optional avatar,
+//    premium / trial status badges, and permission badges.
+//
+//  Purpose:
+//  - Keep header presentation consistent across the app.
+//  - Consume the central monetization truth from EntitlementManager for
+//    premium / trial badge display.
+//  - Preserve the existing permission-badge behavior tied to HealthStore
+//    and user intent settings.
+//
+//  System Role:
+//  - This file is UI only.
+//  - It does NOT define premium / trial / free truth.
+//  - It does NOT resolve capabilities.
+//  - It only renders badges based on already-resolved app state.
+//
+//  Key Connections:
+//  - SettingsModel
+//  - HealthStore
+//  - EntitlementManager
 //
 
 import SwiftUI
 
 struct SectionHeader: View {
 
+    // ============================================================
+    // MARK: - Dependencies
+    // ============================================================
+
     @EnvironmentObject private var settings: SettingsModel
     @EnvironmentObject private var healthStore: HealthStore
+    @EnvironmentObject private var entitlementManager: EntitlementManager // 🟨 UPDATED
 
+    // ============================================================
     // MARK: - Inputs
+    // ============================================================
 
     let title: String
     let subtitle: String?
@@ -20,10 +51,8 @@ struct SectionHeader: View {
     let showsAvatar: Bool
     let onAvatarTapped: (() -> Void)?
 
-    // Backward compatible: external override (legacy)
     let showsPermissionBadge: Bool
 
-    // ✅ NEW: Domain-scoped badge (same concept as OverviewHeader)
     enum PermissionBadgeScope {
         case none
         case metabolic
@@ -35,7 +64,9 @@ struct SectionHeader: View {
 
     let permissionBadgeScope: PermissionBadgeScope
 
+    // ============================================================
     // MARK: - Init
+    // ============================================================
 
     init(
         title: String,
@@ -57,22 +88,28 @@ struct SectionHeader: View {
         self.permissionBadgeScope = permissionBadgeScope
     }
 
+    // ============================================================
+    // MARK: - Monetization Badges
+    // ============================================================
+
     private var showPremiumBadge: Bool { // 🟨 UPDATED
-        (settings.isPremiumEnabled || settings.hasMetabolicPremium) && !settings.isTrialActive
+        entitlementManager.isPremium
     }
 
-    private var showTrialDaysBadge: Bool { // 🟨 NEW
-        settings.isTrialActive && settings.hasMetabolicPremiumEffective
+    private var showTrialDaysBadge: Bool { // 🟨 UPDATED
+        entitlementManager.isTrial
     }
 
-    private var trialDaysBadgeText: String { // 🟨 NEW
-        let days = max(0, settings.trialDaysRemaining ?? 0)
+    private var trialDaysBadgeText: String { // 🟨 UPDATED
+        let days = max(0, entitlementManager.trialDaysRemaining ?? 0)
         return "\(days)"
     }
 
-    // ✅ Permission badge is domain-scoped (still gated by global toggle)
-    private var computedPermissionBadge: Bool {
+    // ============================================================
+    // MARK: - Permission Badge
+    // ============================================================
 
+    private var computedPermissionBadge: Bool {
         guard settings.showPermissionWarnings else { return false }
 
         switch permissionBadgeScope {
@@ -82,7 +119,7 @@ struct SectionHeader: View {
         case .metabolic:
             let glucoseNeeds = settings.hasCGM && healthStore.glucoseReadAuthIssueV1
             let therapyNeeds = settings.hasCGM && settings.isInsulinTreated && healthStore.metabolicTherapyAuthIssueAnyV1
-            let carbsNeeds   = settings.hasCGM && settings.isInsulinTreated && healthStore.metabolicCarbsAuthIssueAnyV1
+            let carbsNeeds = settings.hasCGM && settings.isInsulinTreated && healthStore.metabolicCarbsAuthIssueAnyV1
             return glucoseNeeds || therapyNeeds || carbsNeeds
 
         case .nutrition:
@@ -97,15 +134,19 @@ struct SectionHeader: View {
         case .allDomains:
             let glucoseNeeds = settings.hasCGM && healthStore.metabolicGlucoseAuthIssueAnyV1
             let therapyNeeds = settings.hasCGM && settings.isInsulinTreated && healthStore.metabolicTherapyAuthIssueAnyV1
-            let carbsNeeds   = settings.hasCGM && settings.isInsulinTreated && healthStore.metabolicCarbsAuthIssueAnyV1
+            let carbsNeeds = settings.hasCGM && settings.isInsulinTreated && healthStore.metabolicCarbsAuthIssueAnyV1
 
             let nutritionNeeds = healthStore.nutritionAnyAuthIssueForBadgesV1
-            let activityNeeds  = healthStore.activityAnyAuthIssueForBadgesV1
-            let bodyNeeds      = healthStore.bodyAnyAuthIssueForBadgesV1
+            let activityNeeds = healthStore.activityAnyAuthIssueForBadgesV1
+            let bodyNeeds = healthStore.bodyAnyAuthIssueForBadgesV1
 
             return glucoseNeeds || therapyNeeds || carbsNeeds || nutritionNeeds || activityNeeds || bodyNeeds
         }
     }
+
+    // ============================================================
+    // MARK: - Body
+    // ============================================================
 
     var body: some View {
 
@@ -138,7 +179,13 @@ struct SectionHeader: View {
                             .font(.callout.weight(.semibold))
                             .foregroundColor(tintColor)
                     }
-                    .accessibilityLabel("Back")
+                    .accessibilityLabel(
+                        String(
+                            localized: "Back",
+                            defaultValue: "Back",
+                            comment: "Accessibility label for section header back button"
+                        )
+                    )
                     .buttonStyle(.plain)
                     .padding(.leading, 12)
                 } else {
@@ -151,7 +198,6 @@ struct SectionHeader: View {
                     Button {
                         onAvatarTapped?()
                     } label: {
-
                         ZStack {
                             Image(systemName: "person.crop.circle.fill")
                                 .font(.system(size: 27, weight: .semibold))
@@ -162,7 +208,13 @@ struct SectionHeader: View {
                                     x: 0,
                                     y: 2
                                 )
-                                .accessibilityLabel("Account menu")
+                                .accessibilityLabel(
+                                    String(
+                                        localized: "Account menu",
+                                        defaultValue: "Account menu",
+                                        comment: "Accessibility label for section header account avatar button"
+                                    )
+                                )
                                 .padding(6)
 
                             if showPremiumBadge {
@@ -175,7 +227,7 @@ struct SectionHeader: View {
                                 .accessibilityHidden(true)
                             }
 
-                            if showTrialDaysBadge { // 🟨 NEW
+                            if showTrialDaysBadge {
                                 trialDaysBadgeView(
                                     text: trialDaysBadgeText,
                                     offset: CGSize(width: -19, height: -10)
@@ -190,7 +242,13 @@ struct SectionHeader: View {
                                     bg: Color.Glu.acidCGMRed,
                                     offset: CGSize(width: 10, height: 10)
                                 )
-                                .accessibilityLabel("Permission required")
+                                .accessibilityLabel(
+                                    String(
+                                        localized: "Permission required",
+                                        defaultValue: "Permission required",
+                                        comment: "Accessibility label for section header permission badge"
+                                    )
+                                )
                             }
                         }
                     }
@@ -204,7 +262,10 @@ struct SectionHeader: View {
         .frame(height: 44)
     }
 
-    // exact badge style from OverviewHeader (18x18)
+    // ============================================================
+    // MARK: - Badge Views
+    // ============================================================
+
     private func badgeView(
         system: String,
         fg: Color,
@@ -223,7 +284,7 @@ struct SectionHeader: View {
         .offset(offset)
     }
 
-    private func trialDaysBadgeView( // 🟨 NEW
+    private func trialDaysBadgeView(
         text: String,
         offset: CGSize
     ) -> some View {
@@ -247,11 +308,14 @@ struct SectionHeader: View {
     }
 }
 
+// ============================================================
 // MARK: - Preview
+// ============================================================
 
 #Preview {
     let settings = SettingsModel.shared
     let store = HealthStore.preview()
+    let entitlementManager = EntitlementManager() // 🟨 UPDATED
 
     store.glucoseReadAuthIssueV1 = true
 
@@ -276,5 +340,6 @@ struct SectionHeader: View {
     }
     .environmentObject(settings)
     .environmentObject(store)
+    .environmentObject(entitlementManager) // 🟨 UPDATED
     .background(Color.white)
 }

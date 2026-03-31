@@ -1,21 +1,31 @@
 //
 //  AccountSheetRootView.swift
-//  GluVibProbe
+//  GluVib
 //
-//  Account Sheet — Technical Root Coordinator
+//  Area: Account / Root Navigation
+//  File Role:
+//  - Technical root coordinator for the account sheet flow.
+//  - Owns account-sheet-local navigation and forwards shared runtime objects
+//    into all routed account destinations.
+//
 //  Purpose:
-//  - Central navigation coordinator for the account sheet flow.
-//  - Maps AccountRoute values to the corresponding leaf and menu screens.
+//  - Keep the account navigation flow centralized and easy to maintain.
+//  - Ensure that all account/status screens consume the same shared app state,
+//    including the central EntitlementManager.
+//  - Prevent monetization status from diverging across routed account screens.
 //
-//  Data Flow (SSoT):
-//  - AppState / SettingsModel / HealthStore -> AccountSheetRootView -> routed child screens
+//  System Role:
+//  - This file is a navigation coordinator, not a business-logic layer.
+//  - It does NOT calculate premium / trial / free locally.
+//  - It does NOT define capability rules.
+//  - It only routes to the correct destination views and injects shared objects.
 //
 //  Key Connections:
 //  - AppState.AccountRoute
 //  - AccountMenuSheetView
 //  - AccountSettingsMenuView
-//  - SettingsDomainCardScreen
-//  - HealthKitPermissionsViewV1
+//  - ManageAccountHomeView
+//  - EntitlementManager
 //
 
 import SwiftUI
@@ -29,6 +39,7 @@ struct AccountSheetRootView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var settings: SettingsModel
     @EnvironmentObject private var healthStore: HealthStore
+    @EnvironmentObject private var entitlementManager: EntitlementManager // 🟨 UPDATED
 
     // ============================================================
     // MARK: - Local State
@@ -63,6 +74,7 @@ struct AccountSheetRootView: View {
             .environmentObject(appState)
             .environmentObject(settings)
             .environmentObject(healthStore)
+            .environmentObject(entitlementManager) // 🟨 UPDATED
             .navigationDestination(for: AppState.AccountRoute.self) { route in
                 destinationView(for: route)
             }
@@ -79,11 +91,11 @@ struct AccountSheetRootView: View {
                 }
             }
         }
-        .tint(Color.Glu.systemForeground) // 🟨 UPDATED
+        .tint(Color.Glu.systemForeground)
     }
 
     // ============================================================
-    // MARK: - Local Helper Views
+    // MARK: - Destination Routing
     // ============================================================
 
     @ViewBuilder
@@ -109,6 +121,7 @@ struct AccountSheetRootView: View {
                 .environmentObject(appState)
                 .environmentObject(settings)
                 .environmentObject(healthStore)
+                .environmentObject(entitlementManager) // 🟨 UPDATED
 
         case .settingsMenu:
             AccountSettingsMenuView(
@@ -120,6 +133,7 @@ struct AccountSheetRootView: View {
             .environmentObject(appState)
             .environmentObject(settings)
             .environmentObject(healthStore)
+            .environmentObject(entitlementManager) // 🟨 UPDATED
 
         case .targetsThresholdsMenu:
             TargetsThresholdsMenuView(
@@ -188,5 +202,6 @@ struct AccountSheetRootView: View {
         .environmentObject(AppState())
         .environmentObject(SettingsModel.shared)
         .environmentObject(HealthStore.preview())
+        .environmentObject(EntitlementManager()) // 🟨 UPDATED
 }
 #endif

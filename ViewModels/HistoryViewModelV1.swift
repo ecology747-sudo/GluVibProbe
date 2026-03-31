@@ -150,7 +150,7 @@ final class HistoryViewModelV1: ObservableObject {
 
                 let detail = parts.joined(separator: " · ")
                 let title = w.workoutActivityType.localizedHistoryName
-                let workoutSymbol = WorkoutBadgeHelper.symbolName(for: title)
+                let workoutSymbol = WorkoutBadgeHelper.symbolName(for: w.workoutActivityType) // 🟨 UPDATED
 
                 let markers: [HistoryEventRowCardModel.GlucoseMarker]
                 if showCGM {
@@ -170,7 +170,7 @@ final class HistoryViewModelV1: ObservableObject {
                             timeText: formatTime(start),
                             glucoseMarkers: markers,
                             contextHint: nil,
-                            glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(), // 🟨 UPDATED
+                            glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(),
                             semanticKind: .activityWorkout(symbol: workoutSymbol)
                         ),
                         metricRoute: .workoutMinutes,
@@ -208,7 +208,7 @@ final class HistoryViewModelV1: ObservableObject {
                             timeText: formatTime(e.timestamp),
                             glucoseMarkers: markers,
                             contextHint: nil,
-                            glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(), // 🟨 UPDATED
+                            glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(),
                             semanticKind: .carbs
                         ),
                         metricRoute: .carbs,
@@ -226,7 +226,7 @@ final class HistoryViewModelV1: ObservableObject {
                 let bolus = bolusEventsForDayOffset(healthStore: healthStore, dayOffset)
                 for b in bolus {
                     let units = max(0, b.units)
-                    let detail = L10n.History.Format.insulinValue(units) // 🟨 UPDATED
+                    let detail = L10n.History.Format.insulinValue(units)
 
                     let markers: [HistoryEventRowCardModel.GlucoseMarker]
                     if showCGM {
@@ -246,7 +246,7 @@ final class HistoryViewModelV1: ObservableObject {
                                 timeText: formatTime(b.timestamp),
                                 glucoseMarkers: markers,
                                 contextHint: nil,
-                                glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(), // 🟨 UPDATED
+                                glucoseRowTitleText: markers.isEmpty ? nil : localizedGlucoseRowTitle(),
                                 semanticKind: .bolus
                             ),
                             metricRoute: .bolus,
@@ -258,7 +258,7 @@ final class HistoryViewModelV1: ObservableObject {
                 let basal = basalEventsForDayOffset(healthStore: healthStore, dayOffset)
                 for b in basal {
                     let units = max(0, b.units)
-                    let detail = L10n.History.Format.insulinValue(units) // 🟨 UPDATED
+                    let detail = L10n.History.Format.insulinValue(units)
 
                     out.append(
                         HistoryListEvent(
@@ -541,7 +541,7 @@ final class HistoryViewModelV1: ObservableObject {
         return df.string(from: date)
     }
 
-    private func localizedGlucoseRowTitle() -> String { // 🟨 UPDATED
+    private func localizedGlucoseRowTitle() -> String {
         let settings = SettingsModel.shared
         let unitText = settings.glucoseUnit == .mmolL ? "mmol/L" : "mg/dL"
         return L10n.History.Glucose.rowTitle(unit: unitText)

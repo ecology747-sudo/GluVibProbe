@@ -71,6 +71,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
 
     @Published var todayActiveEnergyKcal: Int = 0
     @Published var sevenDayAverageActiveEnergyKcal: Int = 0
+    @Published var thirtyDayAverageActiveEnergyKcal: Int = 0 // 🟨 UPDATED
 
     @Published var movementSleepMinutesToday: Int = 0
     @Published var movementActiveMinutesToday: Int = 0
@@ -78,7 +79,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
     @Published var movementSplitFillFractionOfDay: Double = 0
     @Published var movementSplitPercentages: (sleep: Double, move: Double, sedentary: Double) = (0, 0, 0)
 
-    @Published var lastExercisesDisplay: [(name: String, badgeName: String, detail: String, date: String, time: String)] = [] // UPDATED
+    @Published var lastExercisesDisplay: [(name: String, badgeName: String, detail: String, date: String, time: String)] = []
 
     @Published var activityInsightText: String = ""
     @Published var activityInsightCategory: ActivityInsightCategory = .neutral
@@ -356,6 +357,15 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             value: { $0.activeEnergy }
         )
 
+        thirtyDayAverageActiveEnergyKcal = computeAverageFixedDays( // 🟨 UPDATED
+            values: healthStore.last90DaysActiveEnergy,
+            endingOn: date,
+            days: 30,
+            calendar: calendar,
+            dateKey: \.date,
+            value: { $0.activeEnergy }
+        )
+
         updateMovementSplitForSelectedDay()
 
         let scoreNow = scoreReferenceNow(for: date, calendar: calendar)
@@ -378,9 +388,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
 
         let calendar = Calendar.current
 
-        // 🟨 UPDATED (Rule A):
-        // Mini-trend ALWAYS shows the last 7 FULL days BEFORE the displayed day.
-        // Therefore: endDay = selectedDate - 1 day (for ALL offsets).
         let endDate: Date = {
             let selectedStart = calendar.startOfDay(for: selectedDate)
             return calendar.date(byAdding: .day, value: -1, to: selectedStart) ?? selectedStart
@@ -515,6 +522,40 @@ final class ActivityOverviewViewModelV1: ObservableObject {
         return Int((Double(sum) / Double(count)).rounded())
     }
 
+    private func computeAverageFixedDays<T>(
+        values: [T],
+        endingOn endDate: Date,
+        days: Int,
+        calendar: Calendar,
+        dateKey: KeyPath<T, Date>,
+        value: (T) -> Int
+    ) -> Int {
+        guard days > 0 else { return 0 }
+
+        let endDay = calendar.startOfDay(for: endDate)
+        guard let startDay = calendar.date(byAdding: .day, value: -(days - 1), to: endDay) else { return 0 }
+
+        var dict: [Date: Int] = [:]
+        dict.reserveCapacity(values.count)
+
+        for item in values {
+            let day = calendar.startOfDay(for: item[keyPath: dateKey])
+            dict[day] = max(dict[day] ?? 0, value(item))
+        }
+
+        var sum = 0
+        var count = 0
+
+        for offset in 0..<days {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: startDay) else { continue }
+            sum += max(0, dict[calendar.startOfDay(for: day)] ?? 0)
+            count += 1
+        }
+
+        guard count > 0 else { return 0 }
+        return Int((Double(sum) / Double(count)).rounded())
+    }
+
     // ============================================================
     // MARK: - Movement Split mapping (unverändert)
     // ============================================================
@@ -616,10 +657,10 @@ final class ActivityOverviewViewModelV1: ObservableObject {
         timeFormatter.dateStyle = .none
         timeFormatter.timeStyle = .short
 
-        let mapped: [(name: String, badgeName: String, detail: String, date: String, time: String)] = workouts.map { workout in // UPDATED
+        let mapped: [(name: String, badgeName: String, detail: String, date: String, time: String)] = workouts.map { workout in
 
             let name = workout.workoutActivityType.simpleName
-            let badgeName = workout.workoutActivityType.badgeName // UPDATED
+            let badgeName = workout.workoutActivityType.badgeName
 
             let durationMinutes = Int(workout.duration / 60)
             let durationText = "\(durationMinutes) min"
@@ -653,7 +694,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
 
             let timeString = timeFormatter.string(from: start)
 
-            return (name: name, badgeName: badgeName, detail: detail, date: dateString, time: timeString) // UPDATED
+            return (name: name, badgeName: badgeName, detail: detail, date: dateString, time: timeString)
         }
 
         lastExercisesDisplay = mapped
@@ -670,7 +711,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             return
         }
 
-        // (rest unchanged)
         let lastWorkoutInfo: ActivityLastWorkoutInfo? = {
             guard let workout = lastWorkoutForInsight else { return nil }
             guard workout.startDate <= now else { return nil }
@@ -698,6 +738,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             )
         }()
 
+        // 🟨 UPDATED: Activity Insight Engine now receives 30d energy baseline as primary reference.
         let input = ActivityInsightInput(
             now: now,
             calendar: calendar,
@@ -709,6 +750,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
             exerciseMinutesToday: todayExerciseMinutes,
             exerciseMinutes7DayAverage: sevenDayAverageExerciseMinutes,
             activeEnergyTodayKcal: todayActiveEnergyKcal,
+            activeEnergy30DayAverageKcal: thirtyDayAverageActiveEnergyKcal,
             activeEnergy7DayAverageKcal: sevenDayAverageActiveEnergyKcal,
             sleepMinutesToday: movementSleepMinutesToday,
             activeMinutesTodayFromSplit: movementActiveMinutesToday,
@@ -725,7 +767,6 @@ final class ActivityOverviewViewModelV1: ObservableObject {
         now: Date = Date(),
         calendar: Calendar = .current
     ) {
-        // unchanged
         let lastWorkoutInfo: ActivityLastWorkoutInfo?
 
         if let workout = lastWorkoutForInsight {
@@ -781,7 +822,7 @@ final class ActivityOverviewViewModelV1: ObservableObject {
 private extension HKWorkoutActivityType {
     var simpleName: String {
         switch self {
-        case .walking: return L10n.ActivityOverview.workoutTypeWalking // UPDATED
+        case .walking: return L10n.ActivityOverview.workoutTypeWalking
         case .running: return L10n.ActivityOverview.workoutTypeRunning
         case .cycling: return L10n.ActivityOverview.workoutTypeCycling
         case .highIntensityIntervalTraining: return L10n.ActivityOverview.workoutTypeHIIT
@@ -800,7 +841,7 @@ private extension HKWorkoutActivityType {
         }
     }
 
-    var badgeName: String { // UPDATED
+    var badgeName: String {
         switch self {
         case .walking: return "Walking"
         case .running: return "Running"

@@ -30,6 +30,19 @@
 		D01279EC2F631061006F1AD9 /* L10n+History.swift in Sources */ = {isa = PBXBuildFile; fileRef = D01279EB2F631061006F1AD9 /* L10n+History.swift */; };
 		D01279EE2F6425AA006F1AD9 /* L10n+Avatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D01279ED2F6425AA006F1AD9 /* L10n+Avatar.swift */; };
 		D017B21C2F65B2CE00C8748C /* L10n+Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = D017B21B2F65B2CE00C8748C /* L10n+Onboarding.swift */; };
+		D0181FE52F74238F00348A34 /* MonetizationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FE42F74238F00348A34 /* MonetizationModels.swift */; };
+		D0181FE72F74239F00348A34 /* MonetizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FE62F74239F00348A34 /* MonetizationProvider.swift */; };
+		D0181FE92F7423B200348A34 /* MonetizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FE82F7423B200348A34 /* MonetizationManager.swift */; };
+		D0181FEB2F7423C500348A34 /* MonetizationCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FEA2F7423C500348A34 /* MonetizationCapabilities.swift */; };
+		D0181FED2F7423D500348A34 /* MonetizationDebug.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FEC2F7423D500348A34 /* MonetizationDebug.swift */; };
+		D0181FEF2F752EC400348A34 /* ActivityInsightEnginePreviewTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FEE2F752EC400348A34 /* ActivityInsightEnginePreviewTool.swift */; };
+		D0181FF42F769BC900348A34 /* ActivityInsightEngineModelsV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FF32F769BC900348A34 /* ActivityInsightEngineModelsV1.swift */; };
+		D0181FF62F769BE100348A34 /* ActivityInsightEngineClassifierV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FF52F769BE100348A34 /* ActivityInsightEngineClassifierV1.swift */; };
+		D0181FF82F769C0000348A34 /* ActivityInsightEngineResolverV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FF72F769C0000348A34 /* ActivityInsightEngineResolverV1.swift */; };
+		D0181FFB2F7A750C00348A34 /* NutritionInsightEngineModelsV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FFA2F7A750C00348A34 /* NutritionInsightEngineModelsV1.swift */; };
+		D0181FFD2F7A759F00348A34 /* NutritionInsightEngineClassifierV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FFC2F7A759F00348A34 /* NutritionInsightEngineClassifierV1.swift */; };
+		D0181FFF2F7A771400348A34 /* NutritionInsightEngineResolverV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0181FFE2F7A771400348A34 /* NutritionInsightEngineResolverV1.swift */; };
+		D01820012F7A780C00348A34 /* NutritionInsightEnginePreviewTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = D01820002F7A780C00348A34 /* NutritionInsightEnginePreviewTool.swift */; };
 		D019E5332F0163BF004911D2 /* HealthStore+CGMKPIV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D019E5322F0163BF004911D2 /* HealthStore+CGMKPIV1.swift */; };
 		D019E5352F016669004911D2 /* CGMTodayDebugViewV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D019E5342F016668004911D2 /* CGMTodayDebugViewV1.swift */; };
 		D019E5372F0169F7004911D2 /* CGMRaw3DaysDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D019E5362F0169F7004911D2 /* CGMRaw3DaysDebugView.swift */; };
@@ -261,6 +274,19 @@
 		D01279EB2F631061006F1AD9 /* L10n+History.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "L10n+History.swift"; sourceTree = "<group>"; };
 		D01279ED2F6425AA006F1AD9 /* L10n+Avatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "L10n+Avatar.swift"; sourceTree = "<group>"; };
 		D017B21B2F65B2CE00C8748C /* L10n+Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "L10n+Onboarding.swift"; sourceTree = "<group>"; };
+		D0181FE42F74238F00348A34 /* MonetizationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonetizationModels.swift; sourceTree = "<group>"; };
+		D0181FE62F74239F00348A34 /* MonetizationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonetizationProvider.swift; sourceTree = "<group>"; };
+		D0181FE82F7423B200348A34 /* MonetizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonetizationManager.swift; sourceTree = "<group>"; };
+		D0181FEA2F7423C500348A34 /* MonetizationCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonetizationCapabilities.swift; sourceTree = "<group>"; };
+		D0181FEC2F7423D500348A34 /* MonetizationDebug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonetizationDebug.swift; sourceTree = "<group>"; };
+		D0181FEE2F752EC400348A34 /* ActivityInsightEnginePreviewTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityInsightEnginePreviewTool.swift; sourceTree = "<group>"; };
+		D0181FF32F769BC900348A34 /* ActivityInsightEngineModelsV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityInsightEngineModelsV1.swift; sourceTree = "<group>"; };
+		D0181FF52F769BE100348A34 /* ActivityInsightEngineClassifierV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityInsightEngineClassifierV1.swift; sourceTree = "<group>"; };
+		D0181FF72F769C0000348A34 /* ActivityInsightEngineResolverV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityInsightEngineResolverV1.swift; sourceTree = "<group>"; };
+		D0181FFA2F7A750C00348A34 /* NutritionInsightEngineModelsV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionInsightEngineModelsV1.swift; sourceTree = "<group>"; };
+		D0181FFC2F7A759F00348A34 /* NutritionInsightEngineClassifierV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionInsightEngineClassifierV1.swift; sourceTree = "<group>"; };
+		D0181FFE2F7A771400348A34 /* NutritionInsightEngineResolverV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionInsightEngineResolverV1.swift; sourceTree = "<group>"; };
+		D01820002F7A780C00348A34 /* NutritionInsightEnginePreviewTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionInsightEnginePreviewTool.swift; sourceTree = "<group>"; };
 		D019E5322F0163BF004911D2 /* HealthStore+CGMKPIV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+CGMKPIV1.swift"; sourceTree = "<group>"; };
 		D019E5342F016668004911D2 /* CGMTodayDebugViewV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMTodayDebugViewV1.swift; sourceTree = "<group>"; };
 		D019E5362F0169F7004911D2 /* CGMRaw3DaysDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMRaw3DaysDebugView.swift; sourceTree = "<group>"; };
@@ -301,7 +327,6 @@
 		D038C55F2EF18A7A007E9266 /* SleepViewModelV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepViewModelV1.swift; sourceTree = "<group>"; };
 		D038C5612EF18AD0007E9266 /* SleepViewV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepViewV1.swift; sourceTree = "<group>"; };
 		D03923D32EFC280F0050C4FF /* HealthStore+RestingEnergyV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+RestingEnergyV1.swift"; sourceTree = "<group>"; };
-		D03A2E952F5713ED006A8BF4 /* TherapyContextCardViewV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TherapyContextCardViewV1.swift; sourceTree = "<group>"; };
 		D03A2E972F57498E006A8BF4 /* CarbsDaypartsModelsV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbsDaypartsModelsV1.swift; sourceTree = "<group>"; };
 		D03A2E992F574A0C006A8BF4 /* HealthStore+CarbsDaypartsV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthStore+CarbsDaypartsV1.swift"; sourceTree = "<group>"; };
 		D03A2E9B2F574B17006A8BF4 /* CarbsDaypartsStackedBarChartViewV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbsDaypartsStackedBarChartViewV1.swift; sourceTree = "<group>"; };
@@ -529,6 +554,40 @@
 			path = SectionCardsActivityOverview;
 			sourceTree = "<group>";
 		};
+		D0181FE32F74235D00348A34 /* Monetization */ = {
+			isa = PBXGroup;
+			children = (
+				D0181FE42F74238F00348A34 /* MonetizationModels.swift */,
+				D0181FE62F74239F00348A34 /* MonetizationProvider.swift */,
+				D0181FE82F7423B200348A34 /* MonetizationManager.swift */,
+				D0181FEA2F7423C500348A34 /* MonetizationCapabilities.swift */,
+				D0181FEC2F7423D500348A34 /* MonetizationDebug.swift */,
+			);
+			path = Monetization;
+			sourceTree = "<group>";
+		};
+		D0181FF22F769BB000348A34 /* Insight */ = {
+			isa = PBXGroup;
+			children = (
+				D0935A242EE983C0004B3B9B /* ActivityInsightEngine.swift */,
+				D0181FF32F769BC900348A34 /* ActivityInsightEngineModelsV1.swift */,
+				D0181FF52F769BE100348A34 /* ActivityInsightEngineClassifierV1.swift */,
+				D0181FF72F769C0000348A34 /* ActivityInsightEngineResolverV1.swift */,
+			);
+			path = Insight;
+			sourceTree = "<group>";
+		};
+		D0181FF92F7A735400348A34 /* Insight */ = {
+			isa = PBXGroup;
+			children = (
+				D0FC375A2EFAE93B00897C04 /* NutritionInsightEngineV1.swift */,
+				D0181FFA2F7A750C00348A34 /* NutritionInsightEngineModelsV1.swift */,
+				D0181FFC2F7A759F00348A34 /* NutritionInsightEngineClassifierV1.swift */,
+				D0181FFE2F7A771400348A34 /* NutritionInsightEngineResolverV1.swift */,
+			);
+			path = Insight;
+			sourceTree = "<group>";
+		};
 		D019E53A2F029533004911D2 /* Mainchart */ = {
 			isa = PBXGroup;
 			children = (
@@ -661,6 +720,7 @@
 		D0306B672EC9DE04004BE9C2 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				D0181FE32F74235D00348A34 /* Monetization */,
 				D0B50A142F61D6FB00B60EF8 /* Boot */,
 				D0306B5C2EC9DD49004BE9C2 /* GluVibProbeApp.swift */,
 				D0306B6F2EC9E0D6004BE9C2 /* AppRouter.swift */,
@@ -673,7 +733,6 @@
 		D0306B682EC9DEDE004BE9C2 /* Features */ = {
 			isa = PBXGroup;
 			children = (
-				D01A88602F45BBD200F6BB4C /* Onboarding */,
 				D0B1B65C2F1E763600692B9F /* Report */,
 				D0306B7B2EC9E30E004BE9C2 /* Activity  */,
 				D0D15DF22ED9896D00DD41E7 /* Body */,
@@ -695,6 +754,7 @@
 				D05873A42ED7007B0010C475 /* Design */,
 				D05873A52ED700A30010C475 /* MetricDomain.swift */,
 				D0573AAD2ECB1DE30025A4AE /* Components */,
+				D01A88602F45BBD200F6BB4C /* Onboarding */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -780,6 +840,7 @@
 		D0306B782EC9E2DC004BE9C2 /* Nutrition */ = {
 			isa = PBXGroup;
 			children = (
+				D0181FF92F7A735400348A34 /* Insight */,
 				D0FC37582EFAD1F600897C04 /* NutritionOverviewViewV1.swift */,
 				D0D0208D2F570C4A00A66462 /* NutritionEnergyBalance7DSectionV1.swift */,
 				D0E88E8F2EDEEFFD00A5E470 /* NutritionDashboardView.swift */,
@@ -790,7 +851,6 @@
 				D0FC37522EFACD9400897C04 /* NutritionEnergyViewV1.swift */,
 				D0FC515E2EE34B9600F6ED0D /* NutritionInsightEngine.swift */,
 				D0FC51602EE3518B00F6ED0D /* NutritionScoreEngine.swift */,
-				D0FC375A2EFAE93B00897C04 /* NutritionInsightEngineV1.swift */,
 				D03A2E9B2F574B17006A8BF4 /* CarbsDaypartsStackedBarChartViewV1.swift */,
 				D03A2E9F2F5750CB006A8BF4 /* CarbsDaypartsViewV1.swift */,
 			);
@@ -800,6 +860,7 @@
 		D0306B7B2EC9E30E004BE9C2 /* Activity  */ = {
 			isa = PBXGroup;
 			children = (
+				D0181FF22F769BB000348A34 /* Insight */,
 				D0BC10F92EEF4A4F00C3E6D9 /* ActivityOverviewViewV1.swift */,
 				D00C6A9E2F154BB6002C19D9 /* ActivityDashboardView.swift */,
 				D00C6A992F153E5D002C19D9 /* SectionCardsActivityOverview */,
@@ -811,7 +872,6 @@
 				D00E24122EF99FB10074058C /* MoveTimeViewV1.swift */,
 				D01050062EF9BE3700572928 /* WorkoutMinutesViewV1.swift */,
 				D0935A222EE97741004B3B9B /* WorkoutBadgeHelper.swift */,
-				D0935A242EE983C0004B3B9B /* ActivityInsightEngine.swift */,
 				D0935A282EE9A49D004B3B9B /* ActivityScoreEngine.swift */,
 			);
 			path = "Activity ";
@@ -862,7 +922,8 @@
 			children = (
 				D02F862E2F08361400E116B2 /* MetabolicOverviewDesignPremium.swift */,
 				D0568ECB2F2101090015E6D7 /* GlucoseSummaryCardDesign.swift */,
-				D03A2E952F5713ED006A8BF4 /* TherapyContextCardViewV1.swift */,
+				D0181FEE2F752EC400348A34 /* ActivityInsightEnginePreviewTool.swift */,
+				D01820002F7A780C00348A34 /* NutritionInsightEnginePreviewTool.swift */,
 			);
 			path = "Testing Things";
 			sourceTree = "<group>";
@@ -1254,8 +1315,10 @@
 				D0FC37512EFACD6F00897C04 /* NutritionEnergyViewModelV1.swift in Sources */,
 				D0DD77042F436C1800F1AB29 /* TermsView.swift in Sources */,
 				D044B1992F6490F2006B7830 /* L10n+Disclaimer.swift in Sources */,
+				D0181FED2F7423D500348A34 /* MonetizationDebug.swift in Sources */,
 				D0E7C6A52F21412E00CDE9B1 /* ZoomableContainer.swift in Sources */,
 				D00C6A9D2F1540CA002C19D9 /* ActivityOverviewWorkoutActiveCard.swift in Sources */,
+				D0181FE92F7423B200348A34 /* MonetizationManager.swift in Sources */,
 				D0306B702EC9E0E5004BE9C2 /* AppRouter.swift in Sources */,
 				D0D0208A2F56FAEF00A66462 /* SugarViewModelV1.swift in Sources */,
 				D09009682F01497D00105639 /* BolusBasalRatioViewV1.swift in Sources */,
@@ -1266,6 +1329,7 @@
 				D0306B802EC9E371004BE9C2 /* HistoryView.swift in Sources */,
 				D0D15E082EDB10F900DD41E7 /* ActivitySettingsSection.swift in Sources */,
 				D0306B832EC9E3BB004BE9C2 /* SettingsView.swift in Sources */,
+				D0181FF82F769C0000348A34 /* ActivityInsightEngineResolverV1.swift in Sources */,
 				D0BC10DA2EED832A00C3E6D9 /* StepsViewModelV1.swift in Sources */,
 				D019E5402F02959F004911D2 /* HealthStore+MainChartOverlaysV1.swift in Sources */,
 				D02F831D2ED273C8005011A1 /* DaillySleepEntry.swift in Sources */,
@@ -1275,6 +1339,7 @@
 				D0D15E112EDDA93C00DD41E7 /* GluVibPrimaryButtonStyle.swift in Sources */,
 				D07F50152EDF7D5E006F723F /* Last90DaysScaledBarChart.swift in Sources */,
 				D038C5562EF0AD5B007E9266 /* BodyFatViewV1.swift in Sources */,
+				D0181FE52F74238F00348A34 /* MonetizationModels.swift in Sources */,
 				D0BC10F22EEEE94800C3E6D9 /* HealthStore+MovementSplitV1.swift in Sources */,
 				D02F83292ED2A68B005011A1 /* CarbBolusRatioViewV1.swift in Sources */,
 				D00E24112EF99F300074058C /* MoveTimeViewModelV1.swift in Sources */,
@@ -1324,6 +1389,7 @@
 				D0D15E0C2EDBF7F500DD41E7 /* UnitsSettingsSection.swift in Sources */,
 				D049A6962F166D7000B7FC93 /* HistoryViewModelV1.swift in Sources */,
 				D0568EC62F1FBB360015E6D7 /* ReportThresholdsSectionView.swift in Sources */,
+				D0181FF62F769BE100348A34 /* ActivityInsightEngineClassifierV1.swift in Sources */,
 				D019E5352F016669004911D2 /* CGMTodayDebugViewV1.swift in Sources */,
 				D05452962F66BABE0062AAC5 /* GluLog.swift in Sources */,
 				D0DD77002F436BD000F1AB29 /* PrivacyPolicyView.swift in Sources */,
@@ -1338,6 +1404,7 @@
 				D0D15E0A2EDB1A2800DD41E7 /* NutritionSettingsSection.swift in Sources */,
 				D02F83272ED2A645005011A1 /* BasalViewV1.swift in Sources */,
 				D0BC10E42EEDB9E900C3E6D9 /* HealthStore+ActivityEnergyV1.swift in Sources */,
+				D0181FFD2F7A759F00348A34 /* NutritionInsightEngineClassifierV1.swift in Sources */,
 				D06A75502F179F30005E0F4B /* AccountMenuSheetView.swift in Sources */,
 				D0C723822F1D3B2700623B5D /* FrequentlyAskedQuestionsView.swift in Sources */,
 				D093C3E52F0D88C700232CFC /* HealthStore+RangeV1.swift in Sources */,
@@ -1365,6 +1432,7 @@
 				D0568EC22F1F9A0C0015E6D7 /* ReportStyle.swift in Sources */,
 				D0587B762F4B21C4009C37D3 /* AccountSettingsMenuView.swift in Sources */,
 				D06A75562F1A8867005E0F4B /* WheelPickerSheet.swift in Sources */,
+				D0181FF42F769BC900348A34 /* ActivityInsightEngineModelsV1.swift in Sources */,
 				D0D0F37E2F1E7A94000D39D7 /* ReportGlucoseProfileModelsV1.swift in Sources */,
 				D0BC10D82EED826A00C3E6D9 /* HealthStore+StepsV1.swift in Sources */,
 				D01A88642F45BD6400F6BB4C /* HealthStore+AuthorizationV1.swift in Sources */,
@@ -1406,8 +1474,10 @@
 				D0DD77022F436BF800F1AB29 /* DisclaimerView.swift in Sources */,
 				D017B21C2F65B2CE00C8748C /* L10n+Onboarding.swift in Sources */,
 				D06A75522F17D488005E0F4B /* SettingsDomainCardScreen.swift in Sources */,
+				D0181FEB2F7423C500348A34 /* MonetizationCapabilities.swift in Sources */,
 				D01279EE2F6425AA006F1AD9 /* L10n+Avatar.swift in Sources */,
 				D038C5542EF0AD2B007E9266 /* BodyFatViewModelV1.swift in Sources */,
+				D01820012F7A780C00348A34 /* NutritionInsightEnginePreviewTool.swift in Sources */,
 				D0E88E8A2EDEE85B00A5E470 /* DailyCarbsEntry.swift in Sources */,
 				D0F197C42EF1975200A71CD9 /* BodyOverviewViewV1.swift in Sources */,
 				D0B1B65E2F1E765000692B9F /* MetabolicReportCoordinatorV1.swift in Sources */,
@@ -1422,6 +1492,9 @@
 				D019E53E2F029590004911D2 /* HealthStore+MainChartCGMV1.swift in Sources */,
 				D02F83252ED2A637005011A1 /* BolusViewV1.swift in Sources */,
 				D01279EA2F62DAB0006F1AD9 /* L10n+Body.swift in Sources */,
+				D0181FFF2F7A771400348A34 /* NutritionInsightEngineResolverV1.swift in Sources */,
+				D0181FEF2F752EC400348A34 /* ActivityInsightEnginePreviewTool.swift in Sources */,
+				D0181FFB2F7A750C00348A34 /* NutritionInsightEngineModelsV1.swift in Sources */,
 				D0568ECA2F20F4AD0015E6D7 /* ReportInsulinTherapyOverviewSectionV1.swift in Sources */,
 				D0568EC82F20EC8C0015E6D7 /* ReportDailyMeanGlucoseLineChartV1.swift in Sources */,
 				D0FC37492EFACBD400897C04 /* ProteinViewV1.swift in Sources */,
@@ -1453,6 +1526,7 @@
 				D00C6A9F2F154BB6002C19D9 /* ActivityDashboardView.swift in Sources */,
 				D03C11382F1019C2006AF487 /* BolusBasalRatioOverviewCard.swift in Sources */,
 				D044B19B2F649222006B7830 /* L10n+Terms.swift in Sources */,
+				D0181FE72F74239F00348A34 /* MonetizationProvider.swift in Sources */,
 				D038C5622EF18AD0007E9266 /* SleepViewV1.swift in Sources */,
 				D0E88E902EDEEFFD00A5E470 /* NutritionDashboardView.swift in Sources */,
 				D0306B742EC9E1B7004BE9C2 /* AppState.swift in Sources */,

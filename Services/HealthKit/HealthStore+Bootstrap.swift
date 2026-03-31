@@ -1,6 +1,6 @@
 //
 //  HealthStore+Bootstrap.swift
-//  GluVibProbe
+//  GluVib
 //
 //  Bootstrap / Refresh Orchestration (SSoT: HealthStore)
 //
@@ -17,10 +17,15 @@
 //  - Read auth issue flags are set ONLY by dedicated probe functions in metric files.
 //  - Sugar is integrated as Nutrition metric (subset of Carbs in UI semantics; handled in UI, not here).
 //
+//  Monetization Integration
+//  - This file is a service/orchestration layer and cannot consume EnvironmentObject.
+//  - Therefore it reads the already-resolved commercial truth via EntitlementManager.shared.
+//  - It may READ monetization state, but it must not DEFINE monetization policy.
+//
 
 import Foundation
 import HealthKit
-import OSLog // 🟨 UPDATED
+import OSLog
 
 extension HealthStore {
 
@@ -41,27 +46,28 @@ extension HealthStore {
 
     @MainActor
     private var hasEffectiveMetabolicAccessV1: Bool {
-        SettingsModel.shared.hasMetabolicPremiumEffective
+        EntitlementManager.shared.canAccessMetabolic
     }
 
     @MainActor
     private var hasCGMEnabledV1: Bool {
-        let s = SettingsModel.shared
-        return s.hasCGM && hasEffectiveMetabolicAccessV1
+        let settings = SettingsModel.shared
+        return settings.hasCGM && hasEffectiveMetabolicAccessV1
     }
 
     @MainActor
     private var hasInsulinEnabledV1: Bool {
-        let s = SettingsModel.shared
-        return hasCGMEnabledV1 && s.isInsulinTreated
+        let settings = SettingsModel.shared
+        return hasCGMEnabledV1 && settings.isInsulinTreated
     }
 
     @MainActor
-    private func logBootstrapStatusV1(prefix: String, context: RefreshContext) { // 🟨 UPDATED
-        let s = SettingsModel.shared
+    private func logBootstrapStatusV1(prefix: String, context: RefreshContext) {
+        let settings = SettingsModel.shared
+        let entitlement = EntitlementManager.shared
 
         GluLog.bootstrap.notice(
-            "\(prefix, privacy: .public) | context=\(context.rawValue, privacy: .public) premium=\(s.hasMetabolicPremiumEffective, privacy: .public) trial=\(s.isTrialActive, privacy: .public) hasCGM=\(s.hasCGM, privacy: .public) insulin=\(s.isInsulinTreated, privacy: .public) warnings=\(s.showPermissionWarnings, privacy: .public) debugNoData=\(s.debugSimulateNoHealthData, privacy: .public)"
+            "\(prefix, privacy: .public) | context=\(context.rawValue, privacy: .public) fullAccess=\(entitlement.hasFullAppAccess, privacy: .public) metabolicAccess=\(entitlement.canAccessMetabolic, privacy: .public) premium=\(entitlement.isPremium, privacy: .public) trial=\(entitlement.isTrial, privacy: .public) hasCGM=\(settings.hasCGM, privacy: .public) insulin=\(settings.isInsulinTreated, privacy: .public) warnings=\(settings.showPermissionWarnings, privacy: .public) debugNoData=\(settings.debugSimulateNoHealthData, privacy: .public)"
         )
     }
 
@@ -181,10 +187,6 @@ extension HealthStore {
     // MARK: - Public API (Entry Points)
     // ============================================================
 
-    // ------------------------------------------------------------
-    // MARK: Global Refresh (All Domains)
-    // ------------------------------------------------------------
-
     @MainActor
     func refreshAll(_ context: RefreshContext = .pullToRefresh) async {
         logBootstrapStatusV1(prefix: "refreshAll started", context: context)
@@ -242,10 +244,6 @@ extension HealthStore {
         logBootstrapStatusV1(prefix: "refreshAll finished", context: context)
     }
 
-    // ------------------------------------------------------------
-    // MARK: Activity staged loading
-    // ------------------------------------------------------------
-
     @MainActor
     func refreshActivity(_ context: RefreshContext = .pullToRefresh) async {
         logBootstrapStatusV1(prefix: "refreshActivity started", context: context)
@@ -288,10 +286,6 @@ extension HealthStore {
 
         logBootstrapStatusV1(prefix: "refreshActivity finished", context: context)
     }
-
-    // ------------------------------------------------------------
-    // MARK: Body staged loading
-    // ------------------------------------------------------------
 
     @MainActor
     func refreshBody(_ context: RefreshContext = .pullToRefresh) async {
@@ -336,10 +330,6 @@ extension HealthStore {
         logBootstrapStatusV1(prefix: "refreshBody finished", context: context)
     }
 
-    // ------------------------------------------------------------
-    // MARK: Nutrition staged loading
-    // ------------------------------------------------------------
-
     @MainActor
     func refreshNutrition(_ context: RefreshContext = .pullToRefresh) async {
         logBootstrapStatusV1(prefix: "refreshNutrition started", context: context)
@@ -362,6 +352,7 @@ extension HealthStore {
 
             await refreshNutritionTodaysKPIs()
             await refreshNutritionChartsLightV1()
+            await refreshCarbsDayparts90V1Async(force: false) // 🟨 UPDATED
 
             nutritionBadgeSourcesResolvedV1 = true
 
@@ -388,10 +379,6 @@ extension HealthStore {
         logBootstrapStatusV1(prefix: "refreshNutrition finished", context: context)
     }
 
-    // ------------------------------------------------------------
-    // MARK: Report (Bootstrap Orchestration)
-    // ------------------------------------------------------------
-
     @MainActor
     func refreshMetabolicReport(_ context: RefreshContext = .pullToRefresh, windowDays: Int) async {
         logBootstrapStatusV1(
@@ -414,12 +401,12 @@ extension HealthStore {
 
         await refreshMetabolicTodayRaw3DaysV1(refreshSource: "bootstrap-report-\(context.rawValue)")
 
-        let s = SettingsModel.shared
+        let settings = SettingsModel.shared
         let thresholds = RangeThresholds(
-            glucoseMin: s.glucoseMin,
-            glucoseMax: s.glucoseMax,
-            veryLowLimit: s.veryLowLimit,
-            veryHighLimit: s.veryHighLimit
+            glucoseMin: settings.glucoseMin,
+            glucoseMax: settings.glucoseMax,
+            veryLowLimit: settings.veryLowLimit,
+            veryHighLimit: settings.veryHighLimit
         )
         await refreshRangeHybridV1Async(thresholds: thresholds)
 
@@ -429,10 +416,6 @@ extension HealthStore {
 
         logBootstrapStatusV1(prefix: "refreshMetabolicReport finished", context: context)
     }
-
-    // ------------------------------------------------------------
-    // MARK: Metabolic Domain (Bootstrap Orchestration)
-    // ------------------------------------------------------------
 
     @MainActor
     func refreshMetabolic(_ context: RefreshContext = .pullToRefresh) async {
@@ -468,10 +451,6 @@ extension HealthStore {
         logBootstrapStatusV1(prefix: "refreshMetabolic finished", context: context)
     }
 
-    // ------------------------------------------------------------
-    // MARK: Metabolic Overview (Premium Home) staged
-    // ------------------------------------------------------------
-
     @MainActor
     func refreshMetabolicOverview(_ context: RefreshContext = .pullToRefresh) async {
         logBootstrapStatusV1(prefix: "refreshMetabolicOverview started", context: context)
@@ -494,15 +473,14 @@ extension HealthStore {
         await refreshMetabolicOverviewStageA_V1(context: context)
 
         Task { @MainActor in
-            await self.refreshMetabolicOverviewDeferredStages_V1(context: context, force: (context == .pullToRefresh))
+            await self.refreshMetabolicOverviewDeferredStages_V1(
+                context: context,
+                force: (context == .pullToRefresh)
+            )
         }
 
         logBootstrapStatusV1(prefix: "refreshMetabolicOverview finished", context: context)
     }
-
-    // ------------------------------------------------------------
-    // MARK: History (Bootstrap Orchestration)
-    // ------------------------------------------------------------
 
     @MainActor
     func refreshHistory(_ context: RefreshContext = .pullToRefresh) async {
@@ -541,12 +519,12 @@ extension HealthStore {
 
         await refreshMetabolicTodayRaw3DaysV1(refreshSource: "bootstrap-\(context.rawValue)")
 
-        let s = SettingsModel.shared
+        let settings = SettingsModel.shared
         let thresholds = RangeThresholds(
-            glucoseMin: s.glucoseMin,
-            glucoseMax: s.glucoseMax,
-            veryLowLimit: s.veryLowLimit,
-            veryHighLimit: s.veryHighLimit
+            glucoseMin: settings.glucoseMin,
+            glucoseMax: settings.glucoseMax,
+            veryLowLimit: settings.veryLowLimit,
+            veryHighLimit: settings.veryHighLimit
         )
 
         if context == .pullToRefresh {
@@ -617,12 +595,12 @@ extension HealthStore {
             MetabolicDeferredLoadGateV1.finishMean90Light(for: key)
         }
 
-        let s = SettingsModel.shared
+        let settings = SettingsModel.shared
         let thresholds = RangeThresholds(
-            glucoseMin: s.glucoseMin,
-            glucoseMax: s.glucoseMax,
-            veryLowLimit: s.veryLowLimit,
-            veryHighLimit: s.veryHighLimit
+            glucoseMin: settings.glucoseMin,
+            glucoseMax: settings.glucoseMax,
+            veryLowLimit: settings.veryLowLimit,
+            veryHighLimit: settings.veryHighLimit
         )
 
         if force || MetabolicDeferredLoadGateV1.shouldRunHybrid(for: key) {
@@ -750,7 +728,7 @@ extension HealthStore {
 
         fetchLast90DaysSleepV1()
         fetchMonthlySleepV1()
-        
+
         fetchLast90DaysWeightV1()
         fetchMonthlyWeightV1()
 
@@ -1114,17 +1092,17 @@ private extension HealthStore {
         let startMonth = calendar.date(byAdding: .month, value: -monthsBack, to: monthAnchor) ?? monthAnchor
 
         var bucket: [String: Int] = [:]
-        for e in self.activeTimeDaily365 where e.date >= startMonth && e.date <= todayStart {
-            let key = e.date.formatted(.dateTime.month(.abbreviated))
-            bucket[key, default: 0] += max(0, e.minutes)
+        for entry in self.activeTimeDaily365 where entry.date >= startMonth && entry.date <= todayStart {
+            let key = entry.date.formatted(.dateTime.month(.abbreviated))
+            bucket[key, default: 0] += max(0, entry.minutes)
         }
 
         var monthly: [MonthlyMetricEntry] = []
         monthly.reserveCapacity(monthsBack + 1)
 
-        for i in 0...monthsBack {
-            guard let d = calendar.date(byAdding: .month, value: i, to: startMonth) else { continue }
-            let key = d.formatted(.dateTime.month(.abbreviated))
+        for index in 0...monthsBack {
+            guard let date = calendar.date(byAdding: .month, value: index, to: startMonth) else { continue }
+            let key = date.formatted(.dateTime.month(.abbreviated))
             monthly.append(MonthlyMetricEntry(monthShort: key, value: bucket[key] ?? 0))
         }
 

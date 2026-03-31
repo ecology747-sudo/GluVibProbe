@@ -985,6 +985,13 @@ private extension NutritionOverviewViewV1 {
             .font(.subheadline)
             .foregroundStyle(Color.Glu.primaryBlue.opacity(0.85))
             .fixedSize(horizontal: false, vertical: true)
+
+            if !viewModel.insightSecondaryText.isEmpty { // 🟨 UPDATED
+                Text(viewModel.insightSecondaryText)
+                    .font(.caption)
+                    .foregroundStyle(Color.Glu.primaryBlue.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)

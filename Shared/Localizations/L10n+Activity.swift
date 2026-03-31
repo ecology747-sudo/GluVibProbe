@@ -324,98 +324,202 @@ extension L10n {
         static var insightFallback: String {
             String(
                 localized: "overview.activity.insight.fallback",
-                defaultValue: "Not enough activity data is available yet. This insight will automatically adapt to your movement pattern as the day progresses.",
-                comment: "Fallback insight text when not enough activity data is available"
+                defaultValue: "No stable activity insight is available yet.",
+                comment: "Fallback insight text when no activity insight is available"
             )
         }
 
-        // MARK: - Insight Texts
+        // MARK: - Insight Engine Texts (NEW ENGINE)
 
-        static var insightSedentaryAfternoon: String {
+        static var insightBlocked: String {
             String(
-                localized: "overview.activity.insight.sedentary_afternoon",
-                defaultValue: "So far your day has been quite sedentary: many inactive minutes and not much movement yet. Short standing or walking breaks this afternoon can help you align your activity level with your recent days.",
-                comment: "Activity insight text for sedentary afternoon pattern"
+                localized: "overview.activity.insight.blocked",
+                defaultValue: "No activity insight is available because activity data access is currently blocked.",
+                comment: "Insight text when activity insight cannot be generated because access is blocked"
             )
         }
 
-        static var insightSedentaryEvening: String {
+        static var insightNoData: String {
             String(
-                localized: "overview.activity.insight.sedentary_evening",
-                defaultValue: "Today has been mostly sedentary and you are below your usual range for steps and exercise minutes. If it fits your schedule, a short walk or light workout can nicely round off the day.",
-                comment: "Activity insight text for sedentary evening pattern"
+                localized: "overview.activity.insight.no_data",
+                defaultValue: "No activity data is available for a stable activity insight.",
+                comment: "Insight text when no activity data is available"
             )
         }
 
-        static var insightStrongWorkout: String {
+        static var insightInsufficientData: String {
             String(
-                localized: "overview.activity.insight.strong_workout",
-                defaultValue: "You are clearly above your 7-day average in activity and energy expenditure today. Strong movement day – make sure to plan enough rest and recovery later on.",
-                comment: "Activity insight text for a strong workout or high activity day"
+                localized: "overview.activity.insight.insufficient_data",
+                defaultValue: "There is not enough activity data yet for a stable activity insight.",
+                comment: "Insight text when activity data is insufficient"
             )
         }
 
-        static var insightEverydayMovement: String {
+        static var insightStrongDualAchievementMorning: String {
             String(
-                localized: "overview.activity.insight.everyday_movement",
-                defaultValue: "Your everyday movement is solid today and roughly in line with your usual level. There is still room for focused training – even a short workout would nicely complement this positive trend.",
-                comment: "Activity insight text for solid everyday movement with little focused training"
+                localized: "overview.activity.insight.strong_dual_achievement.morning",
+                defaultValue: "You have already reached your activity goals for today and are clearly exceeding them.",
+                comment: "Insight text for strong dual achievement in the morning"
             )
         }
 
-        static var insightLastWorkout3Days: String {
+        static var insightStrongDualAchievementLater: String {
             String(
-                localized: "overview.activity.insight.last_workout_3_days",
-                defaultValue: "Your last workout was about three days ago. If it fits your schedule, today or tomorrow would be a good moment to plan a new session.",
-                comment: "Activity insight text when last workout was about three days ago"
+                localized: "overview.activity.insight.strong_dual_achievement.later",
+                defaultValue: "You have reached your activity goals for today and are clearly exceeding them.",
+                comment: "Insight text for strong dual achievement later in the day"
             )
         }
 
-        static var insightLastWorkoutFewDays: String {
+        static var insightStrongStepAchievementMorning: String {
             String(
-                localized: "overview.activity.insight.last_workout_few_days",
-                defaultValue: "Your last workout was a few days ago. A moderate training session can help you get back into your usual rhythm.",
-                comment: "Activity insight text when last workout was a few days ago"
+                localized: "overview.activity.insight.strong_step_achievement.morning",
+                defaultValue: "You have already reached your step goal today and are clearly exceeding it.",
+                comment: "Insight text for strong step achievement in the morning"
             )
         }
 
-        static var insightLastWorkoutLongAgo: String {
+        static var insightStrongStepAchievementLater: String {
             String(
-                localized: "overview.activity.insight.last_workout_long_ago",
-                defaultValue: "Your last workout was quite some time ago. Maybe you can plan a small restart in the next few days – even a short session sends a strong signal to your body.",
-                comment: "Activity insight text when last workout was quite some time ago"
+                localized: "overview.activity.insight.strong_step_achievement.later",
+                defaultValue: "You have reached your step goal today and are clearly exceeding it.",
+                comment: "Insight text for strong step achievement later in the day"
             )
         }
 
-        static var insightEarlyDayLowActivity: String {
+        static var insightStrongEnergyAchievementMorning: String {
             String(
-                localized: "overview.activity.insight.early_day_low_activity",
-                defaultValue: "The day has just started – there has not been much need for movement yet. Short activity bursts distributed over the day help you reach your usual level of steps and exercise minutes in a relaxed way.",
-                comment: "Activity insight text for early day with low activity"
+                localized: "overview.activity.insight.strong_energy_achievement.morning",
+                defaultValue: "You have already reached your active energy goal today and are clearly exceeding it.",
+                comment: "Insight text for strong active energy achievement in the morning"
             )
         }
 
-        static var insightNeutralTypical: String {
+        static var insightStrongEnergyAchievementLater: String {
             String(
-                localized: "overview.activity.insight.neutral_typical",
-                defaultValue: "Your activity today is currently close to your usual range over the last week. Keep your current pace or plan an extra session if it feels right.",
-                comment: "Neutral activity insight when today's activity is close to the recent average"
+                localized: "overview.activity.insight.strong_energy_achievement.later",
+                defaultValue: "You have reached your active energy goal today and are clearly exceeding it.",
+                comment: "Insight text for strong active energy achievement later in the day"
             )
         }
 
-        static var insightNeutralBelowTypical: String {
+        static var insightDualAchievementMorning: String {
             String(
-                localized: "overview.activity.insight.neutral_below_typical",
-                defaultValue: "You are currently a bit below your typical activity level. A little extra activity later today can help you move closer to your 7-day average.",
-                comment: "Neutral activity insight when today's activity is below the recent average"
+                localized: "overview.activity.insight.dual_achievement.morning",
+                defaultValue: "You have already reached your activity goals for today.",
+                comment: "Insight text for dual achievement in the morning"
             )
         }
 
-        static var insightNeutralAboveTypical: String {
+        static var insightDualAchievementLater: String {
             String(
-                localized: "overview.activity.insight.neutral_above_typical",
-                defaultValue: "You are slightly more active today than on most recent days. Keep this good feeling and at the same time pay attention to sufficient recovery.",
-                comment: "Neutral activity insight when today's activity is above the recent average"
+                localized: "overview.activity.insight.dual_achievement.later",
+                defaultValue: "You have reached your activity goals for today.",
+                comment: "Insight text for dual achievement later in the day"
+            )
+        }
+
+        static var insightStepAchievementMorning: String {
+            String(
+                localized: "overview.activity.insight.step_achievement.morning",
+                defaultValue: "You have already reached your step goal today.",
+                comment: "Insight text for step achievement in the morning"
+            )
+        }
+
+        static var insightStepAchievementLater: String {
+            String(
+                localized: "overview.activity.insight.step_achievement.later",
+                defaultValue: "You have reached your step goal today.",
+                comment: "Insight text for step achievement later in the day"
+            )
+        }
+
+        static var insightEnergyAchievementMorning: String {
+            String(
+                localized: "overview.activity.insight.energy_achievement.morning",
+                defaultValue: "You have already reached your active energy goal for today.",
+                comment: "Insight text for active energy achievement in the morning"
+            )
+        }
+
+        static var insightEnergyAchievementLater: String {
+            String(
+                localized: "overview.activity.insight.energy_achievement.later",
+                defaultValue: "You have reached your active energy goal for today.",
+                comment: "Insight text for active energy achievement later in the day"
+            )
+        }
+
+        static var insightPositiveProgressMorning: String {
+            String(
+                localized: "overview.activity.insight.positive_progress.morning",
+                defaultValue: "Today already shows a positive activity progression.",
+                comment: "Insight text for positive activity progress in the morning"
+            )
+        }
+
+        static var insightPositiveProgressAfternoon: String {
+            String(
+                localized: "overview.activity.insight.positive_progress.afternoon",
+                defaultValue: "Today is developing as a positively active day.",
+                comment: "Insight text for positive activity progress in the afternoon"
+            )
+        }
+
+        static var insightPositiveProgressEvening: String {
+            String(
+                localized: "overview.activity.insight.positive_progress.evening",
+                defaultValue: "Today shows a clearly positive activity progression.",
+                comment: "Insight text for positive activity progress in the evening or day close"
+            )
+        }
+
+        static var insightMidZoneMorning: String {
+            String(
+                localized: "overview.activity.insight.mid_zone.morning",
+                defaultValue: "Today is still developing, with no clearly positive or low activity signal yet.",
+                comment: "Insight text for mid-zone activity in the morning"
+            )
+        }
+
+        static var insightMidZoneAfternoon: String {
+            String(
+                localized: "overview.activity.insight.mid_zone.afternoon",
+                defaultValue: "Today currently shows a moderate activity pattern without a clear overall direction.",
+                comment: "Insight text for mid-zone activity in the afternoon"
+            )
+        }
+
+        static var insightMidZoneEvening: String {
+            String(
+                localized: "overview.activity.insight.mid_zone.evening",
+                defaultValue: "Today shows a moderate overall activity pattern.",
+                comment: "Insight text for mid-zone activity in the evening or day close"
+            )
+        }
+
+        static var insightLowActivityMorning: String {
+            String(
+                localized: "overview.activity.insight.low_activity.morning",
+                defaultValue: "So far, activity remains limited, but the day is still open.",
+                comment: "Insight text for low activity in the morning"
+            )
+        }
+
+        static var insightLowActivityAfternoon: String {
+            String(
+                localized: "overview.activity.insight.low_activity.afternoon",
+                defaultValue: "Today currently shows a rather low activity level.",
+                comment: "Insight text for low activity in the afternoon"
+            )
+        }
+
+        static var insightLowActivityEvening: String {
+            String(
+                localized: "overview.activity.insight.low_activity.evening",
+                defaultValue: "Today shows a low overall activity level.",
+                comment: "Insight text for low activity in the evening or day close"
             )
         }
     }
@@ -450,7 +554,7 @@ extension L10n {
 
         // MARK: - Hints
 
-        static var hintNoDataOrPermission: String { // 🟨 UPDATED
+        static var hintNoDataOrPermission: String {
             String(
                 localized: "metric.steps.hint.no_data_or_permission",
                 defaultValue: "No step data available. Please check Apple Health permissions and whether steps have already been recorded in Apple Health.",
@@ -497,7 +601,7 @@ extension L10n {
 
         // MARK: - Hints
 
-        static var hintNoDataOrPermission: String { // 🟨 UPDATED
+        static var hintNoDataOrPermission: String {
             String(
                 localized: "metric.workout_minutes.hint.no_data_or_permission",
                 defaultValue: "No workout minute data available. Please check Apple Health permissions and whether workout minutes have already been recorded in Apple Health.",
@@ -536,7 +640,7 @@ extension L10n {
 
         // MARK: - Hints
 
-        static var hintNoDataOrPermission: String { // 🟨 UPDATED
+        static var hintNoDataOrPermission: String {
             String(
                 localized: "metric.activity_energy.hint.no_data_or_permission",
                 defaultValue: "No active energy data available. Please check Apple Health permissions and whether active energy has already been recorded in Apple Health.",
@@ -620,8 +724,8 @@ extension L10n {
                 comment: "Legend label for inactive time in movement split chart"
             )
         }
-        
-        static var hintNoDataOrPermission: String { // 🟨 NEW
+
+        static var hintNoDataOrPermission: String {
             String(
                 localized: "metric.movement_split.hint.no_data_or_permission",
                 defaultValue: "No movement split data available. Please check Apple Health permissions and whether sleep or activity data have already been recorded in Apple Health.",
@@ -629,7 +733,7 @@ extension L10n {
             )
         }
 
-        static var hintNoToday: String { // 🟨 NEW
+        static var hintNoToday: String {
             String(
                 localized: "metric.movement_split.hint.no_today",
                 defaultValue: "No movement split data recorded today yet.",

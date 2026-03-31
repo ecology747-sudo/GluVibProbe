@@ -1,13 +1,48 @@
-// ============================================================
-// MARK: - SettingsModel.swift  // UPDATED (Premium Entitlement + Trial + Metabolic/Insulin Mode)
-// ============================================================
+//
+//  SettingsModel.swift
+//  GluVib
+//
+//  Area: App / Shared Settings
+//  File Role:
+//  - Central persistent settings model for GluVib user preferences and app-local flags.
+//  - Stores display settings, targets, onboarding progress, metabolic user intent,
+//    and a temporary migration bridge for legacy monetization state.
+//
+//  Purpose:
+//  - Keep normal app settings and user-controlled preferences in one place.
+//  - Persist onboarding and settings values via UserDefaults.
+//  - Support the current monetization migration without letting SettingsModel
+//    remain the long-term source of truth for premium / trial / free.
+//
+//  Monetization Rule:
+//  - The dedicated monetization layer now owns the central commercial truth.
+//  - This file keeps only temporary legacy bridge values that still exist
+//    for the current transition phase.
+//  - New premium / trial / free decisions should move toward EntitlementManager
+//    and CapabilityResolver instead of being created here.
+//
+//  Key Connections:
+//  - EntitlementManager (new central monetization truth)
+//  - legacy premium bridge during migration
+//  - user intent flags:
+//    - hasCGM
+//    - isInsulinTreated
+//
 
 import Foundation
 import Combine
 
 final class SettingsModel: ObservableObject {
 
+    // ============================================================
+    // MARK: - Shared Instance
+    // ============================================================
+
     static let shared = SettingsModel()
+
+    // ============================================================
+    // MARK: - Unsaved State
+    // ============================================================
 
     @Published var hasUnsavedChanges: Bool = false
 
@@ -15,38 +50,44 @@ final class SettingsModel: ObservableObject {
     func clearUnsavedChanges() { hasUnsavedChanges = false }
 
     // ============================================================
-    // 🟨 UPDATED: prevent autosave while loading defaults
+    // MARK: - Internal Loading Guard
     // ============================================================
+
     private var isLoadingFromDefaults: Bool = false
 
-    // MARK: - Published Values
+    // ============================================================
+    // MARK: - Daily Goals
+    // ============================================================
 
     @Published var dailyStepGoal: Int = 10_000
-
     @Published var dailySleepGoalMinutes: Int = 8 * 60
     @Published var targetWeightKg: Int = 75
 
-    // MARK: Units
+    // ============================================================
+    // MARK: - Units
+    // ============================================================
+
     @Published var weightUnit: WeightUnit = .kg
     @Published var distanceUnit: DistanceUnit = .kilometers
     @Published var glucoseUnit: GlucoseUnit = .mgdL
 
-    // MARK: Metabolic Targets
+    // ============================================================
+    // MARK: - Metabolic Targets
+    // ============================================================
+
     @Published var glucoseMin: Int = 70
     @Published var glucoseMax: Int = 180
     @Published var veryLowLimit: Int = 55
     @Published var veryHighLimit: Int = 250
 
-    // TIR Target (%)
     @Published var tirTargetPercent: Int = 70
-
-    // CV Target (%)
     @Published var cvTargetPercent: Int = 36
-
-    // GMI90 Target (%) — stored as Double
     @Published var gmi90TargetPercent: Double = 7.0
 
-    // MARK: Nutrition Targets
+    // ============================================================
+    // MARK: - Nutrition Targets
+    // ============================================================
+
     @Published var dailyCarbs: Int = 200
     @Published var dailySugar: Int = 50
     @Published var dailyProtein: Int = 80
@@ -64,7 +105,7 @@ final class SettingsModel: ObservableObject {
         }
     }
 
-    @Published var debugSimulateNoHealthData: Bool = false { // 🟨 NEW
+    @Published var debugSimulateNoHealthData: Bool = false {
         didSet {
             guard !isLoadingFromDefaults else { return }
             saveToDefaults()
@@ -72,7 +113,7 @@ final class SettingsModel: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - MainChart Overlay Toggles (PERSISTENT)
+    // MARK: - Main Chart Overlay Toggles
     // ============================================================
 
     @Published var mainChartShowActivity: Bool = true {
@@ -118,7 +159,7 @@ final class SettingsModel: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - History Metric Picker Toggles (PERSISTENT)
+    // MARK: - History Metric Picker Toggles
     // ============================================================
 
     @Published var historyShowActivity: Bool = true {
@@ -164,7 +205,7 @@ final class SettingsModel: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Onboarding / Installation Routine Flags
+    // MARK: - Onboarding / Installation Flags
     // ============================================================
 
     @Published var hasAcceptedDisclaimer: Bool = false
@@ -172,8 +213,13 @@ final class SettingsModel: ObservableObject {
     @Published var hasCompletedOnboarding: Bool = false
 
     // ============================================================
-    // MARK: - Premium Entitlement (Purchased Access)
+    // MARK: - Legacy Monetization Bridge
     // ============================================================
+    // 🟨 UPDATED
+    // Transitional only:
+    // - kept to support the current migration phase
+    // - not intended to remain the long-term monetization truth
+    // - EntitlementManager should become the authoritative source
 
     @Published var isPremiumEnabled: Bool = false {
         didSet {
@@ -191,10 +237,6 @@ final class SettingsModel: ObservableObject {
         }
     }
 
-    // ============================================================
-    // MARK: - Trial (30 days)
-    // ============================================================
-
     @Published var trialStartDate: Date? = nil
 
     private let trialLengthDays: Int = 30
@@ -202,20 +244,24 @@ final class SettingsModel: ObservableObject {
     var isTrialActive: Bool {
         guard isPremiumEnabled == false else { return false }
         guard let start = trialStartDate else { return false }
-        guard let end = Calendar.current.date(byAdding: .day, value: trialLengthDays, to: start) else { return false }
+        guard let end = Calendar.current.date(byAdding: .day, value: trialLengthDays, to: start) else {
+            return false
+        }
         return Date() < end
     }
 
     var trialDaysRemaining: Int? {
         guard isPremiumEnabled == false else { return nil }
         guard let start = trialStartDate else { return nil }
-        guard let end = Calendar.current.date(byAdding: .day, value: trialLengthDays, to: start) else { return nil }
+        guard let end = Calendar.current.date(byAdding: .day, value: trialLengthDays, to: start) else {
+            return nil
+        }
 
-        let cal = Calendar.current
-        let from = cal.startOfDay(for: Date())
-        let to = cal.startOfDay(for: end)
-        let d = cal.dateComponents([.day], from: from, to: to).day ?? 0
-        return max(0, d)
+        let calendar = Calendar.current
+        let from = calendar.startOfDay(for: Date())
+        let to = calendar.startOfDay(for: end)
+        let days = calendar.dateComponents([.day], from: from, to: to).day ?? 0
+        return max(0, days)
     }
 
     var hasMetabolicPremiumEffective: Bool {
@@ -230,7 +276,7 @@ final class SettingsModel: ObservableObject {
 
     var accessStatus: AccessStatus {
         if isPremiumEnabled { return .premiumPurchased }
-        if let d = trialDaysRemaining, isTrialActive { return .trial(daysLeft: d) }
+        if let days = trialDaysRemaining, isTrialActive { return .trial(daysLeft: days) }
         return .free
     }
 
@@ -244,14 +290,14 @@ final class SettingsModel: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Metabolic / Insulin Mode Flags (User intent)
+    // MARK: - Metabolic User Intent
     // ============================================================
 
     @Published var hasCGM: Bool = false
     @Published var isInsulinTreated: Bool = false
 
     // ============================================================
-    // MARK: - Priming (Pen Air Shot) — User-controlled filter
+    // MARK: - Priming Filters
     // ============================================================
 
     @Published var excludeBolusPriming: Bool = false
@@ -260,75 +306,90 @@ final class SettingsModel: ObservableObject {
     @Published var excludeBasalPriming: Bool = false
     @Published var basalPrimingThresholdU: Double = 1.0
 
+    // ============================================================
+    // MARK: - HbA1c Manual Entries
+    // ============================================================
+
     @Published var hba1cEntries: [HbA1cEntry] = []
 
-    var latestHbA1cEntry: HbA1cEntry? { hba1cEntries.max(by: { $0.date < $1.date }) }
-    var latestHbA1cValuePercent: Double? { latestHbA1cEntry?.valuePercent }
+    var latestHbA1cEntry: HbA1cEntry? {
+        hba1cEntries.max(by: { $0.date < $1.date })
+    }
+
+    var latestHbA1cValuePercent: Double? {
+        latestHbA1cEntry?.valuePercent
+    }
+
+    // ============================================================
+    // MARK: - Persistence
+    // ============================================================
 
     private let defaults = UserDefaults.standard
 
     private enum Keys {
 
-        static let dailyStepGoal          = "settings_dailyStepGoal"
-        static let dailySleepGoalMinutes  = "settings_dailySleepGoalMinutes"
-        static let targetWeightKg         = "settings_targetWeightKg"
+        static let dailyStepGoal = "settings_dailyStepGoal"
+        static let dailySleepGoalMinutes = "settings_dailySleepGoalMinutes"
+        static let targetWeightKg = "settings_targetWeightKg"
 
-        static let weightUnit    = "settings_weightUnit"
-        static let distanceUnit  = "settings_distanceUnit"
-        static let glucoseUnit   = "settings_glucoseUnit"
+        static let weightUnit = "settings_weightUnit"
+        static let distanceUnit = "settings_distanceUnit"
+        static let glucoseUnit = "settings_glucoseUnit"
 
-        static let glucoseMin    = "settings_glucoseMin"
-        static let glucoseMax    = "settings_glucoseMax"
-        static let veryLowLimit  = "settings_veryLowLimit"
+        static let glucoseMin = "settings_glucoseMin"
+        static let glucoseMax = "settings_glucoseMax"
+        static let veryLowLimit = "settings_veryLowLimit"
         static let veryHighLimit = "settings_veryHighLimit"
 
         static let tirTargetPercent = "settings_tirTargetPercent"
+        static let cvTargetPercent = "settings_cvTargetPercent"
+        static let gmi90TargetPercent = "settings_gmi90TargetPercent"
 
-        static let cvTargetPercent        = "settings_cvTargetPercent"
-        static let gmi90TargetPercent     = "settings_gmi90TargetPercent"
-
-        static let dailyCarbs    = "settings_dailyCarbs"
-        static let dailySugar    = "settings_dailySugar"
-        static let dailyProtein  = "settings_dailyProtein"
+        static let dailyCarbs = "settings_dailyCarbs"
+        static let dailySugar = "settings_dailySugar"
+        static let dailyProtein = "settings_dailyProtein"
         static let dailyCalories = "settings_dailyCalories"
-        static let dailyFat      = "settings_dailyFat"
+        static let dailyFat = "settings_dailyFat"
 
         static let isInsulinTreated = "settings_isInsulinTreated"
-        static let hasCGM           = "settings_hasCGM"
+        static let hasCGM = "settings_hasCGM"
 
-        static let hba1cEntries     = "settings_hba1cEntries"
+        static let hba1cEntries = "settings_hba1cEntries"
 
         static let isPremiumEnabled = "settings_isPremiumEnabled"
         static let hasMetabolicPremium = "settings_hasMetabolicPremium"
-
-        static let excludeBolusPriming       = "settings_excludeBolusPriming"
-        static let bolusPrimingThresholdU    = "settings_bolusPrimingThresholdU"
-        static let excludeBasalPriming       = "settings_excludeBasalPriming"
-        static let basalPrimingThresholdU    = "settings_basalPrimingThresholdU"
-
-        static let hasAcceptedDisclaimer        = "settings_hasAcceptedDisclaimer"
-        static let hasSeenHealthPermissionGate  = "settings_hasSeenHealthPermissionGate"
-        static let hasCompletedOnboarding       = "settings_hasCompletedOnboarding"
-
         static let trialStartDate = "settings_trialStartDate"
 
+        static let excludeBolusPriming = "settings_excludeBolusPriming"
+        static let bolusPrimingThresholdU = "settings_bolusPrimingThresholdU"
+        static let excludeBasalPriming = "settings_excludeBasalPriming"
+        static let basalPrimingThresholdU = "settings_basalPrimingThresholdU"
+
+        static let hasAcceptedDisclaimer = "settings_hasAcceptedDisclaimer"
+        static let hasSeenHealthPermissionGate = "settings_hasSeenHealthPermissionGate"
+        static let hasCompletedOnboarding = "settings_hasCompletedOnboarding"
+
         static let showPermissionWarnings = "settings_showPermissionWarnings"
-        static let debugSimulateNoHealthData = "settings_debugSimulateNoHealthData" // 🟨 NEW
+        static let debugSimulateNoHealthData = "settings_debugSimulateNoHealthData"
 
         static let mainChartShowActivity = "settings_mainChartShowActivity"
-        static let mainChartShowCarbs    = "settings_mainChartShowCarbs"
-        static let mainChartShowProtein  = "settings_mainChartShowProtein"
-        static let mainChartShowBolus    = "settings_mainChartShowBolus"
-        static let mainChartShowBasal    = "settings_mainChartShowBasal"
-        static let mainChartShowCGM      = "settings_mainChartShowCGM"
+        static let mainChartShowCarbs = "settings_mainChartShowCarbs"
+        static let mainChartShowProtein = "settings_mainChartShowProtein"
+        static let mainChartShowBolus = "settings_mainChartShowBolus"
+        static let mainChartShowBasal = "settings_mainChartShowBasal"
+        static let mainChartShowCGM = "settings_mainChartShowCGM"
 
         static let historyShowActivity = "settings_historyShowActivity"
-        static let historyShowCarbs    = "settings_historyShowCarbs"
-        static let historyShowWeight   = "settings_historyShowWeight"
-        static let historyShowBolus    = "settings_historyShowBolus"
-        static let historyShowBasal    = "settings_historyShowBasal"
-        static let historyShowCGM      = "settings_historyShowCGM"
+        static let historyShowCarbs = "settings_historyShowCarbs"
+        static let historyShowWeight = "settings_historyShowWeight"
+        static let historyShowBolus = "settings_historyShowBolus"
+        static let historyShowBasal = "settings_historyShowBasal"
+        static let historyShowCGM = "settings_historyShowCGM"
     }
+
+    // ============================================================
+    // MARK: - Priming Threshold Helpers
+    // ============================================================
 
     private static let primingThresholdOptions: [Double] = [0.5, 1.0, 1.5]
 
@@ -339,10 +400,18 @@ final class SettingsModel: ObservableObject {
         return nearest
     }
 
+    // ============================================================
+    // MARK: - Init
+    // ============================================================
+
     private init() {
         loadFromDefaults()
         clearUnsavedChanges()
     }
+
+    // ============================================================
+    // MARK: - Load
+    // ============================================================
 
     func loadFromDefaults() {
 
@@ -356,29 +425,38 @@ final class SettingsModel: ObservableObject {
         if defaults.object(forKey: Keys.dailySleepGoalMinutes) != nil {
             dailySleepGoalMinutes = defaults.integer(forKey: Keys.dailySleepGoalMinutes)
         }
+
         if defaults.object(forKey: Keys.targetWeightKg) != nil {
             targetWeightKg = defaults.integer(forKey: Keys.targetWeightKg)
         }
 
-        if let raw = defaults.string(forKey: Keys.weightUnit), let v = WeightUnit(rawValue: raw) {
-            weightUnit = v
+        if let raw = defaults.string(forKey: Keys.weightUnit),
+           let value = WeightUnit(rawValue: raw) {
+            weightUnit = value
         }
-        if let raw = defaults.string(forKey: Keys.distanceUnit), let v = DistanceUnit(rawValue: raw) {
-            distanceUnit = v
+
+        if let raw = defaults.string(forKey: Keys.distanceUnit),
+           let value = DistanceUnit(rawValue: raw) {
+            distanceUnit = value
         }
-        if let raw = defaults.string(forKey: Keys.glucoseUnit), let v = GlucoseUnit(rawValue: raw) {
-            glucoseUnit = v
+
+        if let raw = defaults.string(forKey: Keys.glucoseUnit),
+           let value = GlucoseUnit(rawValue: raw) {
+            glucoseUnit = value
         }
 
         if defaults.object(forKey: Keys.glucoseMin) != nil {
             glucoseMin = defaults.integer(forKey: Keys.glucoseMin)
         }
+
         if defaults.object(forKey: Keys.glucoseMax) != nil {
             glucoseMax = defaults.integer(forKey: Keys.glucoseMax)
         }
+
         if defaults.object(forKey: Keys.veryLowLimit) != nil {
             veryLowLimit = defaults.integer(forKey: Keys.veryLowLimit)
         }
+
         if defaults.object(forKey: Keys.veryHighLimit) != nil {
             veryHighLimit = defaults.integer(forKey: Keys.veryHighLimit)
         }
@@ -390,6 +468,7 @@ final class SettingsModel: ObservableObject {
         if defaults.object(forKey: Keys.cvTargetPercent) != nil {
             cvTargetPercent = defaults.integer(forKey: Keys.cvTargetPercent)
         }
+
         if defaults.object(forKey: Keys.gmi90TargetPercent) != nil {
             gmi90TargetPercent = defaults.double(forKey: Keys.gmi90TargetPercent)
         }
@@ -397,15 +476,19 @@ final class SettingsModel: ObservableObject {
         if defaults.object(forKey: Keys.dailyCarbs) != nil {
             dailyCarbs = defaults.integer(forKey: Keys.dailyCarbs)
         }
+
         if defaults.object(forKey: Keys.dailySugar) != nil {
             dailySugar = defaults.integer(forKey: Keys.dailySugar)
         }
+
         if defaults.object(forKey: Keys.dailyProtein) != nil {
             dailyProtein = defaults.integer(forKey: Keys.dailyProtein)
         }
+
         if defaults.object(forKey: Keys.dailyCalories) != nil {
             dailyCalories = defaults.integer(forKey: Keys.dailyCalories)
         }
+
         if defaults.object(forKey: Keys.dailyFat) != nil {
             dailyFat = defaults.integer(forKey: Keys.dailyFat)
         }
@@ -413,6 +496,7 @@ final class SettingsModel: ObservableObject {
         if defaults.object(forKey: Keys.isInsulinTreated) != nil {
             isInsulinTreated = defaults.bool(forKey: Keys.isInsulinTreated)
         }
+
         if defaults.object(forKey: Keys.hasCGM) != nil {
             hasCGM = defaults.bool(forKey: Keys.hasCGM)
         }
@@ -421,25 +505,33 @@ final class SettingsModel: ObservableObject {
             isPremiumEnabled = defaults.bool(forKey: Keys.isPremiumEnabled)
             hasMetabolicPremium = isPremiumEnabled
         } else if defaults.object(forKey: Keys.hasMetabolicPremium) != nil {
-            let legacy = defaults.bool(forKey: Keys.hasMetabolicPremium)
-            hasMetabolicPremium = legacy
-            isPremiumEnabled = legacy
+            let legacyValue = defaults.bool(forKey: Keys.hasMetabolicPremium)
+            hasMetabolicPremium = legacyValue
+            isPremiumEnabled = legacyValue
+        }
+
+        if let ts = defaults.object(forKey: Keys.trialStartDate) as? TimeInterval {
+            trialStartDate = Date(timeIntervalSince1970: ts)
         }
 
         if defaults.object(forKey: Keys.excludeBolusPriming) != nil {
             excludeBolusPriming = defaults.bool(forKey: Keys.excludeBolusPriming)
         }
+
         if defaults.object(forKey: Keys.bolusPrimingThresholdU) != nil {
-            let raw = defaults.double(forKey: Keys.bolusPrimingThresholdU)
-            bolusPrimingThresholdU = normalizedPrimingThreshold(raw)
+            bolusPrimingThresholdU = normalizedPrimingThreshold(
+                defaults.double(forKey: Keys.bolusPrimingThresholdU)
+            )
         }
 
         if defaults.object(forKey: Keys.excludeBasalPriming) != nil {
             excludeBasalPriming = defaults.bool(forKey: Keys.excludeBasalPriming)
         }
+
         if defaults.object(forKey: Keys.basalPrimingThresholdU) != nil {
-            let raw = defaults.double(forKey: Keys.basalPrimingThresholdU)
-            basalPrimingThresholdU = normalizedPrimingThreshold(raw)
+            basalPrimingThresholdU = normalizedPrimingThreshold(
+                defaults.double(forKey: Keys.basalPrimingThresholdU)
+            )
         }
 
         if let data = defaults.data(forKey: Keys.hba1cEntries),
@@ -450,39 +542,43 @@ final class SettingsModel: ObservableObject {
         if defaults.object(forKey: Keys.hasAcceptedDisclaimer) != nil {
             hasAcceptedDisclaimer = defaults.bool(forKey: Keys.hasAcceptedDisclaimer)
         }
+
         if defaults.object(forKey: Keys.hasSeenHealthPermissionGate) != nil {
             hasSeenHealthPermissionGate = defaults.bool(forKey: Keys.hasSeenHealthPermissionGate)
         }
+
         if defaults.object(forKey: Keys.hasCompletedOnboarding) != nil {
             hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
-        }
-
-        if let ts = defaults.object(forKey: Keys.trialStartDate) as? TimeInterval {
-            trialStartDate = Date(timeIntervalSince1970: ts)
         }
 
         if defaults.object(forKey: Keys.showPermissionWarnings) != nil {
             showPermissionWarnings = defaults.bool(forKey: Keys.showPermissionWarnings)
         }
-        if defaults.object(forKey: Keys.debugSimulateNoHealthData) != nil { // 🟨 NEW
+
+        if defaults.object(forKey: Keys.debugSimulateNoHealthData) != nil {
             debugSimulateNoHealthData = defaults.bool(forKey: Keys.debugSimulateNoHealthData)
         }
 
         if defaults.object(forKey: Keys.mainChartShowActivity) != nil {
             mainChartShowActivity = defaults.bool(forKey: Keys.mainChartShowActivity)
         }
+
         if defaults.object(forKey: Keys.mainChartShowCarbs) != nil {
             mainChartShowCarbs = defaults.bool(forKey: Keys.mainChartShowCarbs)
         }
+
         if defaults.object(forKey: Keys.mainChartShowProtein) != nil {
             mainChartShowProtein = defaults.bool(forKey: Keys.mainChartShowProtein)
         }
+
         if defaults.object(forKey: Keys.mainChartShowBolus) != nil {
             mainChartShowBolus = defaults.bool(forKey: Keys.mainChartShowBolus)
         }
+
         if defaults.object(forKey: Keys.mainChartShowBasal) != nil {
             mainChartShowBasal = defaults.bool(forKey: Keys.mainChartShowBasal)
         }
+
         if defaults.object(forKey: Keys.mainChartShowCGM) != nil {
             mainChartShowCGM = defaults.bool(forKey: Keys.mainChartShowCGM)
         }
@@ -490,22 +586,31 @@ final class SettingsModel: ObservableObject {
         if defaults.object(forKey: Keys.historyShowActivity) != nil {
             historyShowActivity = defaults.bool(forKey: Keys.historyShowActivity)
         }
+
         if defaults.object(forKey: Keys.historyShowCarbs) != nil {
             historyShowCarbs = defaults.bool(forKey: Keys.historyShowCarbs)
         }
+
         if defaults.object(forKey: Keys.historyShowWeight) != nil {
             historyShowWeight = defaults.bool(forKey: Keys.historyShowWeight)
         }
+
         if defaults.object(forKey: Keys.historyShowBolus) != nil {
             historyShowBolus = defaults.bool(forKey: Keys.historyShowBolus)
         }
+
         if defaults.object(forKey: Keys.historyShowBasal) != nil {
             historyShowBasal = defaults.bool(forKey: Keys.historyShowBasal)
         }
+
         if defaults.object(forKey: Keys.historyShowCGM) != nil {
             historyShowCGM = defaults.bool(forKey: Keys.historyShowCGM)
         }
     }
+
+    // ============================================================
+    // MARK: - Save
+    // ============================================================
 
     func saveToDefaults() {
 
@@ -523,7 +628,6 @@ final class SettingsModel: ObservableObject {
         defaults.set(veryHighLimit, forKey: Keys.veryHighLimit)
 
         defaults.set(tirTargetPercent, forKey: Keys.tirTargetPercent)
-
         defaults.set(cvTargetPercent, forKey: Keys.cvTargetPercent)
         defaults.set(gmi90TargetPercent, forKey: Keys.gmi90TargetPercent)
 
@@ -560,7 +664,7 @@ final class SettingsModel: ObservableObject {
         }
 
         defaults.set(showPermissionWarnings, forKey: Keys.showPermissionWarnings)
-        defaults.set(debugSimulateNoHealthData, forKey: Keys.debugSimulateNoHealthData) // 🟨 NEW
+        defaults.set(debugSimulateNoHealthData, forKey: Keys.debugSimulateNoHealthData)
 
         defaults.set(mainChartShowActivity, forKey: Keys.mainChartShowActivity)
         defaults.set(mainChartShowCarbs, forKey: Keys.mainChartShowCarbs)

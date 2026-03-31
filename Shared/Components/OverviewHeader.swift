@@ -1,6 +1,32 @@
 //
 //  OverviewHeader.swift
-//  GluVibProbe
+//  GluVib
+//
+//  Area: Shared / Header
+//  File Role:
+//  - Reusable overview header for GluVib overview screens.
+//  - Displays title / subtitle, report entry, account avatar,
+//    premium / trial badges, and permission badges.
+//
+//  Purpose:
+//  - Keep overview header presentation consistent across domains.
+//  - Consume the central monetization truth from EntitlementManager for
+//    premium / trial badge display and report-entry gating.
+//  - Preserve the existing permission-badge behavior tied to HealthStore
+//    and user intent settings.
+//
+//  System Role:
+//  - This file is UI only.
+//  - It does NOT define premium / trial / free truth.
+//  - It does NOT resolve capabilities.
+//  - It only renders header UI based on already-resolved app state.
+//
+//  Key Connections:
+//  - AppState
+//  - SettingsModel
+//  - HealthStore
+//  - EntitlementManager
+//  - localized strings via L10n
 //
 
 import SwiftUI
@@ -8,12 +34,13 @@ import SwiftUI
 struct OverviewHeader: View {
 
     // ============================================================
-    // MARK: - Dependencies (Environment)
+    // MARK: - Dependencies
     // ============================================================
 
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var settings: SettingsModel
     @EnvironmentObject private var healthStore: HealthStore
+    @EnvironmentObject private var entitlementManager: EntitlementManager // 🟨 UPDATED
 
     // ============================================================
     // MARK: - Inputs
@@ -54,20 +81,20 @@ struct OverviewHeader: View {
     // MARK: - Derived UI State
     // ============================================================
 
-    private var canShowReportIcon: Bool {
-        settings.hasCGM && settings.hasMetabolicPremiumEffective
+    private var canShowReportIcon: Bool { // 🟨 UPDATED
+        settings.hasCGM && entitlementManager.canAccessMetabolic
     }
 
-    private var showPremiumBadge: Bool {
-        (settings.isPremiumEnabled || settings.hasMetabolicPremium) && !settings.isTrialActive
+    private var showPremiumBadge: Bool { // 🟨 UPDATED
+        entitlementManager.isPremium
     }
 
-    private var showTrialDaysBadge: Bool {
-        settings.isTrialActive && settings.hasMetabolicPremiumEffective
+    private var showTrialDaysBadge: Bool { // 🟨 UPDATED
+        entitlementManager.isTrial
     }
 
-    private var trialDaysBadgeText: String {
-        let days = max(0, settings.trialDaysRemaining ?? 0)
+    private var trialDaysBadgeText: String { // 🟨 UPDATED
+        let days = max(0, entitlementManager.trialDaysRemaining ?? 0)
         return "\(days)"
     }
 
@@ -80,18 +107,18 @@ struct OverviewHeader: View {
 
         case .metabolic:
             let glucoseNeeds =
-                settings.hasCGM
-                && healthStore.glucoseReadAuthIssueV1
+                settings.hasCGM &&
+                healthStore.glucoseReadAuthIssueV1
 
             let therapyNeeds =
-                settings.hasCGM
-                && settings.isInsulinTreated
-                && healthStore.metabolicTherapyAnyAttentionForBadgesV1
+                settings.hasCGM &&
+                settings.isInsulinTreated &&
+                healthStore.metabolicTherapyAnyAttentionForBadgesV1
 
             let carbsNeeds =
-                settings.hasCGM
-                && settings.isInsulinTreated
-                && healthStore.metabolicCarbsAuthIssueAnyV1
+                settings.hasCGM &&
+                settings.isInsulinTreated &&
+                healthStore.metabolicCarbsAuthIssueAnyV1
 
             return glucoseNeeds || therapyNeeds || carbsNeeds
 
@@ -142,7 +169,7 @@ struct OverviewHeader: View {
 
                 if canShowReportIcon {
                     Button {
-                        appState.isMetabolicReportPresented = true // 🟨 UPDATED
+                        appState.isMetabolicReportPresented = true
                         showReportPeriodDialog = true
                     } label: {
                         Image(systemName: "tray.circle.fill")
@@ -152,7 +179,7 @@ struct OverviewHeader: View {
                             .padding(6)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.MetabolicReportFlow.openAccessibility) // 🟨 UPDATED
+                    .accessibilityLabel(L10n.MetabolicReportFlow.openAccessibility)
                 }
 
                 Spacer()
@@ -213,16 +240,16 @@ struct OverviewHeader: View {
         // ============================================================
 
         .confirmationDialog(
-            L10n.MetabolicReportFlow.periodDialogTitle, // 🟨 UPDATED
+            L10n.MetabolicReportFlow.periodDialogTitle,
             isPresented: $showReportPeriodDialog,
             titleVisibility: .visible
         ) {
-            Button(L10n.MetabolicReportFlow.period7Days)  { openReport(days: 7) } // 🟨 UPDATED
-            Button(L10n.MetabolicReportFlow.period14Days) { openReport(days: 14) } // 🟨 UPDATED
-            Button(L10n.MetabolicReportFlow.period30Days) { openReport(days: 30) } // 🟨 UPDATED
-            Button(L10n.MetabolicReportFlow.period90Days) { openReport(days: 90) } // 🟨 UPDATED
-            Button(L10n.MetabolicReportFlow.cancel, role: .cancel) { // 🟨 UPDATED
-                appState.isMetabolicReportPresented = false // 🟨 UPDATED
+            Button(L10n.MetabolicReportFlow.period7Days)  { openReport(days: 7) }
+            Button(L10n.MetabolicReportFlow.period14Days) { openReport(days: 14) }
+            Button(L10n.MetabolicReportFlow.period30Days) { openReport(days: 30) }
+            Button(L10n.MetabolicReportFlow.period90Days) { openReport(days: 90) }
+            Button(L10n.MetabolicReportFlow.cancel, role: .cancel) {
+                appState.isMetabolicReportPresented = false
             }
         }
 
@@ -235,13 +262,13 @@ struct OverviewHeader: View {
             isPresented: $showIncludeDailyChartsDialog,
             titleVisibility: .hidden
         ) {
-            Button(L10n.MetabolicReportFlow.include) { presentReportPreview(includeCharts: true) } // 🟨 UPDATED
-            Button(L10n.MetabolicReportFlow.skip) { presentReportPreview(includeCharts: false) } // 🟨 UPDATED
-            Button(L10n.MetabolicReportFlow.cancel, role: .cancel) { // 🟨 UPDATED
-                appState.isMetabolicReportPresented = false // 🟨 UPDATED
+            Button(L10n.MetabolicReportFlow.include) { presentReportPreview(includeCharts: true) }
+            Button(L10n.MetabolicReportFlow.skip) { presentReportPreview(includeCharts: false) }
+            Button(L10n.MetabolicReportFlow.cancel, role: .cancel) {
+                appState.isMetabolicReportPresented = false
             }
         } message: {
-            Text(L10n.MetabolicReportFlow.includeDailyChartsMessage) // 🟨 UPDATED
+            Text(L10n.MetabolicReportFlow.includeDailyChartsMessage)
         }
 
         // ============================================================
@@ -251,7 +278,7 @@ struct OverviewHeader: View {
         .sheet(
             isPresented: $showReportPreview,
             onDismiss: {
-                appState.isMetabolicReportPresented = false // 🟨 UPDATED
+                appState.isMetabolicReportPresented = false
             }
         ) {
             MetabolicReportPreviewV1(
@@ -261,12 +288,13 @@ struct OverviewHeader: View {
             .environmentObject(appState)
             .environmentObject(healthStore)
             .environmentObject(settings)
+            .environmentObject(entitlementManager) // 🟨 UPDATED
             .tint(Color.Glu.systemForeground)
             .onAppear {
-                appState.isMetabolicReportPresented = true // 🟨 UPDATED
+                appState.isMetabolicReportPresented = true
             }
             .onDisappear {
-                appState.isMetabolicReportPresented = false // 🟨 UPDATED
+                appState.isMetabolicReportPresented = false
             }
         }
     }

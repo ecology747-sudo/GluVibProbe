@@ -1,15 +1,45 @@
 //
 //  AccountMenuSheetView.swift
-//  GluVibProbe
+//  GluVib
+//
+//  Area: Account / Entry Menu
+//  File Role:
+//  - Root menu content for the account sheet.
+//  - Shows the current GluVib access status in the header.
+//  - Provides entry points to settings, FAQ, help, app info, and legal screens.
+//
+//  Purpose:
+//  - Use the central monetization truth from EntitlementManager instead of
+//    recalculating premium / trial / free locally.
+//  - Keep the account entry header consistent with the new monetization layer.
+//  - Preserve the current permission-badge behavior and localized menu structure.
+//
+//  System Role:
+//  - This View is user-facing UI.
+//  - It does NOT define entitlement truth.
+//  - It does NOT decide StoreKit source selection.
+//  - It does NOT perform capability resolution itself.
+//
+//  Key Connections:
+//  - AppState
+//  - SettingsModel
+//  - HealthStore
+//  - EntitlementManager
+//  - localized strings via L10n
 //
 
 import SwiftUI
 
 struct AccountMenuSheetView: View {
 
+    // ============================================================
+    // MARK: - Dependencies
+    // ============================================================
+
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var settings: SettingsModel
     @EnvironmentObject private var healthStore: HealthStore
+    @EnvironmentObject private var entitlementManager: EntitlementManager // 🟨 UPDATED
 
     let onOpenSettingsMenu: () -> Void
     let onOpenHelp: () -> Void
@@ -17,14 +47,16 @@ struct AccountMenuSheetView: View {
     let onOpenAppInfo: () -> Void
     let onOpenLegal: () -> Void
 
+    // ============================================================
     // MARK: - Style
+    // ============================================================
 
     private let titleColor: Color = Color.Glu.systemForeground
     private let captionColor: Color = Color.Glu.systemForeground.opacity(0.70)
-    private let menuIconColumnWidth: CGFloat = 34 // 🟨 UPDATED
+    private let menuIconColumnWidth: CGFloat = 34
 
     // ============================================================
-    // MARK: - Permission Badge (V1) — domain aggregation + UI gating
+    // MARK: - Permission Badge
     // ============================================================
 
     private var showsSettingsPermissionBadgeV1: Bool {
@@ -55,33 +87,21 @@ struct AccountMenuSheetView: View {
             bodyNeeds
     }
 
-    // MARK: - Access Status
+    // ============================================================
+    // MARK: - Derived Access Status
+    // ============================================================
 
-    private enum AccessStatus {
-        case premiumPurchased
-        case trial(daysLeft: Int?)
-        case free
-    }
-
-    private var accessStatus: AccessStatus {
-        if settings.isPremiumEnabled { return .premiumPurchased }
-        if settings.isTrialActive { return .trial(daysLeft: settings.trialDaysRemaining) }
-        return .free
-    }
-
-    private var accessStatusIsTrial: Bool {
-        if case .trial = accessStatus { return true }
-        return false
+    private var isTrial: Bool {
+        entitlementManager.isTrial
     }
 
     private var isPremium: Bool {
-        if case .premiumPurchased = accessStatus { return true }
-        return false
+        entitlementManager.isPremium
     }
 
     private var statusTitle: String {
-        switch accessStatus {
-        case .premiumPurchased:
+        switch entitlementManager.entitlementStatus {
+        case .premium:
             return L10n.Avatar.Status.premium
         case .trial:
             return String(
@@ -95,24 +115,24 @@ struct AccountMenuSheetView: View {
     }
 
     private var statusIcon: String {
-        switch accessStatus {
-        case .premiumPurchased: return "crown.fill"
+        switch entitlementManager.entitlementStatus {
+        case .premium: return "crown.fill"
         case .trial: return "hourglass"
         case .free: return "sparkles"
         }
     }
 
     private var statusIconColor: Color {
-        switch accessStatus {
-        case .premiumPurchased: return .yellow
+        switch entitlementManager.entitlementStatus {
+        case .premium: return .yellow
         case .trial: return Color.Glu.bodyDomain
         case .free: return titleColor
         }
     }
 
     private var statusLine2: String {
-        switch accessStatus {
-        case .premiumPurchased:
+        switch entitlementManager.entitlementStatus {
+        case .premium:
             return L10n.Avatar.Status.unlockedOnThisDevice
         case .trial:
             return L10n.Avatar.Status.active
@@ -122,9 +142,8 @@ struct AccountMenuSheetView: View {
     }
 
     private var trialDaysLeftTextV1: String? {
-        guard case .trial(let daysLeft) = accessStatus else { return nil }
-        guard let d = daysLeft else { return nil }
-        return L10n.Avatar.Status.trialDaysLeft(d)
+        guard let daysLeft = entitlementManager.trialDaysRemaining else { return nil }
+        return L10n.Avatar.Status.trialDaysLeft(daysLeft)
     }
 
     private var modeStatusLineV1: String {
@@ -139,7 +158,9 @@ struct AccountMenuSheetView: View {
         return L10n.Avatar.Mode.cgmOnInsulinOff
     }
 
+    // ============================================================
     // MARK: - Body
+    // ============================================================
 
     var body: some View {
 
@@ -159,7 +180,7 @@ struct AccountMenuSheetView: View {
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(statusIconColor)
 
-                    if accessStatusIsTrial {
+                    if isTrial {
                         Text(
                             String(
                                 localized: "Trial",
@@ -184,7 +205,7 @@ struct AccountMenuSheetView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
 
-                if accessStatusIsTrial == false, isPremium == false {
+                if isTrial == false, isPremium == false {
                     Text(statusLine2)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(captionColor)
@@ -280,11 +301,13 @@ struct AccountMenuSheetView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    // MARK: - Hard-colored menu atoms (fixes iOS accent bleed)
+    // ============================================================
+    // MARK: - Menu Atoms
+    // ============================================================
 
     private func menuIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
-            .frame(width: menuIconColumnWidth, alignment: .leading) // 🟨 UPDATED
+            .frame(width: menuIconColumnWidth, alignment: .leading)
             .foregroundStyle(titleColor)
     }
 
@@ -293,7 +316,9 @@ struct AccountMenuSheetView: View {
             .foregroundStyle(titleColor)
     }
 
-    // MARK: - Badge View (18x18)
+    // ============================================================
+    // MARK: - Badge View
+    // ============================================================
 
     private var permissionBadgeIconV1: some View {
         ZStack {
